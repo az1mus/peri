@@ -46,7 +46,7 @@ pub(crate) fn render_cron_panel(f: &mut Frame, app: &mut App, area: Rect) {
             .unwrap_or_else(|| "N/A".to_string());
 
         let prompt_truncated: String = task.prompt.chars().take(30).collect();
-        let prompt_display = if task.prompt.len() > 30 {
+        let prompt_display = if task.prompt.chars().count() > 30 {
             format!("{}…", prompt_truncated)
         } else {
             prompt_truncated

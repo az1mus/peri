@@ -99,7 +99,7 @@ pub(crate) fn render_agent_panel(f: &mut Frame, app: &mut App, area: Rect) {
             };
             // 截断过长的描述
             let desc: String = agent.description.chars().take(50).collect();
-            let desc = if agent.description.len() > 50 {
+            let desc = if agent.description.chars().count() > 50 {
                 format!("{}…", desc)
             } else {
                 desc
