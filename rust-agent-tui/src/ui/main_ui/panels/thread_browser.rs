@@ -102,6 +102,13 @@ pub(crate) fn render_thread_browser(f: &mut Frame, app: &mut App, area: Rect) {
 
     // 历史 thread
     let max_label = inner.width.saturating_sub(14) as usize; // 留空给消息数标签
+    if browser.threads.is_empty() {
+        lines.push(Line::from(""));
+        lines.push(Line::from(Span::styled(
+            "  （暂无历史对话，发送消息后自动保存）",
+            Style::default().fg(theme::MUTED),
+        )));
+    }
     for (i, meta) in browser.threads.iter().enumerate() {
         let is_cursor = browser.cursor == i + 1;
         let is_current = app.current_thread_id.as_ref() == Some(&meta.id);
