@@ -150,30 +150,33 @@ pub(crate) fn render_login_panel(f: &mut Frame, app: &App, area: Rect) {
         }
 
         LoginPanelMode::Edit | LoginPanelMode::New => {
-            let fields: &[(LoginEditField, &str, &str)] = &[
-                (LoginEditField::Name, "Name        ", &panel.buf_name),
-                (LoginEditField::Type, "Type        ", &panel.buf_type),
-                (LoginEditField::BaseUrl, "Base URL    ", &panel.buf_base_url),
-                (LoginEditField::ApiKey, "API Key     ", &panel.buf_api_key),
+            let fields: &[(LoginEditField, &str, &str, usize)] = &[
+                (LoginEditField::Name, "Name        ", &panel.buf_name, panel.cur_name),
+                (LoginEditField::Type, "Type        ", &panel.buf_type, 0),
+                (LoginEditField::BaseUrl, "Base URL    ", &panel.buf_base_url, panel.cur_base_url),
+                (LoginEditField::ApiKey, "API Key     ", &panel.buf_api_key, panel.cur_api_key),
                 (
                     LoginEditField::OpusModel,
                     "Opus Model  ",
                     &panel.buf_opus_model,
+                    panel.cur_opus_model,
                 ),
                 (
                     LoginEditField::SonnetModel,
                     "Sonnet Model",
                     &panel.buf_sonnet_model,
+                    panel.cur_sonnet_model,
                 ),
                 (
                     LoginEditField::HaikuModel,
                     "Haiku Model ",
                     &panel.buf_haiku_model,
+                    panel.cur_haiku_model,
                 ),
             ];
 
             let mut lines: Vec<Line> = Vec::new();
-            for (field, label, value) in fields {
+            for (field, label, value, cursor) in fields {
                 let is_active = *field == panel.edit_field;
                 let value_display = if *field == LoginEditField::Type {
                     let types = ["openai", "anthropic"];
@@ -191,7 +194,8 @@ pub(crate) fn render_login_panel(f: &mut Frame, app: &App, area: Rect) {
                 } else if *field == LoginEditField::ApiKey && !is_active {
                     mask_api_key(value)
                 } else if is_active {
-                    format!("{}█", value)
+                    let (before, after) = crate::app::edit_display_parts(value, *cursor);
+                    format!("{}█{}", before, after)
                 } else {
                     value.to_string()
                 };
@@ -364,6 +368,12 @@ mod tests {
             buf_opus_model: String::new(),
             buf_sonnet_model: String::new(),
             buf_haiku_model: String::new(),
+            cur_name: 0,
+            cur_base_url: 0,
+            cur_api_key: 0,
+            cur_opus_model: 0,
+            cur_sonnet_model: 0,
+            cur_haiku_model: 0,
             scroll_offset: 0,
         });
         handle
@@ -403,6 +413,12 @@ mod tests {
             buf_opus_model: String::new(),
             buf_sonnet_model: String::new(),
             buf_haiku_model: String::new(),
+            cur_name: 0,
+            cur_base_url: 0,
+            cur_api_key: 0,
+            cur_opus_model: 0,
+            cur_sonnet_model: 0,
+            cur_haiku_model: 0,
             scroll_offset: 0,
         });
         handle

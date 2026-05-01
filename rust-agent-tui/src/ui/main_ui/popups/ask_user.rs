@@ -134,8 +134,11 @@ pub(crate) fn render_ask_user_popup(f: &mut Frame, app: &App, area: Rect) {
     let ph = "↓ 自定义输入…";
     let display = if cur.custom_input.is_empty() && !is_cur {
         ph.to_string()
+    } else if is_cur {
+        let (before, after) = crate::app::edit_display_parts(&cur.custom_input, cur.custom_cursor);
+        format!("{}█{}", before, after)
     } else {
-        format!("{}{}", cur.custom_input, if is_cur { "█" } else { "" })
+        cur.custom_input.clone()
     };
     let style = if is_cur {
         Style::default().fg(Color::White).bg(theme::WARNING)

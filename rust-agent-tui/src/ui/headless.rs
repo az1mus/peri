@@ -1455,18 +1455,21 @@ mod tests {
             // Step 1 ProviderId: backspace
             wizard.step1_focus = Step1Field::ProviderId;
             wizard.provider_id = "myprovider".to_string();
+            wizard.cur_provider_id = wizard.provider_id.chars().count();
             let _ = handle_setup_wizard_key(&mut wizard, make_key(Key::Backspace));
             assert_eq!(wizard.provider_id, "myprovide");
 
             // Step 1 BaseUrl (Anthropic): editable
             wizard.step1_focus = Step1Field::BaseUrl;
             wizard.base_url = "https://api.anthropic.com".to_string();
+            wizard.cur_base_url = wizard.base_url.chars().count();
             let _ = handle_setup_wizard_key(&mut wizard, make_key(Key::Backspace));
             assert_eq!(wizard.base_url, "https://api.anthropic.co");
 
             // Step 1 BaseUrl (OpenAI): editable
             wizard.provider_type = ProviderType::OpenAiCompatible;
             wizard.base_url = "https://api.openai.com/v1".to_string();
+            wizard.cur_base_url = wizard.base_url.chars().count();
             let _ = handle_setup_wizard_key(&mut wizard, make_key(Key::Backspace));
             assert_eq!(wizard.base_url, "https://api.openai.com/v");
         }

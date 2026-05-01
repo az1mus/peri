@@ -8,6 +8,7 @@ pub struct QuestionState {
     pub option_cursor: isize, // 当前光标在第几个选项（最后一项 = 自定义输入行）
     pub selected: Vec<bool>,
     pub custom_input: String,
+    pub custom_cursor: usize,
     pub in_custom_input: bool,
 }
 
@@ -19,6 +20,7 @@ impl QuestionState {
             option_cursor: 0,
             selected: vec![false; len],
             custom_input: String::new(),
+            custom_cursor: 0,
             in_custom_input: false,
         }
     }

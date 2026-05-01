@@ -64,6 +64,7 @@ impl ProviderType {
 #[derive(Debug, Clone)]
 pub struct AliasConfig {
     pub model_id: String,
+    pub cursor: usize,
 }
 
 /// Setup Wizard 全屏面板状态
@@ -72,10 +73,13 @@ pub struct SetupWizardPanel {
     /// Step 1: Provider 选择
     pub provider_type: ProviderType,
     pub provider_id: String,
+    pub cur_provider_id: usize,
     pub base_url: String,
+    pub cur_base_url: usize,
     pub step1_focus: Step1Field,
     /// Step 2: API Key
     pub api_key: String,
+    pub cur_api_key: usize,
     /// Step 3: 模型别名
     pub aliases: [AliasConfig; 3],
     pub step3_focus: usize,
@@ -114,15 +118,21 @@ impl Step1Field {
 impl SetupWizardPanel {
     pub fn new() -> Self {
         let pt = ProviderType::Anthropic;
+        let pid = pt.default_provider_id().to_string();
+        let burl = pt.default_base_url().to_string();
         Self {
             step: SetupStep::Provider,
             provider_type: pt,
-            provider_id: pt.default_provider_id().to_string(),
-            base_url: pt.default_base_url().to_string(),
+            provider_id: pid.clone(),
+            cur_provider_id: pid.chars().count(),
+            base_url: burl.clone(),
+            cur_base_url: burl.chars().count(),
             step1_focus: Step1Field::ProviderType,
             api_key: String::new(),
+            cur_api_key: 0,
             aliases: pt.default_model_ids().map(|s| AliasConfig {
                 model_id: s.to_string(),
+                cursor: s.chars().count(),
             }),
             step3_focus: 0,
             confirm_skip: false,
@@ -134,14 +144,21 @@ impl SetupWizardPanel {
         let text = text.replace('\n', "");
         match self.step {
             SetupStep::Provider => match self.step1_focus {
-                Step1Field::ProviderId => self.provider_id.push_str(&text),
-                Step1Field::BaseUrl => self.base_url.push_str(&text),
-                Step1Field::ApiKey => self.api_key.push_str(&text),
+                Step1Field::ProviderId => {
+                    insert_at_cursor(&mut self.provider_id, &mut self.cur_provider_id, &text);
+                }
+                Step1Field::BaseUrl => {
+                    insert_at_cursor(&mut self.base_url, &mut self.cur_base_url, &text);
+                }
+                Step1Field::ApiKey => {
+                    insert_at_cursor(&mut self.api_key, &mut self.cur_api_key, &text);
+                }
                 _ => {}
             },
             SetupStep::ModelAlias => {
                 if self.step3_focus < 3 {
-                    self.aliases[self.step3_focus].model_id.push_str(&text);
+                    let a = &mut self.aliases[self.step3_focus];
+                    insert_at_cursor(&mut a.model_id, &mut a.cursor, &text);
                 }
             }
             SetupStep::Done => {}
@@ -151,11 +168,28 @@ impl SetupWizardPanel {
     /// 切换 Provider 类型后刷新默认值
     pub fn refresh_provider_defaults(&mut self) {
         self.provider_id = self.provider_type.default_provider_id().to_string();
+        self.cur_provider_id = self.provider_id.chars().count();
         self.base_url = self.provider_type.default_base_url().to_string();
+        self.cur_base_url = self.base_url.chars().count();
         self.aliases = self.provider_type.default_model_ids().map(|s| AliasConfig {
             model_id: s.to_string(),
+            cursor: s.chars().count(),
         });
     }
+}
+
+/// 在光标位置插入字符串并移动光标
+fn insert_at_cursor(buf: &mut String, cursor: &mut usize, text: &str) {
+    if *cursor > buf.len() {
+        *cursor = buf.len();
+    }
+    let byte_pos = buf
+        .char_indices()
+        .nth(*cursor)
+        .map(|(i, _)| i)
+        .unwrap_or(buf.len());
+    buf.insert_str(byte_pos, text);
+    *cursor += text.chars().count();
 }
 
 /// 检测配置是否需要 Setup 向导
@@ -277,43 +311,24 @@ fn handle_step_provider(
             wizard.confirm_skip = true;
             Some(SetupWizardAction::Redraw)
         }
-        // Backspace: 删除当前字段末字符
-        tui_textarea::Input {
-            key: Key::Backspace,
-            ..
-        } => {
-            match wizard.step1_focus {
-                Step1Field::ProviderId => {
-                    wizard.provider_id.pop();
+        // 编辑按键：使用公共函数处理（Backspace/Delete/Char/Left/Right/Home/End/Ctrl+K/U）
+        _ => {
+            if wizard.step1_focus != Step1Field::ProviderType {
+                let (buf, cursor) = match wizard.step1_focus {
+                    Step1Field::ProviderId => (&mut wizard.provider_id, &mut wizard.cur_provider_id),
+                    Step1Field::BaseUrl => (&mut wizard.base_url, &mut wizard.cur_base_url),
+                    Step1Field::ApiKey => (&mut wizard.api_key, &mut wizard.cur_api_key),
+                    _ => return None,
+                };
+                if crate::app::handle_edit_key(buf, cursor, input) {
+                    Some(SetupWizardAction::Redraw)
+                } else {
+                    None
                 }
-                Step1Field::BaseUrl => {
-                    wizard.base_url.pop();
-                }
-                Step1Field::ApiKey => {
-                    wizard.api_key.pop();
-                }
-                _ => {}
+            } else {
+                None
             }
-            Some(SetupWizardAction::Redraw)
         }
-        // 字符输入
-        tui_textarea::Input {
-            key: Key::Char(c),
-            ctrl: false,
-            alt: false,
-            ..
-        } => {
-            match wizard.step1_focus {
-                Step1Field::ProviderId => wizard.provider_id.push(c),
-                Step1Field::BaseUrl => {
-                    wizard.base_url.push(c);
-                }
-                Step1Field::ApiKey => wizard.api_key.push(c),
-                _ => {}
-            }
-            Some(SetupWizardAction::Redraw)
-        }
-        _ => None,
     }
 }
 
@@ -351,23 +366,15 @@ fn handle_step_model_alias(
             wizard.step = SetupStep::Provider;
             Some(SetupWizardAction::Redraw)
         }
-        tui_textarea::Input {
-            key: Key::Backspace,
-            ..
-        } => {
-            wizard.aliases[wizard.step3_focus].model_id.pop();
-            Some(SetupWizardAction::Redraw)
+        // 编辑按键：使用公共函数处理
+        _ => {
+            let a = &mut wizard.aliases[wizard.step3_focus];
+            if crate::app::handle_edit_key(&mut a.model_id, &mut a.cursor, input) {
+                Some(SetupWizardAction::Redraw)
+            } else {
+                None
+            }
         }
-        tui_textarea::Input {
-            key: Key::Char(c),
-            ctrl: false,
-            alt: false,
-            ..
-        } => {
-            wizard.aliases[wizard.step3_focus].model_id.push(c);
-            Some(SetupWizardAction::Redraw)
-        }
-        _ => None,
     }
 }
 

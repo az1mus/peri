@@ -93,7 +93,8 @@ fn render_step_provider(f: &mut Frame, wizard: &SetupWizardPanel, area: Rect) {
     let pid_active = wizard.step1_focus == Step1Field::ProviderId;
     let (pid_label, pid_val) = focused(pid_active);
     let pid_display = if pid_active {
-        format!("{}▏", wizard.provider_id)
+        let (before, after) = crate::app::edit_display_parts(&wizard.provider_id, wizard.cur_provider_id);
+        format!("{}▏{}", before, after)
     } else {
         wizard.provider_id.clone()
     };
@@ -106,7 +107,8 @@ fn render_step_provider(f: &mut Frame, wizard: &SetupWizardPanel, area: Rect) {
     let url_active = wizard.step1_focus == Step1Field::BaseUrl;
     let (url_label, url_val) = focused(url_active);
     let url_display = if url_active {
-        format!("{}▏", wizard.base_url)
+        let (before, after) = crate::app::edit_display_parts(&wizard.base_url, wizard.cur_base_url);
+        format!("{}▏{}", before, after)
     } else {
         wizard.base_url.clone()
     };
@@ -124,7 +126,7 @@ fn render_step_provider(f: &mut Frame, wizard: &SetupWizardPanel, area: Rect) {
         "•".repeat(wizard.api_key.len())
     };
     let key_display = if key_active {
-        format!("{}▏", masked)
+        masked
     } else {
         masked
     };
@@ -228,7 +230,11 @@ fn render_step_model_alias(f: &mut Frame, wizard: &SetupWizardPanel, area: Rect)
             )
         };
         let model_display = if is_active {
-            format!("{}▏", wizard.aliases[i].model_id)
+            let (before, after) = crate::app::edit_display_parts(
+                &wizard.aliases[i].model_id,
+                wizard.aliases[i].cursor,
+            );
+            format!("{}▏{}", before, after)
         } else {
             wizard.aliases[i].model_id.clone()
         };

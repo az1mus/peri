@@ -233,20 +233,10 @@ pub async fn next_event(app: &mut App) -> Result<Option<Action>> {
                         key: Key::Char(' '),
                         ..
                     } => app.ask_user_toggle(),
-                    // 文字输入（自定义输入模式下）
-                    Input {
-                        key: Key::Backspace,
-                        ..
-                    } => app.ask_user_pop_char(),
-                    Input {
-                        key: Key::Char(c),
-                        ctrl: false,
-                        alt: false,
-                        ..
-                    } => {
-                        app.ask_user_push_char(c);
+                    // 文字输入（自定义输入模式下）— 使用公共编辑函数
+                    _ => {
+                        app.ask_user_edit_key(input);
                     }
-                    _ => {}
                 }
                 return Ok(Some(Action::Redraw));
             }

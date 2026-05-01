@@ -28,15 +28,12 @@ impl App {
         }
     }
 
-    pub fn ask_user_push_char(&mut self, c: char) {
+    pub fn ask_user_edit_key(&mut self, input: tui_textarea::Input) {
         if let Some(InteractionPrompt::Questions(p)) = self.agent.interaction_prompt.as_mut() {
-            p.current().push_char(c);
-        }
-    }
-
-    pub fn ask_user_pop_char(&mut self) {
-        if let Some(InteractionPrompt::Questions(p)) = self.agent.interaction_prompt.as_mut() {
-            p.current().pop_char();
+            let q = p.current();
+            if q.in_custom_input {
+                crate::app::handle_edit_key(&mut q.custom_input, &mut q.custom_cursor, input);
+            }
         }
     }
 

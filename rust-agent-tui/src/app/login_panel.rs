@@ -94,6 +94,13 @@ pub struct LoginPanel {
     pub buf_opus_model: String,
     pub buf_sonnet_model: String,
     pub buf_haiku_model: String,
+    /// 各字段的编辑光标（char-based index）
+    pub cur_name: usize,
+    pub cur_base_url: usize,
+    pub cur_api_key: usize,
+    pub cur_opus_model: usize,
+    pub cur_sonnet_model: usize,
+    pub cur_haiku_model: usize,
     /// 内容滚动偏移
     pub scroll_offset: u16,
 }
@@ -118,6 +125,12 @@ impl LoginPanel {
             buf_opus_model: String::new(),
             buf_sonnet_model: String::new(),
             buf_haiku_model: String::new(),
+            cur_name: 0,
+            cur_base_url: 0,
+            cur_api_key: 0,
+            cur_opus_model: 0,
+            cur_sonnet_model: 0,
+            cur_haiku_model: 0,
             scroll_offset: 0,
         }
     }
@@ -143,6 +156,12 @@ impl LoginPanel {
             self.buf_opus_model = p.models.opus.clone();
             self.buf_sonnet_model = p.models.sonnet.clone();
             self.buf_haiku_model = p.models.haiku.clone();
+            self.cur_name = self.buf_name.chars().count();
+            self.cur_base_url = self.buf_base_url.chars().count();
+            self.cur_api_key = self.buf_api_key.chars().count();
+            self.cur_opus_model = self.buf_opus_model.chars().count();
+            self.cur_sonnet_model = self.buf_sonnet_model.chars().count();
+            self.cur_haiku_model = self.buf_haiku_model.chars().count();
             self.edit_field = LoginEditField::Name;
             self.mode = LoginPanelMode::Edit;
         }
@@ -207,55 +226,36 @@ impl LoginPanel {
         }
     }
 
-    /// 输入字符到当前活动字段（Type 字段不可直接输入，只能 cycle）
-    pub fn push_char(&mut self, c: char) {
+    /// 获取当前编辑字段的 (buf, cursor) 可变引用
+    pub fn active_field(&mut self) -> Option<(&mut String, &mut usize)> {
         match self.edit_field {
-            LoginEditField::Name => self.buf_name.push(c),
-            LoginEditField::Type => {} // 只能 cycle
-            LoginEditField::BaseUrl => self.buf_base_url.push(c),
-            LoginEditField::ApiKey => self.buf_api_key.push(c),
-            LoginEditField::OpusModel => self.buf_opus_model.push(c),
-            LoginEditField::SonnetModel => self.buf_sonnet_model.push(c),
-            LoginEditField::HaikuModel => self.buf_haiku_model.push(c),
-        }
-    }
-
-    /// 删除当前活动字段末字符（Backspace）
-    pub fn pop_char(&mut self) {
-        match self.edit_field {
-            LoginEditField::Name => {
-                self.buf_name.pop();
-            }
-            LoginEditField::Type => {}
-            LoginEditField::BaseUrl => {
-                self.buf_base_url.pop();
-            }
-            LoginEditField::ApiKey => {
-                self.buf_api_key.pop();
-            }
-            LoginEditField::OpusModel => {
-                self.buf_opus_model.pop();
-            }
+            LoginEditField::Name => Some((&mut self.buf_name, &mut self.cur_name)),
+            LoginEditField::Type => None,
+            LoginEditField::BaseUrl => Some((&mut self.buf_base_url, &mut self.cur_base_url)),
+            LoginEditField::ApiKey => Some((&mut self.buf_api_key, &mut self.cur_api_key)),
+            LoginEditField::OpusModel => Some((&mut self.buf_opus_model, &mut self.cur_opus_model)),
             LoginEditField::SonnetModel => {
-                self.buf_sonnet_model.pop();
+                Some((&mut self.buf_sonnet_model, &mut self.cur_sonnet_model))
             }
-            LoginEditField::HaikuModel => {
-                self.buf_haiku_model.pop();
-            }
+            LoginEditField::HaikuModel => Some((&mut self.buf_haiku_model, &mut self.cur_haiku_model)),
         }
     }
 
     /// 粘贴文本到当前活动字段（过滤换行符，Type 字段忽略粘贴）
     pub fn paste_text(&mut self, text: &str) {
         let text: String = text.chars().filter(|&c| c != '\n' && c != '\r').collect();
-        match self.edit_field {
-            LoginEditField::Name => self.buf_name.push_str(&text),
-            LoginEditField::Type => {}
-            LoginEditField::BaseUrl => self.buf_base_url.push_str(&text),
-            LoginEditField::ApiKey => self.buf_api_key.push_str(&text),
-            LoginEditField::OpusModel => self.buf_opus_model.push_str(&text),
-            LoginEditField::SonnetModel => self.buf_sonnet_model.push_str(&text),
-            LoginEditField::HaikuModel => self.buf_haiku_model.push_str(&text),
+        if let Some((buf, cursor)) = self.active_field() {
+            let char_count = buf.chars().count();
+            if *cursor > char_count {
+                *cursor = char_count;
+            }
+            let byte_pos = buf
+                .char_indices()
+                .nth(*cursor)
+                .map(|(i, _)| i)
+                .unwrap_or(buf.len());
+            buf.insert_str(byte_pos, &text);
+            *cursor += text.chars().count();
         }
     }
 
@@ -513,12 +513,17 @@ mod tests {
 
     #[test]
     fn test_login_panel_push_pop_char() {
+        use crate::app::handle_edit_key;
+        use tui_textarea::{Input, Key};
         let mut panel = LoginPanel::from_config(&ZenConfig::default());
         panel.edit_field = LoginEditField::OpusModel;
-        panel.push_char('x');
-        panel.push_char('x');
+        let (buf, cur) = panel.active_field().unwrap();
+        handle_edit_key(buf, cur, Input { key: Key::Char('x'), ctrl: false, alt: false, shift: false });
+        let (buf, cur) = panel.active_field().unwrap();
+        handle_edit_key(buf, cur, Input { key: Key::Char('x'), ctrl: false, alt: false, shift: false });
         assert_eq!(panel.buf_opus_model, "xx");
-        panel.pop_char();
+        let (buf, cur) = panel.active_field().unwrap();
+        handle_edit_key(buf, cur, Input { key: Key::Backspace, ctrl: false, alt: false, shift: false });
         assert_eq!(panel.buf_opus_model, "x");
     }
 
@@ -527,7 +532,7 @@ mod tests {
         let mut panel = LoginPanel::from_config(&ZenConfig::default());
         let orig_type = panel.buf_type.clone();
         panel.edit_field = LoginEditField::Type;
-        panel.push_char('a');
+        assert!(panel.active_field().is_none());
         assert_eq!(panel.buf_type, orig_type);
     }
 
