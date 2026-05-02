@@ -204,7 +204,7 @@ fn render_messages(f: &mut Frame, app: &mut App, header_area: Rect, messages_are
     let visible_height = inner.height;
 
     // 计算 loading spinner 行（Claude Code 风格：✻ verb (Xm Xs · ↓ X.Xk tokens)）
-    // loading 结束后显示总结行：✻ Brewed for Xm Xs（橙色）
+    // compact 时紫色，其余橙色；loading 结束后显示总结行：✻ Brewed for Xm Xs
     let spinner_line: Option<Line<'static>> = if app.core.loading {
         let frame = perihelion_widgets::spinner::animation::tick_to_frame(app.spinner_state.tick());
         let verb = app.spinner_state.verb();
@@ -212,10 +212,15 @@ fn render_messages(f: &mut Frame, app: &mut App, header_area: Rect, messages_are
             perihelion_widgets::spinner::animation::format_elapsed(app.spinner_state.elapsed_ms());
         let tokens = app.spinner_state.displayed_tokens();
 
-        let orange = Style::default().fg(theme::ACCENT);
+        let is_compact = verb.starts_with("压缩上下文");
+        let accent = if is_compact {
+            Style::default().fg(theme::THINKING)
+        } else {
+            Style::default().fg(theme::ACCENT)
+        };
         let gray = Style::default().fg(theme::MUTED);
         let mut parts = vec![
-            Span::styled(format!(" {} {}", frame, verb), orange),
+            Span::styled(format!(" {} {}", frame, verb), accent),
             Span::styled(format!(" ({elapsed}"), gray),
         ];
         if tokens > 0 {
