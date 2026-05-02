@@ -9,7 +9,7 @@ name = "rust_agent_tui"
 path = "src/lib.rs"
 
 [[bin]]
-name = "agent-tui"
+name = "peri"
 path = "src/main.rs"
 
 [features]
@@ -43,3 +43,9 @@ reqwest = { version = "0.13", default-features = false, features = [
     "rustls",
     "json",
 ] }
+clap = { version = "4", features = ["derive"] }
+agent-client-protocol = { version = "0.11", features = ["unstable"] }
+agent-client-protocol-schema = { version = "0.11" }
+agent-client-protocol-tokio = { version = "0.11" }
+dashmap = "6"
+tokio-util = "0.7"

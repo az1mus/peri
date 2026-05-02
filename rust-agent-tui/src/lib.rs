@@ -1,5 +1,6 @@
 //! TUI interface for Rust Agent - interactive terminal playground
 
+pub mod acp;
 pub mod app;
 pub mod command;
 pub mod config;

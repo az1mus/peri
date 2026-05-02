@@ -1,4 +1,5 @@
 use anyhow::Result;
+use clap::{Parser, Subcommand};
 use ratatui::{
     crossterm::{
         event::{
@@ -14,6 +15,36 @@ use std::io;
 use rust_agent_tui::app::App;
 use rust_agent_tui::event;
 use rust_agent_tui::ui;
+
+// ─── CLI 定义 ──────────────────────────────────────────────────────────────
+
+#[derive(Parser)]
+#[command(name = "peri", version, about = "Perihelion AI Agent")]
+struct Cli {
+    /// 向后兼容，无操作（YOLO 已是默认行为）
+    #[arg(short = 'y', long = "yolo")]
+    yolo: bool,
+    /// 启用 HITL 审批模式
+    #[arg(short = 'a', long = "approve")]
+    approve: bool,
+    #[command(subcommand)]
+    command: Option<Commands>,
+}
+
+#[derive(Subcommand)]
+enum Commands {
+    /// 以 ACP Agent 模式运行（stdin/stdout JSON-RPC）
+    Acp {
+        /// 工作目录
+        #[arg(long, default_value = ".")]
+        cwd: String,
+        /// 模型名称/别名
+        #[arg(long)]
+        model: Option<String>,
+    },
+}
+
+// ─── 环境变量注入 ──────────────────────────────────────────────────────────
 
 /// 从 settings.json 读取 env 字段并注入进程环境变量
 /// 仅在进程环境变量不存在时设置（进程环境优先）
@@ -55,15 +86,29 @@ fn inject_env_from_settings() {
     }
 }
 
+// ─── 入口 ──────────────────────────────────────────────────────────────────
+
 fn main() -> Result<()> {
     // 最先注入环境变量（进程环境变量优先）
     inject_env_from_settings();
 
-    // 解析命令行参数
-    let args: Vec<String> = std::env::args().collect();
-    // -y/--yolo 保留为向后兼容的无操作（YOLO 已是默认行为）
-    // --approve / -a 显式启用 HITL 审批（设置 YOLO_MODE=false）
-    if args.iter().any(|a| a == "--approve" || a == "-a") {
+    let cli = Cli::parse();
+
+    match cli.command {
+        None => run_tui(cli.approve),
+        Some(Commands::Acp { cwd, model }) => {
+            let rt = tokio::runtime::Builder::new_multi_thread()
+                .enable_all()
+                .build()?;
+            rt.block_on(rust_agent_tui::acp::run_acp_mode(cwd, model))
+        }
+    }
+}
+
+// ─── TUI 模式 ──────────────────────────────────────────────────────────────
+
+fn run_tui(approve: bool) -> Result<()> {
+    if approve {
         std::env::set_var("YOLO_MODE", "false");
     }
 
