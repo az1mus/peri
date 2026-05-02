@@ -125,9 +125,6 @@ fn render_server_list(f: &mut Frame, app: &mut App, inner: Rect) {
         )));
     }
 
-    // 底部提示行
-    render_server_list_help(&mut lines, panel.confirm_delete.is_some());
-
     // 存储面板元数据供鼠标选区使用
     app.core.panel_area = Some(inner);
     app.core.panel_scroll_offset = 0;
@@ -147,7 +144,7 @@ fn render_server_list(f: &mut Frame, app: &mut App, inner: Rect) {
 
 fn render_server_detail(f: &mut Frame, app: &mut App, inner: Rect) {
     // 从 app 中提取所有需要的数据，避免借用冲突
-    let (active_tab, scroll_offset, cursor, tools, resources, confirm_delete) = {
+    let (active_tab, scroll_offset, cursor, tools, resources) = {
         let panel = match app.mcp_panel.as_ref() {
             Some(p) => p,
             None => return,
@@ -158,7 +155,7 @@ fn render_server_detail(f: &mut Frame, app: &mut App, inner: Rect) {
         else {
             return;
         };
-        (*active_tab, panel.scroll_offset, panel.cursor, tools.clone(), resources.clone(), panel.confirm_delete.clone())
+        (*active_tab, panel.scroll_offset, panel.cursor, tools.clone(), resources.clone())
     };
 
     // ── 1. Tab 栏（固定，不滚动） ──
@@ -252,52 +249,6 @@ fn render_server_detail(f: &mut Frame, app: &mut App, inner: Rect) {
         _ => {}
     }
 
-    // 底部提示行（跟随滚动）
-    lines.push(Line::from(""));
-    if confirm_delete.is_some() {
-        let server_name = confirm_delete.as_deref().unwrap_or("?");
-        lines.push(Line::from(vec![
-            Span::styled(
-                " ⚠ 确定删除 ",
-                Style::default()
-                    .fg(theme::ERROR)
-                    .add_modifier(Modifier::BOLD),
-            ),
-            Span::styled(
-                server_name,
-                Style::default()
-                    .fg(theme::ERROR)
-                    .add_modifier(Modifier::BOLD),
-            ),
-            Span::styled(
-                "？此操作将从配置文件中永久移除  ",
-                Style::default().fg(theme::MUTED),
-            ),
-            Span::styled(
-                "Enter",
-                Style::default()
-                    .fg(theme::MUTED)
-                    .add_modifier(Modifier::BOLD),
-            ),
-            Span::styled(":确认  ", Style::default().fg(theme::MUTED)),
-            Span::styled(
-                "其他键",
-                Style::default()
-                    .fg(theme::MUTED)
-                    .add_modifier(Modifier::BOLD),
-            ),
-            Span::styled(":取消", Style::default().fg(theme::MUTED)),
-        ]));
-    } else {
-        lines.push(Line::from(vec![
-            Span::styled("↑↓", Style::default().fg(theme::WARNING).add_modifier(Modifier::BOLD)),
-            Span::styled(":移动  ", Style::default().fg(theme::MUTED)),
-            Span::styled("Tab", Style::default().fg(theme::WARNING).add_modifier(Modifier::BOLD)),
-            Span::styled(":切换视图  ", Style::default().fg(theme::MUTED)),
-            Span::styled("Esc", Style::default().fg(theme::ERROR).add_modifier(Modifier::BOLD)),
-            Span::styled(":返回", Style::default().fg(theme::MUTED)),
-        ]));
-    }
 
     // 存储面板元数据供鼠标选区使用
     app.core.panel_area = Some(scroll_area);
@@ -314,47 +265,6 @@ fn render_server_detail(f: &mut Frame, app: &mut App, inner: Rect) {
     ScrollableArea::new(Text::from(lines))
         .scrollbar_style(Style::default().fg(theme::MUTED))
         .render(f, scroll_area, &mut scroll_state);
-}
-
-fn render_server_list_help(lines: &mut Vec<Line>, has_confirm_delete: bool) {
-    lines.push(Line::from(""));
-    if has_confirm_delete {
-        lines.push(Line::from(vec![
-            Span::styled(
-                " ⚠ 确定删除？此操作将从配置文件中永久移除  ",
-                Style::default()
-                    .fg(theme::ERROR)
-                    .add_modifier(Modifier::BOLD),
-            ),
-            Span::styled(
-                "Enter",
-                Style::default()
-                    .fg(theme::MUTED)
-                    .add_modifier(Modifier::BOLD),
-            ),
-            Span::styled(":确认  ", Style::default().fg(theme::MUTED)),
-            Span::styled(
-                "其他键",
-                Style::default()
-                    .fg(theme::MUTED)
-                    .add_modifier(Modifier::BOLD),
-            ),
-            Span::styled(":取消", Style::default().fg(theme::MUTED)),
-        ]));
-    } else {
-        lines.push(Line::from(vec![
-            Span::styled("↑↓", Style::default().fg(theme::WARNING).add_modifier(Modifier::BOLD)),
-            Span::styled(":移动  ", Style::default().fg(theme::MUTED)),
-            Span::styled("Enter", Style::default().fg(theme::WARNING).add_modifier(Modifier::BOLD)),
-            Span::styled(":详情  ", Style::default().fg(theme::MUTED)),
-            Span::styled("Ctrl+R", Style::default().fg(theme::WARNING).add_modifier(Modifier::BOLD)),
-            Span::styled(":重连  ", Style::default().fg(theme::MUTED)),
-            Span::styled("Ctrl+D", Style::default().fg(theme::WARNING).add_modifier(Modifier::BOLD)),
-            Span::styled(":删除  ", Style::default().fg(theme::MUTED)),
-            Span::styled("Esc", Style::default().fg(theme::ERROR).add_modifier(Modifier::BOLD)),
-            Span::styled(":关闭", Style::default().fg(theme::MUTED)),
-        ]));
-    }
 }
 
 fn apply_panel_selection(app: &mut App, lines: &mut Vec<Line>, area: Rect) {

@@ -240,77 +240,7 @@ pub(crate) fn render_thread_browser(f: &mut Frame, app: &mut App, area: Rect) {
         lines.push(Line::from(""));
     }
 
-    // 确认删除提示
-    if browser.confirm_delete {
-        lines.push(Line::from(vec![
-            Span::styled(
-                " ⚠ ",
-                Style::default()
-                    .fg(theme::ERROR)
-                    .add_modifier(Modifier::BOLD),
-            ),
-            Span::styled(
-                "确认删除？",
-                Style::default()
-                    .fg(theme::ERROR)
-                    .add_modifier(Modifier::BOLD),
-            ),
-            Span::styled(
-                " Enter",
-                Style::default()
-                    .fg(theme::WARNING)
-                    .add_modifier(Modifier::BOLD),
-            ),
-            Span::styled(":确认  ", Style::default().fg(theme::MUTED)),
-            Span::styled(
-                "其他键",
-                Style::default()
-                    .fg(theme::WARNING)
-                    .add_modifier(Modifier::BOLD),
-            ),
-            Span::styled(":取消", Style::default().fg(theme::MUTED)),
-        ]));
-    }
-
-    // 底部快捷键提示
-    let help_spans = vec![
-        Span::styled(
-            " ↑↓",
-            Style::default()
-                .fg(theme::WARNING)
-                .add_modifier(Modifier::BOLD),
-        ),
-        Span::styled(":移动 ", Style::default().fg(theme::MUTED)),
-        Span::styled(
-            "Enter",
-            Style::default()
-                .fg(theme::WARNING)
-                .add_modifier(Modifier::BOLD),
-        ),
-        Span::styled(":确认 ", Style::default().fg(theme::MUTED)),
-        Span::styled(
-            "Ctrl+D",
-            Style::default()
-                .fg(theme::WARNING)
-                .add_modifier(Modifier::BOLD),
-        ),
-        Span::styled(":删除 ", Style::default().fg(theme::MUTED)),
-        Span::styled(
-            "Esc",
-            Style::default()
-                .fg(theme::WARNING)
-                .add_modifier(Modifier::BOLD),
-        ),
-        Span::styled(":关闭 ", Style::default().fg(theme::MUTED)),
-        Span::styled(
-            "/",
-            Style::default()
-                .fg(theme::WARNING)
-                .add_modifier(Modifier::BOLD),
-        ),
-        Span::styled(":搜索", Style::default().fg(theme::MUTED)),
-    ];
-    lines.push(Line::from(help_spans));
+    // 存储面板元数据供鼠标选区使用（仅列表区域）
 
     // 存储面板元数据供鼠标选区使用（仅列表区域）
     app.core.panel_area = Some(list_area);

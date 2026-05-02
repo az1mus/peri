@@ -120,30 +120,6 @@ pub(crate) fn render_agent_panel(f: &mut Frame, app: &mut App, area: Rect) {
         )));
     }
 
-    // 底部提示
-    lines.push(Line::from(vec![
-        Span::styled(
-            " ↑↓",
-            Style::default()
-                .fg(theme::MUTED)
-                .add_modifier(Modifier::BOLD),
-        ),
-        Span::styled(":导航  ", Style::default().fg(theme::MUTED)),
-        Span::styled(
-            "Enter",
-            Style::default()
-                .fg(theme::MUTED)
-                .add_modifier(Modifier::BOLD),
-        ),
-        Span::styled(":选择  ", Style::default().fg(theme::MUTED)),
-        Span::styled(
-            "Esc",
-            Style::default()
-                .fg(theme::MUTED)
-                .add_modifier(Modifier::BOLD),
-        ),
-        Span::styled(":关闭", Style::default().fg(theme::MUTED)),
-    ]));
 
     // 存储面板元数据供鼠标选区使用
     app.core.panel_area = Some(inner);

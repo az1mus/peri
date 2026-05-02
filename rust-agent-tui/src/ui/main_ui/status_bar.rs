@@ -293,68 +293,131 @@ fn render_second_row(f: &mut Frame, app: &App, area: Rect) {
                     ),
                     Span::styled(":取消", Style::default().fg(theme::MUTED)),
                 ]
-            } else if app.cron.cron_panel.is_some() {
-                vec![
-                    Span::styled(
-                        "↑↓",
-                        Style::default()
-                            .fg(theme::WARNING)
-                            .add_modifier(Modifier::BOLD),
-                    ),
-                    Span::styled(":移动  ", Style::default().fg(theme::MUTED)),
-                    Span::styled(
-                        "Enter",
-                        Style::default()
-                            .fg(theme::WARNING)
-                            .add_modifier(Modifier::BOLD),
-                    ),
-                    Span::styled(":切换  ", Style::default().fg(theme::MUTED)),
-                    Span::styled(
-                        "Ctrl+D",
-                        Style::default()
-                            .fg(theme::WARNING)
-                            .add_modifier(Modifier::BOLD),
-                    ),
-                    Span::styled(":删除  ", Style::default().fg(theme::MUTED)),
-                    Span::styled(
-                        "Esc",
-                        Style::default()
-                            .fg(theme::ERROR)
-                            .add_modifier(Modifier::BOLD),
-                    ),
-                    Span::styled(":关闭", Style::default().fg(theme::MUTED)),
-                ]
-            } else if app.core.login_panel.is_some() {
-                vec![
-                    Span::styled(
-                        "Enter",
-                        Style::default()
-                            .fg(theme::WARNING)
-                            .add_modifier(Modifier::BOLD),
-                    ),
-                    Span::styled(":编辑  ", Style::default().fg(theme::MUTED)),
-                    Span::styled(
-                        "Ctrl+N",
-                        Style::default()
-                            .fg(theme::SAGE)
-                            .add_modifier(Modifier::BOLD),
-                    ),
-                    Span::styled(":新建  ", Style::default().fg(theme::MUTED)),
-                    Span::styled(
-                        "Ctrl+D",
-                        Style::default()
-                            .fg(theme::WARNING)
-                            .add_modifier(Modifier::BOLD),
-                    ),
-                    Span::styled(":删除  ", Style::default().fg(theme::MUTED)),
-                    Span::styled(
-                        "Esc",
-                        Style::default()
-                            .fg(theme::ERROR)
-                            .add_modifier(Modifier::BOLD),
-                    ),
-                    Span::styled(":关闭", Style::default().fg(theme::MUTED)),
-                ]
+            } else if let Some(cron_panel) = &app.cron.cron_panel {
+                if cron_panel.confirm_delete {
+                    vec![
+                        Span::styled(
+                            "Enter",
+                            Style::default().fg(theme::WARNING).add_modifier(Modifier::BOLD),
+                        ),
+                        Span::styled(":确认  ", Style::default().fg(theme::MUTED)),
+                        Span::styled(
+                            "其他键",
+                            Style::default().fg(theme::WARNING).add_modifier(Modifier::BOLD),
+                        ),
+                        Span::styled(":取消", Style::default().fg(theme::MUTED)),
+                    ]
+                } else {
+                    vec![
+                        Span::styled(
+                            "↑↓",
+                            Style::default()
+                                .fg(theme::WARNING)
+                                .add_modifier(Modifier::BOLD),
+                        ),
+                        Span::styled(":移动  ", Style::default().fg(theme::MUTED)),
+                        Span::styled(
+                            "Enter",
+                            Style::default()
+                                .fg(theme::WARNING)
+                                .add_modifier(Modifier::BOLD),
+                        ),
+                        Span::styled(":切换  ", Style::default().fg(theme::MUTED)),
+                        Span::styled(
+                            "Ctrl+D",
+                            Style::default()
+                                .fg(theme::WARNING)
+                                .add_modifier(Modifier::BOLD),
+                        ),
+                        Span::styled(":删除  ", Style::default().fg(theme::MUTED)),
+                        Span::styled(
+                            "Esc",
+                            Style::default()
+                                .fg(theme::ERROR)
+                                .add_modifier(Modifier::BOLD),
+                        ),
+                        Span::styled(":关闭", Style::default().fg(theme::MUTED)),
+                    ]
+                }
+            } else if let Some(login_panel) = &app.core.login_panel {
+                use crate::app::login_panel::LoginPanelMode;
+                match login_panel.mode {
+                    LoginPanelMode::ConfirmDelete => {
+                        vec![
+                            Span::styled(
+                                "Enter",
+                                Style::default().fg(theme::WARNING).add_modifier(Modifier::BOLD),
+                            ),
+                            Span::styled(":确认删除  ", Style::default().fg(theme::MUTED)),
+                            Span::styled(
+                                "Esc",
+                                Style::default().fg(theme::ERROR).add_modifier(Modifier::BOLD),
+                            ),
+                            Span::styled(":取消", Style::default().fg(theme::MUTED)),
+                        ]
+                    }
+                    LoginPanelMode::Edit | LoginPanelMode::New => {
+                        vec![
+                            Span::styled(
+                                "↑↓",
+                                Style::default().fg(theme::WARNING).add_modifier(Modifier::BOLD),
+                            ),
+                            Span::styled(":切换字段  ", Style::default().fg(theme::MUTED)),
+                            Span::styled(
+                                "←→/Space",
+                                Style::default().fg(theme::WARNING).add_modifier(Modifier::BOLD),
+                            ),
+                            Span::styled(":切换Type  ", Style::default().fg(theme::MUTED)),
+                            Span::styled(
+                                "Enter",
+                                Style::default().fg(theme::WARNING).add_modifier(Modifier::BOLD),
+                            ),
+                            Span::styled(":保存  ", Style::default().fg(theme::MUTED)),
+                            Span::styled(
+                                "Ctrl+V",
+                                Style::default().fg(theme::WARNING).add_modifier(Modifier::BOLD),
+                            ),
+                            Span::styled(":粘贴  ", Style::default().fg(theme::MUTED)),
+                            Span::styled(
+                                "Esc",
+                                Style::default().fg(theme::ERROR).add_modifier(Modifier::BOLD),
+                            ),
+                            Span::styled(":取消", Style::default().fg(theme::MUTED)),
+                        ]
+                    }
+                    LoginPanelMode::Browse => {
+                        vec![
+                            Span::styled(
+                                "Enter",
+                                Style::default()
+                                    .fg(theme::WARNING)
+                                    .add_modifier(Modifier::BOLD),
+                            ),
+                            Span::styled(":编辑  ", Style::default().fg(theme::MUTED)),
+                            Span::styled(
+                                "Ctrl+N",
+                                Style::default()
+                                    .fg(theme::SAGE)
+                                    .add_modifier(Modifier::BOLD),
+                            ),
+                            Span::styled(":新建  ", Style::default().fg(theme::MUTED)),
+                            Span::styled(
+                                "Ctrl+D",
+                                Style::default()
+                                    .fg(theme::WARNING)
+                                    .add_modifier(Modifier::BOLD),
+                            ),
+                            Span::styled(":删除  ", Style::default().fg(theme::MUTED)),
+                            Span::styled(
+                                "Esc",
+                                Style::default()
+                                    .fg(theme::ERROR)
+                                    .add_modifier(Modifier::BOLD),
+                            ),
+                            Span::styled(":关闭", Style::default().fg(theme::MUTED)),
+                        ]
+                    }
+                }
             } else if app.mcp_panel.is_some() {
                 let view_label = app.mcp_panel.as_ref().map(|p| match &p.view {
                     crate::app::McpPanelView::ServerList => {
@@ -423,6 +486,49 @@ fn render_second_row(f: &mut Frame, app: &App, area: Rect) {
                     ),
                     Span::styled(":关闭", Style::default().fg(theme::MUTED)),
                 ]
+            } else if let Some(browser) = &app.core.thread_browser {
+                if browser.confirm_delete {
+                    vec![
+                        Span::styled(
+                            "Enter",
+                            Style::default().fg(theme::WARNING).add_modifier(Modifier::BOLD),
+                        ),
+                        Span::styled(":确认  ", Style::default().fg(theme::MUTED)),
+                        Span::styled(
+                            "其他键",
+                            Style::default().fg(theme::WARNING).add_modifier(Modifier::BOLD),
+                        ),
+                        Span::styled(":取消", Style::default().fg(theme::MUTED)),
+                    ]
+                } else {
+                    vec![
+                        Span::styled(
+                            "↑↓",
+                            Style::default().fg(theme::WARNING).add_modifier(Modifier::BOLD),
+                        ),
+                        Span::styled(":移动  ", Style::default().fg(theme::MUTED)),
+                        Span::styled(
+                            "Enter",
+                            Style::default().fg(theme::WARNING).add_modifier(Modifier::BOLD),
+                        ),
+                        Span::styled(":确认  ", Style::default().fg(theme::MUTED)),
+                        Span::styled(
+                            "Ctrl+D",
+                            Style::default().fg(theme::WARNING).add_modifier(Modifier::BOLD),
+                        ),
+                        Span::styled(":删除  ", Style::default().fg(theme::MUTED)),
+                        Span::styled(
+                            "Esc",
+                            Style::default().fg(theme::ERROR).add_modifier(Modifier::BOLD),
+                        ),
+                        Span::styled(":关闭  ", Style::default().fg(theme::MUTED)),
+                        Span::styled(
+                            "/",
+                            Style::default().fg(theme::WARNING).add_modifier(Modifier::BOLD),
+                        ),
+                        Span::styled(":搜索", Style::default().fg(theme::MUTED)),
+                    ]
+                }
             } else {
                 vec![
                     Span::styled(

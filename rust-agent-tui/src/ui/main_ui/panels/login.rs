@@ -108,37 +108,6 @@ pub(crate) fn render_login_panel(f: &mut Frame, app: &App, area: Rect) {
                     Style::default().fg(theme::MUTED),
                 )));
             }
-            lines.push(Line::from(""));
-            lines.push(Line::from(vec![
-                Span::styled(
-                    " Enter",
-                    Style::default()
-                        .fg(theme::MUTED)
-                        .add_modifier(Modifier::BOLD),
-                ),
-                Span::styled(":选中  ", Style::default().fg(theme::MUTED)),
-                Span::styled(
-                    "Tab",
-                    Style::default()
-                        .fg(theme::MUTED)
-                        .add_modifier(Modifier::BOLD),
-                ),
-                Span::styled(":编辑  ", Style::default().fg(theme::MUTED)),
-                Span::styled(
-                    "Ctrl+N",
-                    Style::default()
-                        .fg(theme::MUTED)
-                        .add_modifier(Modifier::BOLD),
-                ),
-                Span::styled(":新建  ", Style::default().fg(theme::MUTED)),
-                Span::styled(
-                    "Ctrl+D",
-                    Style::default()
-                        .fg(theme::MUTED)
-                        .add_modifier(Modifier::BOLD),
-                ),
-                Span::styled(":删除", Style::default().fg(theme::MUTED)),
-            ]));
             lines.truncate(inner.height as usize);
             f.render_widget(Paragraph::new(Text::from(lines)), inner);
         }
@@ -214,39 +183,6 @@ pub(crate) fn render_login_panel(f: &mut Frame, app: &App, area: Rect) {
                 ]));
             }
 
-            lines.push(Line::from(""));
-            lines.push(Line::from(vec![
-                Span::styled(
-                    " ↑↓",
-                    Style::default()
-                        .fg(theme::MUTED)
-                        .add_modifier(Modifier::BOLD),
-                ),
-                Span::styled(":切换字段  ", Style::default().fg(theme::MUTED)),
-                Span::styled(
-                    "←→/Space",
-                    Style::default()
-                        .fg(theme::MUTED)
-                        .add_modifier(Modifier::BOLD),
-                ),
-                Span::styled(":切换Type  ", Style::default().fg(theme::MUTED)),
-                Span::styled(
-                    "Enter",
-                    Style::default()
-                        .fg(theme::MUTED)
-                        .add_modifier(Modifier::BOLD),
-                ),
-                Span::styled(":保存  ", Style::default().fg(theme::MUTED)),
-                Span::styled(
-                    "Ctrl+V",
-                    Style::default()
-                        .fg(theme::MUTED)
-                        .add_modifier(Modifier::BOLD),
-                ),
-                Span::styled(":粘贴  ", Style::default().fg(theme::MUTED)),
-                Span::styled("Esc", Style::default().fg(theme::MUTED)),
-                Span::styled(":取消", Style::default().fg(theme::MUTED)),
-            ]));
             lines.truncate(inner.height as usize);
             f.render_widget(Paragraph::new(Text::from(lines)), inner);
         }
@@ -275,13 +211,13 @@ pub(crate) fn render_login_panel(f: &mut Frame, app: &App, area: Rect) {
                     ),
                 ]));
             }
-            list_lines.truncate(inner.height.saturating_sub(5) as usize);
+            list_lines.truncate(inner.height.saturating_sub(3) as usize);
             f.render_widget(Paragraph::new(Text::from(list_lines)), inner);
 
-            let confirm_y = inner.y + inner.height.saturating_sub(4);
+            let confirm_y = inner.y + inner.height.saturating_sub(2);
             let confirm_area = Rect {
                 y: confirm_y,
-                height: 4,
+                height: 2,
                 ..inner
             };
             if let Some(p) = panel.providers.get(panel.cursor) {
@@ -296,22 +232,6 @@ pub(crate) fn render_login_panel(f: &mut Frame, app: &App, area: Rect) {
                                 .add_modifier(Modifier::BOLD),
                         ),
                         Span::styled(" ？", Style::default().fg(theme::TEXT)),
-                    ]),
-                    Line::from(vec![
-                        Span::styled(
-                            " Enter",
-                            Style::default()
-                                .fg(theme::MUTED)
-                                .add_modifier(Modifier::BOLD),
-                        ),
-                        Span::styled(":确认删除  ", Style::default().fg(theme::MUTED)),
-                        Span::styled(
-                            "Esc",
-                            Style::default()
-                                .fg(theme::MUTED)
-                                .add_modifier(Modifier::BOLD),
-                        ),
-                        Span::styled(":取消", Style::default().fg(theme::MUTED)),
                     ]),
                 ];
                 f.render_widget(Paragraph::new(Text::from(confirm_lines)), confirm_area);

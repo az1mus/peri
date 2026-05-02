@@ -8,7 +8,7 @@ use ratatui::{
 
 use perihelion_widgets::BorderedPanel;
 
-use crate::app::model_panel::{AliasTab, ROW_EFFORT, ROW_HAIKU, ROW_OPUS, ROW_SONNET};
+use crate::app::model_panel::{AliasTab, ROW_HAIKU, ROW_OPUS, ROW_SONNET};
 use crate::app::App;
 use crate::ui::theme;
 
@@ -107,7 +107,6 @@ pub(crate) fn render_model_panel(f: &mut Frame, app: &App, area: Rect) {
 
     // Effort row
     {
-        let is_cursor = panel.cursor == ROW_EFFORT;
         let effort_label = match panel.buf_thinking_effort.as_str() {
             "low" => "Low",
             "high" => "High",
@@ -119,7 +118,7 @@ pub(crate) fn render_model_panel(f: &mut Frame, app: &App, area: Rect) {
             .fg(theme::MUTED)
             .add_modifier(Modifier::BOLD);
 
-        let mut spans = vec![
+        let spans = vec![
             Span::styled(
                 "    \u{25cf} ",
                 Style::default().fg(radio_color),
@@ -127,40 +126,10 @@ pub(crate) fn render_model_panel(f: &mut Frame, app: &App, area: Rect) {
             Span::styled(format!("{} effort", effort_label), effort_style),
         ];
 
-        if is_cursor {
-            spans.push(Span::styled(
-                " \u{2190} \u{2192} to adjust",
-                Style::default().fg(theme::MUTED),
-            ));
-        }
-
         lines.push(Line::from(spans));
     }
 
     lines.push(Line::from(""));
-
-    // Footer
-    lines.push(Line::from(vec![
-        Span::styled(
-            "  Enter",
-            Style::default()
-                .fg(theme::MUTED)
-                .add_modifier(Modifier::BOLD),
-        ),
-        Span::styled(" to confirm ", Style::default().fg(theme::MUTED)),
-        Span::styled(
-            "\u{00b7}",
-            Style::default().fg(theme::MUTED),
-        ),
-        Span::styled(" ", Style::default().fg(theme::MUTED)),
-        Span::styled(
-            "Esc",
-            Style::default()
-                .fg(theme::MUTED)
-                .add_modifier(Modifier::BOLD),
-        ),
-        Span::styled(" to exit", Style::default().fg(theme::MUTED)),
-    ]));
 
     lines.truncate(inner.height as usize);
     f.render_widget(Paragraph::new(Text::from(lines)), inner);
