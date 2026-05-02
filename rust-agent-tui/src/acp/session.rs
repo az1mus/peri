@@ -4,11 +4,11 @@ use chrono::Utc;
 use dashmap::DashMap;
 use rust_create_agent::messages::BaseMessage;
 use rust_create_agent::thread::{ThreadId, ThreadMeta, ThreadStore};
-use rust_agent_middlewares::prelude::SharedPermissionMode;
+use rust_agent_middlewares::prelude::{PermissionMode, SharedPermissionMode};
 use tokio_util::sync::CancellationToken;
 
 use crate::app::agent::LlmProvider;
-use crate::config::ZenConfig;
+use crate::config::{ThinkingConfig, ZenConfig};
 
 pub struct AcpSession {
     pub session_id: String,
@@ -17,6 +17,12 @@ pub struct AcpSession {
     pub cancel_token: CancellationToken,
     pub state_messages: Vec<BaseMessage>,
     pub created_at: chrono::DateTime<Utc>,
+    /// 当前激活的模型别名（"opus"/"sonnet"/"haiku"）
+    pub model_alias: String,
+    /// 每会话独立的权限模式
+    pub permission_mode: Arc<SharedPermissionMode>,
+    /// 每会话独立的 thinking 配置
+    pub thinking: Option<ThinkingConfig>,
 }
 
 struct SessionManagerInner {
@@ -63,20 +69,35 @@ impl SessionManager {
         }
 
         let thread_id = ThreadId::from(session_id.to_string());
-        let session = AcpSession {
-            session_id: session_id.to_string(),
-            thread_id,
-            cwd: cwd.to_string(),
-            cancel_token: CancellationToken::new(),
-            state_messages: Vec::new(),
-            created_at: Utc::now(),
-        };
+        let session = self.build_session(session_id, thread_id, cwd);
 
         self.inner.sessions.insert(session_id.to_string(), session);
         Ok(())
     }
 
     pub async fn new_session(&self, cwd: &str) -> anyhow::Result<(String, ThreadId)> {
+        let meta = ThreadMeta::new(cwd);
+        let thread_id = self.inner.thread_store.create_thread(meta).await?;
+
+        let session_id = self
+            .inner
+            .next_session_id
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+            .to_string();
+
+        let session = self.build_session(&session_id, thread_id.clone(), cwd);
+
+        self.inner.sessions.insert(session_id.clone(), session);
+        Ok((session_id, thread_id))
+    }
+
+    /// 创建新会话并继承指定的 model_alias 和 thinking 设置
+    pub async fn new_session_with_settings(
+        &self,
+        cwd: &str,
+        model_alias: String,
+        thinking: Option<ThinkingConfig>,
+    ) -> anyhow::Result<(String, ThreadId)> {
         let meta = ThreadMeta::new(cwd);
         let thread_id = self.inner.thread_store.create_thread(meta).await?;
 
@@ -93,10 +114,27 @@ impl SessionManager {
             cancel_token: CancellationToken::new(),
             state_messages: Vec::new(),
             created_at: Utc::now(),
+            model_alias,
+            permission_mode: SharedPermissionMode::new(PermissionMode::Default),
+            thinking,
         };
 
         self.inner.sessions.insert(session_id.clone(), session);
         Ok((session_id, thread_id))
+    }
+
+    fn build_session(&self, session_id: &str, thread_id: ThreadId, cwd: &str) -> AcpSession {
+        AcpSession {
+            session_id: session_id.to_string(),
+            thread_id,
+            cwd: cwd.to_string(),
+            cancel_token: CancellationToken::new(),
+            state_messages: Vec::new(),
+            created_at: Utc::now(),
+            model_alias: self.inner.zen_config.config.active_alias.clone(),
+            permission_mode: SharedPermissionMode::new(PermissionMode::Default),
+            thinking: self.inner.zen_config.config.thinking.clone(),
+        }
     }
 
     pub async fn close_session(&self, session_id: &str) -> anyhow::Result<()> {
@@ -112,6 +150,10 @@ impl SessionManager {
 
     pub fn get_session(&self, session_id: &str) -> Option<dashmap::mapref::one::Ref<'_, String, AcpSession>> {
         self.inner.sessions.get(session_id)
+    }
+
+    pub fn inner_sessions(&self) -> &DashMap<String, AcpSession> {
+        &self.inner.sessions
     }
 
     pub fn cancel_session(&self, session_id: &str) {

@@ -15,7 +15,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2af62fb84df2af0f933d8f5fd78b843fa5eb0ec5a48fa1b528c41951d0bbe36c"
 dependencies = [
  "agent-client-protocol-derive",
- "agent-client-protocol-schema 0.12.0",
+ "agent-client-protocol-schema",
  "anyhow",
  "futures",
  "futures-concurrency",
@@ -41,20 +41,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.117",
-]
-
-[[package]]
-name = "agent-client-protocol-schema"
-version = "0.11.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2d24232129441563139fe5389de351433240d5f0ec8a6c775bf632dc6da7e549"
-dependencies = [
- "anyhow",
- "derive_more",
- "schemars 1.2.1",
- "serde",
- "serde_json",
- "strum 0.28.0",
 ]
 
 [[package]]
@@ -3065,7 +3051,6 @@ name = "rust-agent-tui"
 version = "0.1.0"
 dependencies = [
  "agent-client-protocol",
- "agent-client-protocol-schema 0.11.7",
  "agent-client-protocol-tokio",
  "anyhow",
  "arboard",

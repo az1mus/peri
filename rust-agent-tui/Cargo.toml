@@ -45,7 +45,6 @@ reqwest = { version = "0.13", default-features = false, features = [
 ] }
 clap = { version = "4", features = ["derive"] }
 agent-client-protocol = { version = "0.11", features = ["unstable"] }
-agent-client-protocol-schema = { version = "0.11" }
 agent-client-protocol-tokio = { version = "0.11" }
 dashmap = "6"
 tokio-util = "0.7"

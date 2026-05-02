@@ -40,40 +40,18 @@ pub async fn run_acp_mode(_cwd: String, model_override: Option<String>) -> Resul
 
     Agent::builder(Agent)
         .name("perihelion")
-        // 请求处理器（类型安全）
-        .on_receive_request(
-            request_handler::handle_initialize,
-            on_receive_request!(),
-        )
-        .on_receive_request(
-            dispatch::handle_new_session,
-            on_receive_request!(),
-        )
-        .on_receive_request(
-            dispatch::handle_close_session,
-            on_receive_request!(),
-        )
-        .on_receive_request(
-            dispatch::handle_list_sessions,
-            on_receive_request!(),
-        )
-        .on_receive_request(
-            dispatch::handle_prompt,
-            on_receive_request!(),
-        )
-        .on_receive_request(
-            dispatch::handle_load_session,
-            on_receive_request!(),
-        )
-        .on_receive_request(
-            dispatch::handle_resume_session,
-            on_receive_request!(),
-        )
-        // 通知 + 未匹配请求
-        .on_receive_dispatch(
-            dispatch::handle_dispatch,
-            on_receive_dispatch!(),
-        )
+        .on_receive_request(request_handler::handle_initialize, on_receive_request!())
+        .on_receive_request(dispatch::handle_new_session, on_receive_request!())
+        .on_receive_request(dispatch::handle_close_session, on_receive_request!())
+        .on_receive_request(dispatch::handle_list_sessions, on_receive_request!())
+        .on_receive_request(dispatch::handle_prompt, on_receive_request!())
+        .on_receive_request(dispatch::handle_load_session, on_receive_request!())
+        .on_receive_request(dispatch::handle_resume_session, on_receive_request!())
+        .on_receive_request(dispatch::handle_set_mode, on_receive_request!())
+        .on_receive_request(dispatch::handle_set_config_option, on_receive_request!())
+        .on_receive_request(dispatch::handle_set_model, on_receive_request!())
+        .on_receive_request(dispatch::handle_fork_session, on_receive_request!())
+        .on_receive_dispatch(dispatch::handle_dispatch, on_receive_dispatch!())
         .connect_to(Stdio::new())
         .await
         .map_err(Into::into)
