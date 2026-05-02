@@ -1,0 +1,177 @@
+use std::collections::HashMap;
+use thiserror::Error;
+
+use super::config::McpServerConfig;
+
+/// 传输层配置枚举，从 McpServerConfig 派生
+#[derive(Debug, Clone)]
+pub enum TransportConfig {
+    Stdio {
+        command: String,
+        args: Vec<String>,
+        env: HashMap<String, String>,
+    },
+    StreamableHttp {
+        url: String,
+        headers: HashMap<String, String>,
+    },
+}
+
+/// 传输层构建错误
+#[derive(Debug, Error)]
+pub enum TransportError {
+    #[error("MCP 服务器配置无效: 缺少 command 或 url 字段")]
+    InvalidConfig,
+    #[error("MCP stdio 传输子进程启动失败: {0}")]
+    StdioLaunchFailed(String),
+    #[error("MCP HTTP 传输配置失败: {0}")]
+    HttpConfigFailed(String),
+}
+
+impl TryFrom<&McpServerConfig> for TransportConfig {
+    type Error = TransportError;
+
+    fn try_from(config: &McpServerConfig) -> Result<Self, Self::Error> {
+        match (&config.command, &config.url) {
+            (Some(command), _) => Ok(TransportConfig::Stdio {
+                command: command.clone(),
+                args: config.args.clone().unwrap_or_default(),
+                env: config.env.clone().unwrap_or_default(),
+            }),
+            (_, Some(url)) => Ok(TransportConfig::StreamableHttp {
+                url: url.clone(),
+                headers: config.headers.clone().unwrap_or_default(),
+            }),
+            (None, None) => Err(TransportError::InvalidConfig),
+        }
+    }
+}
+
+/// 构建 MCP Transport 实例
+/// stdio: 通过 TokioChildProcess 启动子进程
+/// HTTP: 通过 StreamableHttpClientTransport 建立 HTTP 连接
+pub fn build_transport(
+    config: &McpServerConfig,
+) -> Result<TransportConfig, TransportError> {
+    TransportConfig::try_from(config)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn stdio_config() -> McpServerConfig {
+        McpServerConfig {
+            command: Some("echo".to_string()),
+            args: Some(vec!["hello".to_string()]),
+            env: Some(HashMap::from([("KEY".to_string(), "val".to_string())])),
+            url: None,
+            headers: None,
+        }
+    }
+
+    fn http_config() -> McpServerConfig {
+        McpServerConfig {
+            command: None,
+            args: None,
+            env: None,
+            url: Some("https://example.com/mcp".to_string()),
+            headers: Some(HashMap::from([(
+                "Auth".to_string(),
+                "Bearer token".to_string(),
+            )])),
+        }
+    }
+
+    #[test]
+    fn test_try_from_stdio_config() {
+        let config = stdio_config();
+        let tc = TransportConfig::try_from(&config).unwrap();
+        match tc {
+            TransportConfig::Stdio { command, args, env } => {
+                assert_eq!(command, "echo");
+                assert_eq!(args, vec!["hello"]);
+                assert_eq!(env.get("KEY").unwrap(), "val");
+            }
+            _ => panic!("Expected Stdio"),
+        }
+    }
+
+    #[test]
+    fn test_try_from_http_config() {
+        let config = http_config();
+        let tc = TransportConfig::try_from(&config).unwrap();
+        match tc {
+            TransportConfig::StreamableHttp { url, headers } => {
+                assert_eq!(url, "https://example.com/mcp");
+                assert_eq!(headers.get("Auth").unwrap(), "Bearer token");
+            }
+            _ => panic!("Expected StreamableHttp"),
+        }
+    }
+
+    #[test]
+    fn test_try_from_empty_config() {
+        let config = McpServerConfig {
+            command: None,
+            args: None,
+            env: None,
+            url: None,
+            headers: None,
+        };
+        let result = TransportConfig::try_from(&config);
+        assert!(matches!(result, Err(TransportError::InvalidConfig)));
+    }
+
+    #[test]
+    fn test_try_from_stdio_priority_over_url() {
+        let config = McpServerConfig {
+            command: Some("npx".to_string()),
+            args: None,
+            env: None,
+            url: Some("https://example.com".to_string()),
+            headers: None,
+        };
+        let tc = TransportConfig::try_from(&config).unwrap();
+        assert!(matches!(tc, TransportConfig::Stdio { .. }));
+    }
+
+    #[test]
+    fn test_try_from_defaults() {
+        let config = McpServerConfig {
+            command: Some("cat".to_string()),
+            args: None,
+            env: None,
+            url: None,
+            headers: None,
+        };
+        let tc = TransportConfig::try_from(&config).unwrap();
+        match tc {
+            TransportConfig::Stdio { args, env, .. } => {
+                assert!(args.is_empty());
+                assert!(env.is_empty());
+            }
+            _ => panic!("Expected Stdio"),
+        }
+    }
+
+    #[test]
+    fn test_build_transport_returns_config() {
+        let config = stdio_config();
+        let result = build_transport(&config);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_build_transport_invalid() {
+        let config = McpServerConfig {
+            command: None,
+            args: None,
+            env: None,
+            url: None,
+            headers: None,
+        };
+        let result = build_transport(&config);
+        assert!(result.is_err());
+    }
+}

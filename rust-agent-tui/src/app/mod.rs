@@ -90,6 +90,8 @@ pub struct App {
     pub spinner_state: perihelion_widgets::SpinnerState,
     /// 测试时覆盖配置文件路径，防止污染全局 ~/.zen-code/settings.json
     pub config_path_override: Option<PathBuf>,
+    /// MCP 连接池：首次 agent 启动时惰性初始化，App 退出时 shutdown
+    pub mcp_pool: Option<Arc<rust_agent_middlewares::mcp::McpClientPool>>,
 }
 
 impl App {
@@ -179,6 +181,7 @@ impl App {
                 perihelion_widgets::SpinnerMode::Idle,
             ),
             config_path_override: None,
+            mcp_pool: None,
         }
     }
 

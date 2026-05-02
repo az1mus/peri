@@ -7,11 +7,19 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Rust Agent 框架，包含 **4 个 Workspace Crate**：
 
 - **`rust-create-agent`**：核心框架——ReAct 循环执行器、Middleware trait、LLM 适配器、工具系统、线程持久化（SQLite）、遥测（OTel）
-- **`rust-agent-middlewares`**：中间件实现（文件系统、终端、HITL、SubAgent、Skills、Todo、Cron 等）
+- **`rust-agent-middlewares`**：中间件实现（文件系统、终端、HITL、SubAgent、Skills、Todo、Cron、MCP 等）
 - **`perihelion-widgets`**：独立 widget crate（BorderedPanel/ScrollableArea/SelectableList 等 11 组件），零内部依赖，仅依赖 ratatui + pulldown-cmark
 - **`rust-agent-tui`**：交互式 TUI 应用，基于 ratatui
 
 核心价值：高兼容（复用 `.claude/` 配置零迁移）、可插拔（中间件模式按需组合）、生产可用（异步+OTel 追踪）。
+
+### Workspace 依赖补丁
+
+`rmcp` crate（v1.6.0）通过 `[patch.crates-io]` 指向本地 `rust-mcp-patch/`，修复上游 bug：
+
+- **问题**：部分 MCP 服务器（如 `open.bigmodel.cn`）对 `notifications/initialized` 返回 `HTTP 200` + 空 body + 无 Content-Type，但 rmcp 只把 `202 Accepted` / `204 No Content` 视为通知已接受，导致 `UnexpectedContentType(None)` 错误，worker 终止。
+- **修复位置**：`rust-mcp-patch/src/transport/common/reqwest/streamable_http_client.rs` 的 `post_message` 方法，增加对 `200 OK` + `content-length: 0` 的处理。
+- **移除条件**：rmcp 上游发布包含此修复的新版本后，删除 `[patch.crates-io]` 和 `rust-mcp-patch/` 目录即可。
 
 ## 开发命令
 
@@ -208,8 +216,10 @@ submit_message()
 5. FilesystemMiddleware       ← 6 个文件系统工具（Read/Write/Edit/Glob/Grep/folder_operations）
 6. TerminalMiddleware         ← Bash 工具
 7. TodoMiddleware             ← after_tool 解析 TodoWrite
-8. HumanInTheLoopMiddleware   ← before_tool 拦截敏感工具
-9. SubAgentMiddleware         ← Agent 工具
+8. CronMiddleware             ← Cron 调度工具
+9. HumanInTheLoopMiddleware   ← before_tool 拦截敏感工具
+10. SubAgentMiddleware        ← Agent 工具
+11. McpMiddleware             ← MCP 工具和资源注入（仅 pool 初始化成功时注册）
 [ReActAgent.with_system_prompt()] ← system prompt prepend
 ```
 
@@ -262,8 +272,50 @@ TUI 层扩展：`Done` / `Error` / `ApprovalNeeded` / `AskUserBatch`。
 | `TodoWrite` | TodoMiddleware | — |
 | `AskUserQuestion` | 手动注册（AskUserTool） | — |
 | `Agent` | SubAgentMiddleware | ✓ |
+| `mcp__{server}__{tool}` | McpMiddleware（MCP 工具桥接） | ✓（`mcp__` 前缀匹配） |
+| `mcp__read_resource` | McpMiddleware（MCP 资源读取） | — |
 
 `Bash` 默认超时 120 秒。跨平台：Windows 用 `cmd /C`，其他用 `bash -c`。
+
+### MCP 中间件
+
+通过 `McpMiddleware` 将外部 MCP 服务器提供的工具和资源注入 ReAct 循环。基于 `rmcp` crate 实现。
+
+**配置加载**：`McpConfig::load_merged_config(cwd)` 合并两层配置：
+
+| 来源 | 路径 | 说明 |
+|------|------|------|
+| 全局 | `~/.zen-code/settings.json` 的 `config.mcpServers` 或 `mcpServers` | 所有项目共享 |
+| 项目级 | `{cwd}/.mcp.json` 的 `mcpServers` | 项目特定，同名覆盖全局 |
+
+**服务器配置**（`McpServerConfig`）：
+
+| 字段 | 说明 |
+|------|------|
+| `command` + `args` + `env` | stdio 传输：启动子进程 |
+| `url` + `headers` | Streamable HTTP 传输：连接远程服务器 |
+| `${VAR}` 占位符 | 所有字符串字段自动展开环境变量 |
+
+**工具命名**：`mcp__{server_name}__{tool_name}`，HITL 对 `mcp__` 前缀的工具默认需审批。
+
+**资源读取**：`mcp__read_resource` 工具，参数 `server_name` + `uri`，120 秒超时。
+
+**连接池**（`McpClientPool`）：
+- 首次 agent 启动时惰性初始化（`agent_ops.rs`），后续复用
+- stdio 连接超时 10 秒，HTTP 连接超时 30 秒
+- 连接失败的 server 记录为 `Failed` 状态，不影响其他 server
+- App 退出时调用 `pool.shutdown()` 优雅关闭所有连接
+
+**代码结构**（`rust-agent-middlewares/src/mcp/`）：
+
+| 文件 | 职责 |
+|------|------|
+| `config.rs` | 配置加载、合并、`${VAR}` 展开 |
+| `transport.rs` | 传输层工厂（stdio / StreamableHTTP） |
+| `client.rs` | 连接池管理、HTTP headers 注入 |
+| `tool_bridge.rs` | MCP 工具 → `BaseTool` 桥接 |
+| `resource_tool.rs` | MCP 资源读取工具 |
+| `middleware.rs` | `Middleware` trait 实现，`collect_tools` 注入 |
 
 ### AskUserQuestion 工具参数
 

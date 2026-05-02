@@ -21,6 +21,7 @@ pub use claude_agent_parser::{
 pub mod ask_user;
 pub mod cron;
 pub mod hitl;
+pub mod mcp;
 pub mod middleware;
 pub mod skills;
 pub mod tools;

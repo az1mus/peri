@@ -1,5 +1,6 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
+use std::sync::Arc;
 use ratatui::{
     crossterm::{
         event::{
@@ -222,6 +223,17 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> Resul
                     terminal.draw(|f| ui::main_ui::render(f, &mut app))?;
                 }
             }
+        }
+    }
+
+    // 关闭 MCP 连接池（断开所有 MCP 服务器连接，清理子进程）
+    if let Some(pool) = app.mcp_pool.take() {
+        tracing::info!("正在关闭 MCP 连接池...");
+        if let Ok(mut pool) = Arc::try_unwrap(pool) {
+            tokio::task::block_in_place(|| {
+                tokio::runtime::Handle::current().block_on(pool.shutdown())
+            });
+            tracing::info!("MCP 连接池已关闭");
         }
     }
 

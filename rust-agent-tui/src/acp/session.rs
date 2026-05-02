@@ -31,7 +31,6 @@ struct SessionManagerInner {
     provider: LlmProvider,
     zen_config: Arc<ZenConfig>,
     permission_mode: Arc<SharedPermissionMode>,
-    next_session_id: std::sync::atomic::AtomicU64,
 }
 
 #[derive(Clone)]
@@ -53,7 +52,6 @@ impl SessionManager {
                 provider,
                 zen_config,
                 permission_mode,
-                next_session_id: std::sync::atomic::AtomicU64::new(1),
             }),
         }
     }
@@ -79,11 +77,7 @@ impl SessionManager {
         let meta = ThreadMeta::new(cwd);
         let thread_id = self.inner.thread_store.create_thread(meta).await?;
 
-        let session_id = self
-            .inner
-            .next_session_id
-            .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
-            .to_string();
+        let session_id = thread_id.clone();
 
         let session = self.build_session(&session_id, thread_id.clone(), cwd);
 
@@ -101,11 +95,7 @@ impl SessionManager {
         let meta = ThreadMeta::new(cwd);
         let thread_id = self.inner.thread_store.create_thread(meta).await?;
 
-        let session_id = self
-            .inner
-            .next_session_id
-            .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
-            .to_string();
+        let session_id = thread_id.clone();
 
         let session = AcpSession {
             session_id: session_id.clone(),

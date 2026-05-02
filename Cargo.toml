@@ -13,3 +13,9 @@ strip = true
 opt-level = "z"
 lto = true
 codegen-units = 1
+
+# Patch rmcp to handle 200 OK + empty body as Accepted for Streamable HTTP.
+# Upstream bug: https://github.com/anthropics/rmcp/issues/XXX
+# Remove this patch once upstream releases a fix.
+[patch.crates-io]
+rmcp = { path = "rust-mcp-patch" }

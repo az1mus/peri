@@ -26,6 +26,12 @@ tracing = "0.1"
 parking_lot = "0.12"
 grep = "0.4"
 num_cpus = "1"
+rmcp = { version = "1.6", features = [
+    "client",
+    "transport-child-process",
+    "transport-streamable-http-client-reqwest",
+] }
+reqwest = "0.13"
 
 [dev-dependencies]
 tokio-test = "0.4"

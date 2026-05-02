@@ -318,6 +318,7 @@ impl App {
                 perihelion_widgets::SpinnerMode::Idle,
             ),
             config_path_override: Some(test_config_path),
+            mcp_pool: None,
         };
 
         let handle = crate::ui::headless::HeadlessHandle {

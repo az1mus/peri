@@ -45,6 +45,7 @@ pub fn default_requires_approval(tool_name: &str) -> bool {
         || tool_name == "Edit"
         || tool_name.starts_with("delete_")
         || tool_name.starts_with("rm_")
+        || tool_name.starts_with("mcp__")
 }
 
 /// 判断工具是否为文件编辑类工具（AcceptEdits 模式使用）
@@ -460,12 +461,39 @@ mod tests {
         assert!(default_requires_approval("delete_something"));
         assert!(default_requires_approval("rm_rf"));
         assert!(default_requires_approval("Agent"));
+        // MCP 工具需审批
+        assert!(default_requires_approval("mcp__filesystem__read_file"));
+        assert!(default_requires_approval("mcp__filesystem__write_file"));
+        assert!(default_requires_approval("mcp__github__create_issue"));
+        assert!(default_requires_approval("mcp__database__query"));
+        assert!(default_requires_approval("mcp__web__fetch"));
 
         assert!(!default_requires_approval("Read"));
         assert!(!default_requires_approval("Glob"));
         assert!(!default_requires_approval("Grep"));
         assert!(!default_requires_approval("TodoWrite"));
         assert!(!default_requires_approval("ask_user"));
+        // mcp_read_resource 不以 mcp__（双下划线）开头，不拦截
+        assert!(!default_requires_approval("mcp_read_resource"));
+    }
+
+    #[test]
+    fn test_mcp_prefix_edge_cases() {
+        // 单下划线不匹配
+        assert!(!default_requires_approval("mcp_"));
+        assert!(!default_requires_approval("mcp_read_resource"));
+        // 无下划线不匹配
+        assert!(!default_requires_approval("mcp"));
+        // 双下划线匹配
+        assert!(default_requires_approval("mcp__a__b"));
+        assert!(default_requires_approval("mcp__server__tool_name"));
+        assert!(default_requires_approval("mcp__x__y__z"));
+    }
+
+    #[test]
+    fn test_is_edit_tool_excludes_mcp() {
+        // MCP 工具不属于编辑工具，在 AcceptEdits 模式下仍需审批
+        assert!(!is_edit_tool("mcp__filesystem__write_file"));
     }
 
     #[tokio::test]

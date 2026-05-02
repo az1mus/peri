@@ -31,6 +31,7 @@ pub struct AgentRunConfig {
     pub cron_scheduler:
         Option<Arc<parking_lot::Mutex<rust_agent_middlewares::cron::CronScheduler>>>,
     pub permission_mode: Arc<SharedPermissionMode>,
+    pub mcp_pool: Option<Arc<rust_agent_middlewares::mcp::McpClientPool>>,
 }
 
 pub async fn run_universal_agent(cfg: AgentRunConfig) {
@@ -49,6 +50,7 @@ pub async fn run_universal_agent(cfg: AgentRunConfig) {
         config: zen_config,
         cron_scheduler,
         permission_mode,
+        mcp_pool,
     } = cfg;
     // 如果设置了 agent_id，提前解析 agent.md 获取可覆盖部分（persona / tone / proactiveness），
     // 替换 system prompt 中对应占位符；安全策略、代码规范等硬约束始终保留。
@@ -165,6 +167,20 @@ pub async fn run_universal_agent(cfg: AgentRunConfig) {
         FilesystemMiddleware::build_tools(&cwd);
     parent_tools.extend(TerminalMiddleware::build_tools(&cwd));
 
+    // 将 MCP 工具加入 parent_tools，供 SubAgent 继承
+    if let Some(ref pool) = mcp_pool {
+        let mcp_tools =
+            rust_agent_middlewares::mcp::build_tool_bridges(pool);
+        for tool in mcp_tools {
+            parent_tools.push(tool);
+        }
+        if pool.has_resources() {
+            parent_tools.push(Box::new(
+                rust_agent_middlewares::mcp::McpResourceTool::new(Arc::clone(pool)),
+            ));
+        }
+    }
+
     // LLM 工厂：每次为子 agent 创建裸 LLM（不设 system）
     // 系统提示词由 system_builder + with_system_prompt() 注入，使其在 Langfuse 中可见
     // model_alias: None 表示继承父模型；有值时通过 from_config_for_alias 解析
@@ -230,7 +246,18 @@ pub async fn run_universal_agent(cfg: AgentRunConfig) {
             }),
         )))
         .add_middleware(Box::new(hitl))
-        .add_middleware(Box::new(subagent))
+        .add_middleware(Box::new(subagent));
+
+    // MCP 中间件：仅在 pool 初始化成功时注册
+    let executor = if let Some(pool) = mcp_pool {
+        executor.add_middleware(Box::new(
+            rust_agent_middlewares::mcp::McpMiddleware::new(pool),
+        ))
+    } else {
+        executor
+    };
+
+    let executor = executor
         .with_event_handler(Arc::clone(&handler))
         .register_tool(Box::new(ask_user_tool));
 

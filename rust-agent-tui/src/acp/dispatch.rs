@@ -214,15 +214,22 @@ pub async fn handle_close_session(
 // ─── session/list handler ────────────────────────────────────────────────────
 
 pub async fn handle_list_sessions(
-    _req: ListSessionsRequest,
+    req: ListSessionsRequest,
     responder: agent_client_protocol::Responder<ListSessionsResponse>,
     _conn: ConnectionTo<Client>,
 ) -> Result<(), agent_client_protocol::Error> {
+    let cwd_filter = req.cwd.as_ref().map(|p| p.to_string_lossy().to_string());
+
     match mgr().list_sessions().await {
         Ok(threads) => {
             let sessions: Vec<SessionInfo> = threads
                 .into_iter()
-                .map(|t| SessionInfo::new(SessionId::from(t.id), &t.cwd).title(t.title.unwrap_or_default()))
+                .filter(|t| cwd_filter.as_ref().map_or(true, |cwd| t.cwd == *cwd))
+                .map(|t| {
+                    SessionInfo::new(SessionId::from(t.id), &t.cwd)
+                        .title(t.title.unwrap_or_default())
+                        .updated_at(t.updated_at.to_rfc3339())
+                })
                 .collect();
             let _ = responder.respond(ListSessionsResponse::new(sessions));
         }

@@ -138,6 +138,21 @@ impl App {
         let zen_config_for_agent = Arc::new(self.zen_config.clone().unwrap_or_default());
         let cron_scheduler = Some(self.cron.scheduler.clone());
         let permission_mode = self.permission_mode.clone();
+
+        // 惰性初始化 MCP 连接池（仅在首次 agent 启动时创建，后续复用）
+        if self.mcp_pool.is_none() {
+            let pool_cwd = self.cwd.clone();
+            let pool = tokio::task::block_in_place(|| {
+                tokio::runtime::Handle::current()
+                    .block_on(rust_agent_middlewares::mcp::McpClientPool::initialize(
+                        std::path::Path::new(&pool_cwd),
+                    ))
+            });
+            tracing::info!("MCP 连接池初始化完成");
+            self.mcp_pool = Some(Arc::new(pool));
+        }
+        let mcp_pool = self.mcp_pool.clone();
+
         tokio::spawn(
             async move {
                 agent::run_universal_agent(agent::AgentRunConfig {
@@ -155,6 +170,7 @@ impl App {
                     config: zen_config_for_agent,
                     cron_scheduler,
                     permission_mode,
+                    mcp_pool,
                 })
                 .await;
             }
