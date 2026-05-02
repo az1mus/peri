@@ -168,7 +168,6 @@ pub(crate) fn render_model_panel(f: &mut Frame, app: &App, area: Rect) {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use crate::app::model_panel::{AliasTab, ModelPanel, ROW_OPUS};
     use crate::app::App;
 

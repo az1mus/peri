@@ -197,7 +197,7 @@ mod tests {
         terminal
             .draw(|f| {
                 let area = Rect::new(0, 0, 20, 5);
-                let list = SelectableList::new(|item: &&str, is_cursor: bool| Line::from(*item));
+                let list = SelectableList::new(|item: &&str, _is_cursor: bool| Line::from(*item));
                 f.render_stateful_widget(list, area, &mut state);
             })
             .unwrap();

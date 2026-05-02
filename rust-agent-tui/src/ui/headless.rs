@@ -149,7 +149,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_clear_empties_render_cache() {
-        let (mut app, mut handle) = App::new_headless(120, 30);
+        let (mut app, handle) = App::new_headless(120, 30);
         let notify = Arc::clone(&handle.render_notify);
 
         // Pipeline: 每个 AssistantChunk → AppendChunk (1 个 RenderEvent)
@@ -178,7 +178,6 @@ mod tests {
 
     mod markdown_tests {
         use crate::ui::markdown::parse_markdown_default;
-        use crate::ui::theme;
         use ratatui::style::Modifier;
 
         fn all_text(text: &ratatui::text::Text) -> String {
@@ -1144,7 +1143,6 @@ mod tests {
     }
 
     mod setup_wizard_e2e {
-        use super::*;
         use crate::app::setup_wizard::{
             handle_setup_wizard_key, needs_setup, save_setup_to, ProviderType, SetupStep,
             SetupWizardAction, SetupWizardPanel, Step1Field,
@@ -1222,7 +1220,7 @@ mod tests {
             let wizard = app.setup_wizard.as_ref().unwrap();
             assert!(wizard.aliases[0].model_id.contains("claude-opus"));
             let wizard = app.setup_wizard.as_mut().unwrap();
-            let action = handle_setup_wizard_key(wizard, make_key(Key::Enter));
+            let _action = handle_setup_wizard_key(wizard, make_key(Key::Enter));
             assert_eq!(wizard.step, SetupStep::Done);
 
             // Done → Enter → SaveAndClose
@@ -1311,7 +1309,7 @@ mod tests {
 
         #[tokio::test]
         async fn test_setup_wizard_skip_with_confirm() {
-            let (mut app, mut handle) = App::new_headless(120, 30);
+            let (mut app, _handle) = App::new_headless(120, 30);
             app.setup_wizard = Some(SetupWizardPanel::new());
 
             // Esc → confirm skip
@@ -1326,7 +1324,7 @@ mod tests {
             assert!(!wizard.confirm_skip);
 
             // Esc again → confirm
-            let action = handle_setup_wizard_key(wizard, make_key(Key::Esc));
+            let _action = handle_setup_wizard_key(wizard, make_key(Key::Esc));
             assert!(wizard.confirm_skip);
 
             // Enter → Skip
@@ -1387,7 +1385,7 @@ mod tests {
 
             // Empty model_id → Enter blocked
             wizard.aliases[0].model_id.clear();
-            let action = handle_setup_wizard_key(&mut wizard, make_key(Key::Enter));
+            let _action = handle_setup_wizard_key(&mut wizard, make_key(Key::Enter));
             assert_eq!(wizard.step, SetupStep::ModelAlias);
         }
 
@@ -1524,7 +1522,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_permission_mode_store_and_load() {
-        let (mut app, _handle) = App::new_headless(80, 24);
+        let (app, _handle) = App::new_headless(80, 24);
         use rust_agent_middlewares::prelude::PermissionMode;
         for mode in [
             PermissionMode::Default,
@@ -1557,7 +1555,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_status_bar_shows_permission_mode() {
-        use rust_agent_middlewares::prelude::PermissionMode;
         let (mut app, mut handle) = App::new_headless(120, 24);
         // 默认 Bypass → 应显示 "Bypass"
         handle
@@ -1627,7 +1624,7 @@ mod tests {
     #[tokio::test]
     async fn test_shift_tab_cycles_permission_mode() {
         use rust_agent_middlewares::prelude::PermissionMode;
-        let (mut app, _handle) = App::new_headless(120, 24);
+        let (app, _handle) = App::new_headless(120, 24);
         // 初始 Bypass
         assert_eq!(app.permission_mode.load(), PermissionMode::Bypass);
         // 模拟 Shift+Tab 按键效果（直接调用 cycle）
@@ -1682,7 +1679,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_tool_call_widget_renders_completed() {
-        let (mut app, mut handle) = crate::app::App::new_headless(120, 30);
+        let (_app, mut handle) = crate::app::App::new_headless(120, 30);
 
         let vm = crate::app::MessageViewModel::ToolBlock {
             tool_name: "Bash".to_string(),
@@ -1753,7 +1750,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn test_compact_done_with_re_inject() {
-        let (mut app, mut handle) = App::new_headless(120, 30);
+        let (mut app, handle) = App::new_headless(120, 30);
         let notified = handle.render_notify.notified();
         app.push_agent_event(make_compact_done_event(
             "Test summary",
@@ -1785,7 +1782,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn test_compact_done_without_re_inject() {
-        let (mut app, mut handle) = App::new_headless(120, 30);
+        let (mut app, handle) = App::new_headless(120, 30);
         let notified = handle.render_notify.notified();
         app.push_agent_event(make_compact_done_event("Simple summary", &[]));
         app.process_pending_events();
@@ -2296,7 +2293,6 @@ mod tests {
 
     #[test]
     fn test_system_note_error_detection() {
-        use crate::ui::message_view::MessageViewModel;
         // 错误类 system note
         let error_content = "❌ 压缩失败: 未配置 Provider";
         assert!(
@@ -2510,7 +2506,7 @@ mod tests {
     #[tokio::test]
     async fn test_cron_panel_delete_confirmation() {
         use crate::app::CronPanel;
-        use chrono::{DateTime, Utc};
+        use chrono::Utc;
         use rust_agent_middlewares::cron::CronTask;
 
         let (mut app, _handle) = App::new_headless(120, 30);
@@ -2586,7 +2582,7 @@ mod tests {
             .unwrap();
         let snap = handle.snapshot();
         // 使用 ASCII 内容断言（避免 CJK 宽字符问题），确认面板渲染了 Enter 提示
-        let all_text = snap.join("");
+        let _all_text = snap.join("");
         // 面板应该渲染了包含 "Enter" 的帮助行（确认模式提示）
         let has_enter = snap.iter().any(|l| l.contains("Enter"));
         assert!(

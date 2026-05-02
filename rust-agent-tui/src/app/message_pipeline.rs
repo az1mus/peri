@@ -670,7 +670,7 @@ mod tests {
     use rust_create_agent::messages::{BaseMessage, ContentBlock, MessageContent, ToolCallRequest};
     use serde_json::json;
 
-    fn normalize_vms(vms: Vec<MessageViewModel>) -> Vec<String> {
+    fn _normalize_vms(vms: Vec<MessageViewModel>) -> Vec<String> {
         vms.iter().map(|vm| format!("{:?}", vm)).collect()
     }
 
@@ -1031,7 +1031,7 @@ mod tests {
         let (prefix_len, tail_vms) = pipeline.reconcile_tail(2);
 
         // 全量转换
-        let full_vms =
+        let _full_vms =
             MessagePipeline::messages_to_view_models(pipeline.completed_messages(), &pipeline.cwd);
 
         // tail_vms 应等于从最后一条 Human 消息开始重建的 VMs

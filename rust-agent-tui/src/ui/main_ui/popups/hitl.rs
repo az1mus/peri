@@ -52,7 +52,7 @@ pub(crate) fn render_hitl_popup(f: &mut Frame, app: &App, area: Rect) {
 
         // 光标高亮
         let cursor_indicator = if is_cursor { "❯ " } else { "  " };
-        let row_style = if is_cursor {
+        let _row_style = if is_cursor {
             Style::default()
         } else {
             Style::default()
@@ -163,7 +163,6 @@ fn format_input_preview(input: &serde_json::Value, max_len: usize) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use crate::app::App;
     use crate::app::{HitlBatchPrompt, InteractionPrompt};
     use rust_agent_middlewares::hitl::BatchItem;

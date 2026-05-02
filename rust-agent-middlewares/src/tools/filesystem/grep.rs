@@ -71,8 +71,8 @@ struct GrepInput {
     output_mode: String,           // "content" | "files_with_matches" | "count"
     case_insensitive: bool,        // 对应 -i，默认 false
     context: Option<usize>,        // 对应 -C
-    line_number: bool,             // 对应 -n，默认 true
-    multiline: bool,               // 对应 -U --multiline-dotall，默认 false
+    _line_number: bool,             // 对应 -n，默认 true
+    _multiline: bool,               // 对应 -U --multiline-dotall，默认 false
     head_limit: usize,             // 默认 250
     offset: Option<usize>,         // 跳过前 N 行
 }
@@ -460,8 +460,8 @@ impl BaseTool for GrepTool {
             output_mode,
             case_insensitive: input.get("-i").and_then(|v| v.as_bool()).unwrap_or(false),
             context: input.get("-C").and_then(|v| v.as_u64()).map(|n| n as usize),
-            line_number: input.get("-n").and_then(|v| v.as_bool()).unwrap_or(true),
-            multiline: input.get("multiline").and_then(|v| v.as_bool()).unwrap_or(false),
+            _line_number: input.get("-n").and_then(|v| v.as_bool()).unwrap_or(true),
+            _multiline: input.get("multiline").and_then(|v| v.as_bool()).unwrap_or(false),
             head_limit: input.get("head_limit").and_then(|v| v.as_u64()).unwrap_or(250) as usize,
             offset: input.get("offset").and_then(|v| v.as_u64()).map(|n| n as usize),
         };

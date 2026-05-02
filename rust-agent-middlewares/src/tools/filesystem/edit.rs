@@ -272,6 +272,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(non_snake_case)]
     fn test_tool_name_is_Edit() {
         let tool = EditFileTool::new("/tmp");
         assert_eq!(tool.name(), "Edit");

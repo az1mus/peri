@@ -15,6 +15,7 @@ fn setup_temp_dir() -> TempDir {
 
 /// 验证 FilesystemMiddleware 通过 add_middleware 自动提供 Read 工具
 #[tokio::test]
+#[allow(non_snake_case)]
 async fn test_filesystem_middleware_auto_registers_Read() {
     let dir = setup_temp_dir();
     let cwd = dir.path().to_str().unwrap().to_string();

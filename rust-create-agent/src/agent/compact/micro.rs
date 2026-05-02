@@ -265,7 +265,7 @@ mod tests {
             ai_with_tool("tc2", "Read"),
             tool_result("tc2", &long_text),
         ];
-        let mut config = CompactConfig {
+        let config = CompactConfig {
             micro_compactable_tools: vec!["Read".to_string()],
             micro_compact_stale_steps: 0,
             ..Default::default()

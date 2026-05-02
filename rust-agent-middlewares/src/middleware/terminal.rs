@@ -412,6 +412,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(non_snake_case)]
     fn test_tool_name_is_Bash() {
         let tool = BashTool::new(std::env::temp_dir().to_str().unwrap());
         assert_eq!(tool.name(), "Bash");

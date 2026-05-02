@@ -10,7 +10,7 @@ pub use rust_create_agent::ask_user::{AskUserBatchRequest, AskUserOption, AskUse
 struct InputOption {
     label: String,
     description: Option<String>,
-    preview: Option<String>,
+    _preview: Option<String>,
 }
 
 #[derive(serde::Deserialize)]

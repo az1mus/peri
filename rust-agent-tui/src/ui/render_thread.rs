@@ -397,7 +397,7 @@ mod tests {
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
 
         let v1 = cache.read().version;
-        let lines_before = cache.read().lines.len();
+        let _lines_before = cache.read().lines.len();
 
         // AppendChunk
         tx.send(RenderEvent::AppendChunk("World".to_string()))

@@ -1485,7 +1485,7 @@ mod tests {
         );
         if let AgentEvent::ContextWarning {
             used_tokens,
-            total_tokens,
+            total_tokens: _,
             percentage,
         } = warnings[0]
         {

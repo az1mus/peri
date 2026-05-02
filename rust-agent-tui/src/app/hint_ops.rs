@@ -152,7 +152,7 @@ mod tests {
             .map(|s| s.as_str())
             .collect();
         // 字母排序后第一个匹配 /m 的项
-        let items = app.build_hint_items();
+        let _items = app.build_hint_items();
         // hint_complete 已经清空了 hint_cursor 并修改了 textarea，这里直接验证
         assert!(
             text.starts_with("/"),

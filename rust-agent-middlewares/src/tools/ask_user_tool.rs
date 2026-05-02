@@ -31,7 +31,7 @@ impl AskUserTool {
 struct InputOption {
     label: String,
     description: Option<String>,
-    preview: Option<String>,
+    _preview: Option<String>,
 }
 
 #[derive(serde::Deserialize)]
@@ -306,6 +306,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(non_snake_case)]
     fn test_tool_name_is_AskUserQuestion() {
         let tool = make_tool(make_answer(&[], None));
         assert_eq!(tool.name(), "AskUserQuestion");

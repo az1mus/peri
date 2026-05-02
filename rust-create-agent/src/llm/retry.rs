@@ -149,7 +149,7 @@ mod tests {
             }
         }
 
-        fn call_count(&self) -> usize {
+        fn _call_count(&self) -> usize {
             self.call_count.load(Ordering::SeqCst)
         }
     }

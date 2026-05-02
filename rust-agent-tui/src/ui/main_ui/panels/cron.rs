@@ -187,7 +187,6 @@ pub(crate) fn render_cron_panel(f: &mut Frame, app: &mut App, area: Rect) {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use crate::app::App;
     use crate::app::CronPanel;
 

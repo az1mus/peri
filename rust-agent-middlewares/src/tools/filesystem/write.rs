@@ -200,6 +200,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(non_snake_case)]
     fn test_tool_name_is_Write() {
         let tool = WriteFileTool::new("/tmp");
         assert_eq!(tool.name(), "Write");
