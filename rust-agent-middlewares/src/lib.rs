@@ -70,8 +70,7 @@ pub mod prelude {
     pub use crate::subagent::{SkillPreloadMiddleware, SubAgentMiddleware, SubAgentTool};
     pub use crate::tools::{
         ArcToolWrapper, AskUserTool, BoxToolWrapper, EditFileTool, FolderOperationsTool,
-        GlobFilesTool, GrepTool, ReadFileTool, TodoItem, TodoStatus, TodoWriteTool,
-        WriteFileTool,
+        GlobFilesTool, GrepTool, ReadFileTool, TodoItem, TodoStatus, TodoWriteTool, WriteFileTool,
     };
     pub use rust_create_agent::tools::ToolProvider;
 

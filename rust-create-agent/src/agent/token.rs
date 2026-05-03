@@ -287,6 +287,9 @@ mod tests {
         let pct = tracker.context_usage_percent(0);
         // Division by zero → should return Some(infinity) or handle gracefully
         // The actual behavior is: 150.0 / 0.0 * 100.0 = inf
-        assert!(pct.is_some(), "should return Some even with 0 context window");
+        assert!(
+            pct.is_some(),
+            "should return Some even with 0 context window"
+        );
     }
 }

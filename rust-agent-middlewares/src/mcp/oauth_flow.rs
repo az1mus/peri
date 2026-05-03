@@ -43,14 +43,9 @@ pub enum OAuthFlowEvent {
         callback_tx: oneshot::Sender<OAuthCallbackResult>,
     },
     /// OAuth 授权完成
-    AuthorizationCompleted {
-        server_name: String,
-    },
+    AuthorizationCompleted { server_name: String },
     /// OAuth 授权失败
-    AuthorizationFailed {
-        server_name: String,
-        error: String,
-    },
+    AuthorizationFailed { server_name: String, error: String },
 }
 
 /// OAuth 流程编排器
@@ -95,10 +90,8 @@ impl OAuthFlowManager {
         let state = if let Some(existing) = self.states.remove(server_name) {
             existing
         } else {
-            let credential_store = PerServerCredentialStore::new(
-                self.token_store.clone(),
-                server_name.to_string(),
-            );
+            let credential_store =
+                PerServerCredentialStore::new(self.token_store.clone(), server_name.to_string());
             let mut mgr_state = OAuthState::new(server_url, None).await?;
             if let OAuthState::Unauthorized(ref mut manager) = mgr_state {
                 manager.set_credential_store(credential_store);
@@ -140,7 +133,9 @@ impl OAuthFlowManager {
             .unwrap_or_default();
 
         let client_name = Some("perihelion-mcp-client");
-        state.start_authorization(&scopes, &redirect_uri, client_name).await?;
+        state
+            .start_authorization(&scopes, &redirect_uri, client_name)
+            .await?;
 
         // 5. 获取授权 URL
         let authorization_url = state.get_authorization_url().await?;
@@ -183,7 +178,9 @@ impl OAuthFlowManager {
         };
 
         // 8. 处理回调，完成授权
-        state.handle_callback(&callback_data.code, &callback_data.state).await?;
+        state
+            .handle_callback(&callback_data.code, &callback_data.state)
+            .await?;
 
         // 9. 保存状态到 states map
         self.states.insert(server_name.to_string(), state);
@@ -317,8 +314,9 @@ mod tests {
         let path = tmp.path().to_path_buf();
         drop(tmp);
         let store = Arc::new(FileCredentialStore::with_path(path));
-        let mut manager =
-            OAuthFlowManager::new(store, move |_| { counter_clone.fetch_add(1, Ordering::SeqCst); });
+        let mut manager = OAuthFlowManager::new(store, move |_| {
+            counter_clone.fetch_add(1, Ordering::SeqCst);
+        });
 
         manager.emit_event(OAuthFlowEvent::AuthorizationCompleted {
             server_name: "test".to_string(),

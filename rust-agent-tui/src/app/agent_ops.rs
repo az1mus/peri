@@ -165,14 +165,11 @@ impl App {
                         )
                     };
                     if !is_done(&rx.borrow()) {
-                        let _ = tokio::time::timeout(
-                            std::time::Duration::from_secs(30),
-                            async {
-                                while !is_done(&rx.borrow()) {
-                                    rx.changed().await.ok();
-                                }
-                            },
-                        )
+                        let _ = tokio::time::timeout(std::time::Duration::from_secs(30), async {
+                            while !is_done(&rx.borrow()) {
+                                rx.changed().await.ok();
+                            }
+                        })
                         .await;
                     }
                 }
@@ -275,7 +272,10 @@ impl App {
                     let _ = self.core.render_tx.send(RenderEvent::RemoveLastMessage);
                 }
             }
-            PipelineAction::RebuildAll { prefix_len, tail_vms } => {
+            PipelineAction::RebuildAll {
+                prefix_len,
+                tail_vms,
+            } => {
                 self.core.view_messages.truncate(prefix_len);
                 self.core.view_messages.extend(tail_vms.clone());
                 let _ = self
@@ -356,7 +356,11 @@ impl App {
             } => {
                 // 关闭 MCP 面板，避免与 OAuth 面板渲染冲突
                 self.mcp_panel = None;
-                self.oauth_prompt = Some(OAuthPrompt::new(server_name, authorization_url, callback_tx));
+                self.oauth_prompt = Some(OAuthPrompt::new(
+                    server_name,
+                    authorization_url,
+                    callback_tx,
+                ));
                 (true, true, false)
             }
             AgentEvent::OAuthAuthorizationCompleted { server_name } => {
@@ -384,7 +388,10 @@ impl App {
                         .map(|p| p.server_infos())
                         .unwrap_or_default();
                 }
-                let vm = MessageViewModel::system(format!("[i] OAuth 授权失败: {} - {}", server_name, error));
+                let vm = MessageViewModel::system(format!(
+                    "[i] OAuth 授权失败: {} - {}",
+                    server_name, error
+                ));
                 self.core.view_messages.push(vm.clone());
                 let _ = self.core.render_tx.send(RenderEvent::AddMessage(vm));
                 (true, false, false)
@@ -528,8 +535,10 @@ impl App {
                     self.apply_pipeline_action(action);
                 }
                 // reconcile 尾部重建：确保流式最终状态与恢复路径一致
-                let (prefix_len, tail_vms) =
-                    self.core.pipeline.reconcile_tail(self.core.round_start_vm_idx);
+                let (prefix_len, tail_vms) = self
+                    .core
+                    .pipeline
+                    .reconcile_tail(self.core.round_start_vm_idx);
                 self.apply_pipeline_action(PipelineAction::RebuildAll {
                     prefix_len,
                     tail_vms,
@@ -592,8 +601,10 @@ impl App {
                     self.apply_pipeline_action(action);
                 }
                 // reconcile 尾部重建：中断场景同样需要确保一致性
-                let (prefix_len, tail_vms) =
-                    self.core.pipeline.reconcile_tail(self.core.round_start_vm_idx);
+                let (prefix_len, tail_vms) = self
+                    .core
+                    .pipeline
+                    .reconcile_tail(self.core.round_start_vm_idx);
                 self.apply_pipeline_action(PipelineAction::RebuildAll {
                     prefix_len,
                     tail_vms,
@@ -984,16 +995,15 @@ impl App {
                     first_line.to_string()
                 };
                 let header_info = if success {
-                    format!("{} completed ({} calls, {}ms): {}", short_id, tool_calls_count, duration_ms, one_line)
+                    format!(
+                        "{} completed ({} calls, {}ms): {}",
+                        short_id, tool_calls_count, duration_ms, one_line
+                    )
                 } else {
                     format!("{} failed: {}", short_id, one_line)
                 };
-                let mut vm = MessageViewModel::tool_block(
-                    display_name.clone(),
-                    header_info,
-                    None,
-                    !success,
-                );
+                let mut vm =
+                    MessageViewModel::tool_block(display_name.clone(), header_info, None, !success);
                 if let MessageViewModel::ToolBlock { collapsed, .. } = &mut vm {
                     *collapsed = true; // 始终折叠，摘要已在 header 中
                 }
@@ -1006,7 +1016,13 @@ impl App {
                     self.agent.agent_rx = None;
                     // 截断显示文本（完整数据已在 agent_state_messages 中供 LLM 使用）
                     let display_notification = if success {
-                        let output_preview: String = output.lines().next().unwrap_or("").chars().take(80).collect();
+                        let output_preview: String = output
+                            .lines()
+                            .next()
+                            .unwrap_or("")
+                            .chars()
+                            .take(80)
+                            .collect();
                         format!(
                             "[后台任务 {} 已完成] Agent: {} | 工具调用: {} | 耗时: {}ms\n{}",
                             &task_id[..8.min(task_id.len())],
@@ -1373,8 +1389,13 @@ mod tests {
 
         // push Human VM 后
         core.view_messages
-            .push(crate::ui::message_view::MessageViewModel::user("q3".to_string()));
+            .push(crate::ui::message_view::MessageViewModel::user(
+                "q3".to_string(),
+            ));
         assert_eq!(core.view_messages.len(), 4);
-        assert_eq!(core.round_start_vm_idx, 3, "round_start_vm_idx 应保持为 push 前的值");
+        assert_eq!(
+            core.round_start_vm_idx, 3,
+            "round_start_vm_idx 应保持为 push 前的值"
+        );
     }
 }

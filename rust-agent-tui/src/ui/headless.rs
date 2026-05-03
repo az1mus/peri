@@ -2502,7 +2502,11 @@ mod tests {
         // 直接验证 Space 的实际处理逻辑：应设置 active_tab
         // （event.rs 中 Space 在 ROW_SONNET 会设置 active_tab = Sonnet）
         panel.active_tab = AliasTab::Sonnet;
-        assert_eq!(panel.active_tab, AliasTab::Sonnet, "Space 应能选中 Sonnet 模型");
+        assert_eq!(
+            panel.active_tab,
+            AliasTab::Sonnet,
+            "Space 应能选中 Sonnet 模型"
+        );
     }
 
     /// Cron 面板删除确认：Ctrl+D 应进入确认状态而非立即删除
@@ -2629,10 +2633,7 @@ mod tests {
         app.model_panel_confirm();
 
         let last_msg = app.core.view_messages.last();
-        assert!(
-            last_msg.is_some(),
-            "Model 面板确认后应有反馈消息"
-        );
+        assert!(last_msg.is_some(), "Model 面板确认后应有反馈消息");
         let msg_text = match last_msg.unwrap() {
             MessageViewModel::SystemNote { content, .. } => content.clone(),
             _ => String::new(),
@@ -2642,10 +2643,7 @@ mod tests {
             "反馈消息应包含模型名 'Sonnet'，实际: {}",
             msg_text
         );
-        assert!(
-            app.core.model_panel.is_none(),
-            "确认后面板应关闭"
-        );
+        assert!(app.core.model_panel.is_none(), "确认后面板应关闭");
     }
 
     /// Login 面板激活 Provider 后应显示"已激活"反馈消息
@@ -2683,10 +2681,7 @@ mod tests {
         app.login_panel_select_provider();
 
         let last_msg = app.core.view_messages.last();
-        assert!(
-            last_msg.is_some(),
-            "Login 面板激活后应有反馈消息"
-        );
+        assert!(last_msg.is_some(), "Login 面板激活后应有反馈消息");
         let msg_text = match last_msg.unwrap() {
             MessageViewModel::SystemNote { content, .. } => content.clone(),
             _ => String::new(),
@@ -2696,10 +2691,7 @@ mod tests {
             "反馈消息应包含 Provider 名 'Provider2'，实际: {}",
             msg_text
         );
-        assert!(
-            app.core.login_panel.is_none(),
-            "激活后面板应关闭"
-        );
+        assert!(app.core.login_panel.is_none(), "激活后面板应关闭");
     }
 
     // ─── Design Review 第24轮：Welcome Card 模型信息 + Thread Browser 消息数 ────

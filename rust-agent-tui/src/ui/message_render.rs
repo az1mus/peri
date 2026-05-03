@@ -146,14 +146,8 @@ pub fn render_view_model(
 
             // 运行中状态：● 闪烁
             let indicator = if matches!(state.status, perihelion_widgets::ToolCallStatus::Running) {
-                let tick = std::time::Instant::now()
-                    .elapsed()
-                    .as_millis() as u64
-                    / 200;
-                perihelion_widgets::tool_call::display::format_indicator(
-                    state.status.clone(),
-                    tick,
-                )
+                let tick = std::time::Instant::now().elapsed().as_millis() as u64 / 200;
+                perihelion_widgets::tool_call::display::format_indicator(state.status.clone(), tick)
             } else {
                 perihelion_widgets::tool_call::display::format_indicator(
                     state.status.clone(),
@@ -191,11 +185,7 @@ pub fn render_view_model(
                 } else {
                     theme::MUTED
                 };
-                let border_color = if *is_error {
-                    theme::ERROR
-                } else {
-                    *color
-                };
+                let border_color = if *is_error { theme::ERROR } else { *color };
                 for line in &state.result_lines {
                     lines.push(Line::from(vec![
                         Span::styled("  │ ".to_string(), Style::default().fg(border_color)),

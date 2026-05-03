@@ -117,17 +117,19 @@ pub(crate) fn render_unified_hint(f: &mut Frame, app: &App, input_area: Rect) {
             None => (name, None, ""),
         };
 
-        let mut spans = vec![
-            Span::styled(
-                if is_selected { "❯ /" } else { "  /" },
-                Style::default().fg(theme::THINKING),
-            ),
-        ];
+        let mut spans = vec![Span::styled(
+            if is_selected { "❯ /" } else { "  /" },
+            Style::default().fg(theme::THINKING),
+        )];
 
         if let Some(m) = matched {
             spans.push(Span::styled(
                 before.to_string(),
-                Style::default().fg(if is_selected { theme::THINKING } else { theme::TEXT }),
+                Style::default().fg(if is_selected {
+                    theme::THINKING
+                } else {
+                    theme::TEXT
+                }),
             ));
             spans.push(Span::styled(
                 m.to_string(),
@@ -137,12 +139,20 @@ pub(crate) fn render_unified_hint(f: &mut Frame, app: &App, input_area: Rect) {
             ));
             spans.push(Span::styled(
                 after.to_string(),
-                Style::default().fg(if is_selected { theme::THINKING } else { theme::TEXT }),
+                Style::default().fg(if is_selected {
+                    theme::THINKING
+                } else {
+                    theme::TEXT
+                }),
             ));
         } else {
             spans.push(Span::styled(
                 name.to_string(),
-                Style::default().fg(if is_selected { theme::THINKING } else { theme::TEXT }),
+                Style::default().fg(if is_selected {
+                    theme::THINKING
+                } else {
+                    theme::TEXT
+                }),
             ));
         }
 

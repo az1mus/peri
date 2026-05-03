@@ -55,7 +55,10 @@ pub(crate) fn render_config_panel(f: &mut Frame, app: &App, area: Rect) {
                 };
 
                 lines.push(Line::from(vec![
-                    Span::styled(cursor_char.to_string(), Style::default().fg(theme::THINKING)),
+                    Span::styled(
+                        cursor_char.to_string(),
+                        Style::default().fg(theme::THINKING),
+                    ),
                     Span::styled(format!("{:<14}", label), style),
                     Span::styled(value, Style::default().fg(theme::TEXT)),
                 ]));
@@ -100,7 +103,10 @@ pub(crate) fn render_config_panel(f: &mut Frame, app: &App, area: Rect) {
                 };
                 let mut spans = vec![
                     Span::styled("  ", Style::default()),
-                    Span::styled(format!("{:<14}", ConfigEditField::Autocompact.label()), label_style),
+                    Span::styled(
+                        format!("{:<14}", ConfigEditField::Autocompact.label()),
+                        label_style,
+                    ),
                 ];
                 spans.extend(on_off);
                 lines.push(Line::from(spans));

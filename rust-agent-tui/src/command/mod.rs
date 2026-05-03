@@ -6,10 +6,10 @@ pub mod context_cmd;
 pub mod cost;
 pub mod cron;
 pub mod help;
-pub mod mcp;
 pub mod history;
 pub mod login;
 pub mod loop_cmd;
+pub mod mcp;
 pub mod memory;
 pub mod model;
 

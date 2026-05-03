@@ -3,9 +3,9 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use parking_lot::RwLock;
 use rust_create_agent::agent::events::{AgentEvent, AgentEventHandler};
-use rust_create_agent::agent::BackgroundTaskResult;
 use rust_create_agent::agent::react::{AgentInput, ReactLLM};
 use rust_create_agent::agent::state::AgentState;
+use rust_create_agent::agent::BackgroundTaskResult;
 use rust_create_agent::agent::{AgentCancellationToken, ReActAgent};
 use rust_create_agent::messages::BaseMessage;
 use rust_create_agent::tools::BaseTool;
@@ -117,19 +117,13 @@ impl SubAgentTool {
     }
 
     /// Set shared parent message reference, Fork path obtains deep copy via RwLock.read()
-    pub fn with_parent_messages(
-        mut self,
-        messages: Arc<RwLock<Vec<BaseMessage>>>,
-    ) -> Self {
+    pub fn with_parent_messages(mut self, messages: Arc<RwLock<Vec<BaseMessage>>>) -> Self {
         self.parent_messages = Some(messages);
         self
     }
 
     /// Set background task registry for run_in_background mode
-    pub fn with_background_registry(
-        mut self,
-        registry: Arc<BackgroundTaskRegistry>,
-    ) -> Self {
+    pub fn with_background_registry(mut self, registry: Arc<BackgroundTaskRegistry>) -> Self {
         self.background_registry = Some(registry);
         self
     }
@@ -208,7 +202,10 @@ impl SubAgentTool {
         // 1. Obtain deep copy of parent messages
         let parent_msgs: Vec<BaseMessage> = match &self.parent_messages {
             Some(pm) => pm.read().clone(),
-            None => return Ok("Error: Fork path requires parent message history, but parent_messages is not set".to_string()),
+            None => return Ok(
+                "Error: Fork path requires parent message history, but parent_messages is not set"
+                    .to_string(),
+            ),
         };
 
         // 2. Build fork directive Human message
@@ -257,10 +254,8 @@ impl SubAgentTool {
 
         // 6. Register full parent tools (no filtering, including Agent itself to maintain cache hit)
         for tool in self.parent_tools.iter() {
-            agent_builder = agent_builder.register_tool(
-                Box::new(ArcToolWrapper(Arc::clone(tool)))
-                    as Box<dyn BaseTool>
-            );
+            agent_builder = agent_builder
+                .register_tool(Box::new(ArcToolWrapper(Arc::clone(tool))) as Box<dyn BaseTool>);
         }
 
         // 7. Transparently forward parent event handler
@@ -295,16 +290,16 @@ impl SubAgentTool {
         subagent_type: Option<String>,
         cwd: String,
     ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
-        let registry = self.background_registry.as_ref()
+        let registry = self
+            .background_registry
+            .as_ref()
             .ok_or("Background tasks not available: no registry configured")?;
 
         // 检查并发上限
         if registry.active_count() >= 3 {
-            return Ok(
-                "Error: maximum 3 concurrent background tasks reached. \
+            return Ok("Error: maximum 3 concurrent background tasks reached. \
                  Wait for a running task to complete before starting a new one."
-                    .to_string()
-            );
+                .to_string());
         }
 
         let task_id = format!("bg-{}", uuid::Uuid::new_v4());
@@ -312,7 +307,9 @@ impl SubAgentTool {
         // background mode requires subagent_type
         let agent_id = match &subagent_type {
             Some(id) => id.clone(),
-            None => return Ok("Error: background mode requires subagent_type parameter".to_string()),
+            None => {
+                return Ok("Error: background mode requires subagent_type parameter".to_string())
+            }
         };
 
         let agent_path = AgentDefineMiddleware::candidate_paths(&cwd, &agent_id)
@@ -321,17 +318,22 @@ impl SubAgentTool {
 
         let agent_path = match agent_path {
             Some(p) => p,
-            None => return Ok(format!(
-                "Error: cannot find agent definition file '{}'",
-                agent_id
-            )),
+            None => {
+                return Ok(format!(
+                    "Error: cannot find agent definition file '{}'",
+                    agent_id
+                ))
+            }
         };
 
         let content = std::fs::read_to_string(&agent_path)
             .map_err(|e| format!("Error: failed to read agent definition file: {}", e))?;
-        let agent_def = parse_agent_file(&content)
-            .ok_or_else(|| format!("Error: failed to parse agent definition file '{}'",
-                agent_path.display()))?;
+        let agent_def = parse_agent_file(&content).ok_or_else(|| {
+            format!(
+                "Error: failed to parse agent definition file '{}'",
+                agent_path.display()
+            )
+        })?;
 
         let filtered_tools = self.filter_tools(
             &agent_def.frontmatter.tools,
@@ -342,11 +344,18 @@ impl SubAgentTool {
         let prompt_summary: String = prompt.chars().take(100).collect();
 
         // Build child agent before spawn (avoid capturing self references across await)
-        let model_alias: Option<&str> = agent_def.frontmatter.model.as_deref()
+        let model_alias: Option<&str> = agent_def
+            .frontmatter
+            .model
+            .as_deref()
             .filter(|m| !m.is_empty() && *m != "inherit");
         let llm = (self.llm_factory)(model_alias);
         let raw_turns = agent_def.frontmatter.max_turns.unwrap_or(200);
-        let max_iterations = if raw_turns == 0 { 200 } else { raw_turns as usize };
+        let max_iterations = if raw_turns == 0 {
+            200
+        } else {
+            raw_turns as usize
+        };
 
         let mut agent_builder = ReActAgent::new(llm).max_iterations(max_iterations);
         agent_builder = agent_builder
@@ -404,7 +413,8 @@ impl SubAgentTool {
                 .await
             {
                 Ok(output) => {
-                    let tool_calls_count = state.messages
+                    let tool_calls_count = state
+                        .messages
                         .iter()
                         .filter(|m| matches!(m, BaseMessage::Tool { .. }))
                         .count();
@@ -515,11 +525,17 @@ impl BaseTool for SubAgentTool {
             Some(p) => p.to_string(),
             None => return Ok("Error: missing required parameter prompt".to_string()),
         };
-        let subagent_type = input.get("subagent_type").and_then(|v| v.as_str()).map(|s| s.to_string());
+        let subagent_type = input
+            .get("subagent_type")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
         let _description = input.get("description").and_then(|v| v.as_str());
         let _name = input.get("name").and_then(|v| v.as_str());
         let _isolation = input.get("isolation").and_then(|v| v.as_str());
-        let run_in_background = input.get("run_in_background").and_then(|v| v.as_bool()).unwrap_or(false);
+        let run_in_background = input
+            .get("run_in_background")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
 
         // cwd defaults to inheriting parent agent's working directory
         let cwd = input
@@ -544,7 +560,12 @@ impl BaseTool for SubAgentTool {
         // 1. Find agent definition file
         let agent_id = match &subagent_type {
             Some(id) => id.clone(),
-            None => return Ok("Error: please provide subagent_type parameter to specify the agent type".to_string()),
+            None => {
+                return Ok(
+                    "Error: please provide subagent_type parameter to specify the agent type"
+                        .to_string(),
+                )
+            }
         };
 
         let agent_path = AgentDefineMiddleware::candidate_paths(&cwd, &agent_id)
@@ -564,7 +585,12 @@ impl BaseTool for SubAgentTool {
         // 2. Read and parse agent definition file
         let content = match std::fs::read_to_string(&agent_path) {
             Ok(c) => c,
-            Err(e) => return Ok(format!("Error: failed to read agent definition file: {}", e)),
+            Err(e) => {
+                return Ok(format!(
+                    "Error: failed to read agent definition file: {}",
+                    e
+                ))
+            }
         };
         let agent_def = match parse_agent_file(&content) {
             Some(a) => a,
@@ -777,7 +803,11 @@ mod tests {
             }))
             .await
             .unwrap();
-        assert!(result.contains("prompt"), "Should return missing prompt error: {}", result);
+        assert!(
+            result.contains("prompt"),
+            "Should return missing prompt error: {}",
+            result
+        );
     }
 
     /// Verify error returned when subagent_type parameter is missing
@@ -790,7 +820,11 @@ mod tests {
             }))
             .await
             .unwrap();
-        assert!(result.contains("subagent_type"), "Should return missing subagent_type error: {}", result);
+        assert!(
+            result.contains("subagent_type"),
+            "Should return missing subagent_type error: {}",
+            result
+        );
     }
 
     #[tokio::test]
@@ -804,7 +838,11 @@ mod tests {
             }))
             .await
             .unwrap();
-        assert!(result.contains("cannot find"), "Should return not found error: {}", result);
+        assert!(
+            result.contains("cannot find"),
+            "Should return not found error: {}",
+            result
+        );
     }
 
     #[tokio::test]
@@ -830,11 +868,7 @@ mod tests {
     #[test]
     fn test_tool_filter_allowlist() {
         // tools has value -> only keep specified tools
-        let parent_tools = vec![
-            make_tool("Read"),
-            make_tool("Write"),
-            make_tool("Glob"),
-        ];
+        let parent_tools = vec![make_tool("Read"), make_tool("Write"), make_tool("Glob")];
         let t = make_subagent_tool(parent_tools);
 
         let allowed = ToolsValue::List(vec!["Read".to_string(), "Glob".to_string()]);
@@ -853,11 +887,7 @@ mod tests {
     #[test]
     fn test_tool_filter_disallow() {
         // disallowedTools -> exclude from inherited set
-        let parent_tools = vec![
-            make_tool("Read"),
-            make_tool("Write"),
-            make_tool("Edit"),
-        ];
+        let parent_tools = vec![make_tool("Read"), make_tool("Write"), make_tool("Edit")];
         let t = make_subagent_tool(parent_tools);
 
         let allowed = ToolsValue::Empty;
@@ -897,7 +927,11 @@ mod tests {
             .await
             .unwrap();
         // EchoLLM returns echo: hello
-        assert!(result.contains("echo"), "Should receive sub-agent output: {}", result);
+        assert!(
+            result.contains("echo"),
+            "Should receive sub-agent output: {}",
+            result
+        );
     }
 
     /// Verify Agent reserved fields (isolation/run_in_background/description/name) don't affect execution
@@ -926,7 +960,11 @@ mod tests {
             .await
             .unwrap();
         // Reserved fields don't affect execution, should still return normal result
-        assert!(result.contains("echo"), "Should execute normally: {}", result);
+        assert!(
+            result.contains("echo"),
+            "Should execute normally: {}",
+            result
+        );
     }
 
     #[tokio::test]
@@ -963,11 +1001,7 @@ mod tests {
     /// tools/disallowedTools filtering: case-insensitive (users often write PascalCase)
     #[test]
     fn test_tool_filter_case_insensitive() {
-        let parent_tools = vec![
-            make_tool("Read"),
-            make_tool("Write"),
-            make_tool("Glob"),
-        ];
+        let parent_tools = vec![make_tool("Read"), make_tool("Write"), make_tool("Glob")];
         let t = make_subagent_tool(parent_tools);
 
         // User writes different cases in agent.md: tools: READ, glob
@@ -1151,7 +1185,10 @@ mod tests {
     fn test_agent_description_extended() {
         let t = make_subagent_tool(vec![]);
         let desc = t.description();
-        assert!(desc.contains("Usage:"), "description should contain Usage section");
+        assert!(
+            desc.contains("Usage:"),
+            "description should contain Usage section"
+        );
         assert!(
             desc.contains("sub-agent") || desc.contains("sub agent"),
             "description should mention sub-agent"
@@ -1160,8 +1197,14 @@ mod tests {
             desc.contains("isolated") || desc.contains("isolation"),
             "description should mention context isolation"
         );
-        assert!(desc.contains("Fork mode"), "description should mention Fork mode");
-        assert!(desc.len() > 300, "description should be extended multi-paragraph text");
+        assert!(
+            desc.contains("Fork mode"),
+            "description should mention Fork mode"
+        );
+        assert!(
+            desc.len() > 300,
+            "description should be extended multi-paragraph text"
+        );
     }
 
     /// Verify overrides_from_agent_def correctly extracts AgentOverrides from parsed data
@@ -1298,8 +1341,7 @@ mod tests {
     /// Fork inherits parent messages
     #[tokio::test]
     async fn test_fork_inherits_parent_messages() {
-        let parent_messages: Arc<RwLock<Vec<BaseMessage>>> =
-            Arc::new(RwLock::new(Vec::new()));
+        let parent_messages: Arc<RwLock<Vec<BaseMessage>>> = Arc::new(RwLock::new(Vec::new()));
         parent_messages.write().push(BaseMessage::human("Hello"));
         parent_messages.write().push(BaseMessage::ai("Hi there"));
 
@@ -1350,15 +1392,15 @@ mod tests {
         let count = *msg_capture.lock().unwrap();
         assert!(
             count >= 3,
-            "Fork should receive parent messages (got {})", count
+            "Fork should receive parent messages (got {})",
+            count
         );
     }
 
     /// Fork registers all tools including Agent (no hard-coded exclusion)
     #[tokio::test]
     async fn test_fork_registers_all_tools_including_agent() {
-        let parent_messages: Arc<RwLock<Vec<BaseMessage>>> =
-            Arc::new(RwLock::new(Vec::new()));
+        let parent_messages: Arc<RwLock<Vec<BaseMessage>>> = Arc::new(RwLock::new(Vec::new()));
 
         let tools_capture: Arc<std::sync::Mutex<Vec<String>>> =
             Arc::new(std::sync::Mutex::new(Vec::new()));
@@ -1428,7 +1470,8 @@ mod tests {
             .unwrap();
 
         assert!(
-            result.contains("parent_messages is not set") || result.contains("parent message history"),
+            result.contains("parent_messages is not set")
+                || result.contains("parent message history"),
             "Fork without parent_messages should return error, got: {}",
             result
         );
@@ -1437,8 +1480,7 @@ mod tests {
     /// Fork system prompt is consistent with system_builder
     #[tokio::test]
     async fn test_fork_system_prompt_consistent() {
-        let parent_messages: Arc<RwLock<Vec<BaseMessage>>> =
-            Arc::new(RwLock::new(Vec::new()));
+        let parent_messages: Arc<RwLock<Vec<BaseMessage>>> = Arc::new(RwLock::new(Vec::new()));
 
         let sys_capture: Arc<std::sync::Mutex<String>> =
             Arc::new(std::sync::Mutex::new(String::new()));
@@ -1495,8 +1537,7 @@ mod tests {
     /// Fork directive includes RULES
     #[tokio::test]
     async fn test_fork_directive_includes_rules() {
-        let parent_messages: Arc<RwLock<Vec<BaseMessage>>> =
-            Arc::new(RwLock::new(Vec::new()));
+        let parent_messages: Arc<RwLock<Vec<BaseMessage>>> = Arc::new(RwLock::new(Vec::new()));
 
         let last_capture: Arc<std::sync::Mutex<String>> =
             Arc::new(std::sync::Mutex::new(String::new()));

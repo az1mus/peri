@@ -120,7 +120,6 @@ pub(crate) fn render_agent_panel(f: &mut Frame, app: &mut App, area: Rect) {
         )));
     }
 
-
     // 存储面板元数据供鼠标选区使用
     app.core.panel_area = Some(inner);
     app.core.panel_scroll_offset = panel.scroll_offset;

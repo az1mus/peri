@@ -20,7 +20,11 @@ pub enum TodoStatus {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TodoItem {
     pub content: String,
-    #[serde(default, rename = "activeForm", skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        rename = "activeForm",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub active_form: Option<String>,
     pub status: TodoStatus,
 }
@@ -236,27 +240,57 @@ mod tests {
     #[test]
     fn test_summarize_changes_by_index() {
         let old = vec![
-            TodoItem { content: "A".into(), active_form: None, status: TodoStatus::Pending },
-            TodoItem { content: "B".into(), active_form: None, status: TodoStatus::Pending },
+            TodoItem {
+                content: "A".into(),
+                active_form: None,
+                status: TodoStatus::Pending,
+            },
+            TodoItem {
+                content: "B".into(),
+                active_form: None,
+                status: TodoStatus::Pending,
+            },
         ];
         let new = vec![
-            TodoItem { content: "A".into(), active_form: None, status: TodoStatus::InProgress },
-            TodoItem { content: "B".into(), active_form: None, status: TodoStatus::Pending },
-            TodoItem { content: "C".into(), active_form: None, status: TodoStatus::Pending },
+            TodoItem {
+                content: "A".into(),
+                active_form: None,
+                status: TodoStatus::InProgress,
+            },
+            TodoItem {
+                content: "B".into(),
+                active_form: None,
+                status: TodoStatus::Pending,
+            },
+            TodoItem {
+                content: "C".into(),
+                active_form: None,
+                status: TodoStatus::Pending,
+            },
         ];
         let summary = summarize_changes(&old, &new);
-        assert!(summary.contains("[0]→in_progress"), "should detect status change at [0]: {summary}");
-        assert!(summary.contains("+[2]"), "should detect addition at [2]: {summary}");
+        assert!(
+            summary.contains("[0]→in_progress"),
+            "should detect status change at [0]: {summary}"
+        );
+        assert!(
+            summary.contains("+[2]"),
+            "should detect addition at [2]: {summary}"
+        );
     }
 
     #[test]
     fn test_summarize_changes_empty() {
-        let old = vec![
-            TodoItem { content: "A".into(), active_form: None, status: TodoStatus::Pending },
-        ];
-        let new = vec![
-            TodoItem { content: "A".into(), active_form: None, status: TodoStatus::Pending },
-        ];
+        let old = vec![TodoItem {
+            content: "A".into(),
+            active_form: None,
+            status: TodoStatus::Pending,
+        }];
+        let new = vec![TodoItem {
+            content: "A".into(),
+            active_form: None,
+            status: TodoStatus::Pending,
+        }];
         let summary = summarize_changes(&old, &new);
         assert_eq!(summary, "saved");
     }

@@ -26,7 +26,11 @@ pub enum BlockRenderStrategy {
     },
 }
 
-pub fn render_block(strategy: &BlockRenderStrategy, width: usize, theme: &dyn Theme) -> Vec<Line<'static>> {
+pub fn render_block(
+    strategy: &BlockRenderStrategy,
+    width: usize,
+    theme: &dyn Theme,
+) -> Vec<Line<'static>> {
     match strategy {
         BlockRenderStrategy::Text { content, .. } => {
             #[cfg(feature = "markdown")]

@@ -29,9 +29,7 @@ pub struct BackgroundTaskRegistry {
 }
 
 impl BackgroundTaskRegistry {
-    pub fn new(
-        notification_tx: tokio::sync::mpsc::UnboundedSender<BackgroundTaskResult>,
-    ) -> Self {
+    pub fn new(notification_tx: tokio::sync::mpsc::UnboundedSender<BackgroundTaskResult>) -> Self {
         Self {
             tasks: parking_lot::Mutex::new(HashMap::new()),
             notification_tx,
@@ -94,9 +92,9 @@ impl BackgroundTaskRegistry {
 
     /// 清理已完成的任务
     pub fn cleanup_completed(&self) {
-        self.tasks.lock().retain(|_, t| {
-            matches!(t.status, BackgroundTaskStatus::Running)
-        });
+        self.tasks
+            .lock()
+            .retain(|_, t| matches!(t.status, BackgroundTaskStatus::Running));
     }
 }
 
@@ -104,7 +102,10 @@ impl BackgroundTaskRegistry {
 mod tests {
     use super::*;
 
-    fn make_registry() -> (BackgroundTaskRegistry, tokio::sync::mpsc::UnboundedReceiver<BackgroundTaskResult>) {
+    fn make_registry() -> (
+        BackgroundTaskRegistry,
+        tokio::sync::mpsc::UnboundedReceiver<BackgroundTaskResult>,
+    ) {
         let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
         (BackgroundTaskRegistry::new(tx), rx)
     }

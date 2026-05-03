@@ -99,21 +99,20 @@ pub fn assemble_agent(
     });
 
     // 系统提示词构建器
-    let system_builder: Arc<dyn Fn(Option<&rust_agent_middlewares::AgentOverrides>, &str) -> String + Send + Sync> =
-        Arc::new(|overrides, cwd_dir| {
-            crate::prompt::build_system_prompt(
-                overrides,
-                cwd_dir,
-                crate::prompt::PromptFeatures::detect(),
-            )
-        });
+    let system_builder: Arc<
+        dyn Fn(Option<&rust_agent_middlewares::AgentOverrides>, &str) -> String + Send + Sync,
+    > = Arc::new(|overrides, cwd_dir| {
+        crate::prompt::build_system_prompt(
+            overrides,
+            cwd_dir,
+            crate::prompt::PromptFeatures::detect(),
+        )
+    });
 
     // SubAgent 中间件
     let subagent = SubAgentMiddleware::new(
         parent_tools,
-        Some(
-            Arc::clone(&event_handler) as Arc<dyn AgentEventHandler>,
-        ),
+        Some(Arc::clone(&event_handler) as Arc<dyn AgentEventHandler>),
         llm_factory,
     )
     .with_system_builder(system_builder)
@@ -130,17 +129,15 @@ pub fn assemble_agent(
         .add_middleware(Box::new(FilesystemMiddleware::new()))
         .add_middleware(Box::new(TerminalMiddleware::new()))
         .add_middleware(Box::new(TodoMiddleware::new(todo_tx)))
-        .add_middleware(Box::new(
-            rust_agent_middlewares::cron::CronMiddleware::new(
-                cron_scheduler.unwrap_or_else(|| {
-                    Arc::new(parking_lot::Mutex::new(
-                        rust_agent_middlewares::cron::CronScheduler::new(
-                            tokio::sync::mpsc::unbounded_channel().0,
-                        ),
-                    ))
-                }),
-            ),
-        ))
+        .add_middleware(Box::new(rust_agent_middlewares::cron::CronMiddleware::new(
+            cron_scheduler.unwrap_or_else(|| {
+                Arc::new(parking_lot::Mutex::new(
+                    rust_agent_middlewares::cron::CronScheduler::new(
+                        tokio::sync::mpsc::unbounded_channel().0,
+                    ),
+                ))
+            }),
+        )))
         .add_middleware(Box::new(hitl))
         .add_middleware(Box::new(subagent))
         .with_event_handler(Arc::clone(&event_handler))

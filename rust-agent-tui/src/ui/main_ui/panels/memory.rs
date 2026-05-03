@@ -1,12 +1,12 @@
+use crate::app::App;
+use crate::ui::theme;
+use perihelion_widgets::{BorderedPanel, ScrollState, ScrollableArea};
 use ratatui::{
     layout::Rect,
     style::{Modifier, Style},
     text::{Line, Span, Text},
     Frame,
 };
-use perihelion_widgets::{BorderedPanel, ScrollState, ScrollableArea};
-use crate::app::App;
-use crate::ui::theme;
 
 pub(crate) fn render_memory_panel(f: &mut Frame, app: &mut App, area: Rect) {
     let Some(panel) = &app.memory_panel else {
@@ -51,7 +51,10 @@ pub(crate) fn render_memory_panel(f: &mut Frame, app: &mut App, area: Rect) {
         };
 
         lines.push(Line::from(vec![
-            Span::styled(cursor_char.to_string(), Style::default().fg(theme::THINKING)),
+            Span::styled(
+                cursor_char.to_string(),
+                Style::default().fg(theme::THINKING),
+            ),
             Span::styled(format!("[{}] ", exist_icon.0), exist_icon.1),
             Span::styled(format!("{:<8} ", entry.label), style),
             Span::styled(path_display, Style::default().fg(theme::MUTED)),

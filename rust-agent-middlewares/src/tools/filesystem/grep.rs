@@ -1,13 +1,15 @@
 use rust_create_agent::tools::BaseTool;
 use serde_json::Value;
+use std::cell::Cell;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
-use std::cell::Cell;
 use tokio::time::{timeout, Duration};
 
 use grep::regex::RegexMatcherBuilder;
-use grep::searcher::{SearcherBuilder, BinaryDetection, Sink, SinkMatch, SinkContext, SinkContextKind, Searcher};
+use grep::searcher::{
+    BinaryDetection, Searcher, SearcherBuilder, Sink, SinkContext, SinkContextKind, SinkMatch,
+};
 use ignore::WalkBuilder;
 
 /// Grep tool - 与 Claude Code Grep 工具对齐
@@ -45,19 +47,19 @@ When to use:
 /// 从 args 数组中解析搜索参数
 struct ParsedArgs {
     pattern: String,
-    path: Option<String>,       // 搜索路径，None 表示 cwd
-    glob_filters: Vec<String>,  // -g 参数
+    path: Option<String>,        // 搜索路径，None 表示 cwd
+    glob_filters: Vec<String>,   // -g 参数
     _type_filters: Vec<String>,  // -t 参数（暂不实现）
     _type_excludes: Vec<String>, // -T 参数（暂不实现）
-    output_mode: OutputMode,    // 默认/文件名/计数
-    context_lines: usize,       // -C 参数
-    case_insensitive: bool,     // -i 参数
-    whole_word: bool,           // -w 参数
+    output_mode: OutputMode,     // 默认/文件名/计数
+    context_lines: usize,        // -C 参数
+    case_insensitive: bool,      // -i 参数
+    whole_word: bool,            // -w 参数
 }
 
 #[derive(Clone, Copy, PartialEq)]
 enum OutputMode {
-    Default,  // 显示匹配行
+    Default,   // 显示匹配行
     FilesOnly, // -l
     CountOnly, // -c
 }
@@ -68,13 +70,13 @@ struct GrepInput {
     path: Option<String>,
     glob: Option<String>,
     type_filter: Option<String>,
-    output_mode: String,           // "content" | "files_with_matches" | "count"
-    case_insensitive: bool,        // 对应 -i，默认 false
-    context: Option<usize>,        // 对应 -C
-    _line_number: bool,             // 对应 -n，默认 true
-    _multiline: bool,               // 对应 -U --multiline-dotall，默认 false
-    head_limit: usize,             // 默认 250
-    offset: Option<usize>,         // 跳过前 N 行
+    output_mode: String,    // "content" | "files_with_matches" | "count"
+    case_insensitive: bool, // 对应 -i，默认 false
+    context: Option<usize>, // 对应 -C
+    _line_number: bool,     // 对应 -n，默认 true
+    _multiline: bool,       // 对应 -U --multiline-dotall，默认 false
+    head_limit: usize,      // 默认 250
+    offset: Option<usize>,  // 跳过前 N 行
 }
 
 /// 将 type 参数（如 "rust"、"js"）映射为 glob 模式列表
@@ -111,7 +113,10 @@ impl GrepInput {
             "content" => OutputMode::Default,
             "files_with_matches" => OutputMode::FilesOnly,
             "count" => OutputMode::CountOnly,
-            other => return Err(format!("Invalid output_mode: '{}'. Must be 'content', 'files_with_matches', or 'count'", other)),
+            other => return Err(format!(
+                "Invalid output_mode: '{}'. Must be 'content', 'files_with_matches', or 'count'",
+                other
+            )),
         };
 
         // 组装 glob 过滤器：用户提供的 glob + type 映射
@@ -188,7 +193,11 @@ impl Sink for SearchSink {
         }
     }
 
-    fn context(&mut self, _searcher: &Searcher, ctx: &SinkContext<'_>) -> Result<bool, Self::Error> {
+    fn context(
+        &mut self,
+        _searcher: &Searcher,
+        ctx: &SinkContext<'_>,
+    ) -> Result<bool, Self::Error> {
         if self.stopped.load(Ordering::Relaxed) || self.context_lines == 0 {
             return Ok(true);
         }
@@ -206,7 +215,10 @@ impl Sink for SearchSink {
             SinkContextKind::Other => '-',
         };
 
-        let line = format!("{}:{}{}: {}", self.display_path, line_number, separator, content);
+        let line = format!(
+            "{}:{}{}: {}",
+            self.display_path, line_number, separator, content
+        );
 
         let total = self.total_lines.fetch_add(1, Ordering::Relaxed) + 1;
         if total >= self.max_limit {
@@ -281,83 +293,86 @@ fn execute_search(
         let glob_filters = glob_filters.clone();
         let results = Arc::clone(&results);
 
-        Box::new(move |entry_result: Result<ignore::DirEntry, ignore::Error>| {
-            use ignore::WalkState;
+        Box::new(
+            move |entry_result: Result<ignore::DirEntry, ignore::Error>| {
+                use ignore::WalkState;
 
-            let entry = match entry_result {
-                Ok(e) => e,
-                Err(_) => return WalkState::Continue,
-            };
+                let entry = match entry_result {
+                    Ok(e) => e,
+                    Err(_) => return WalkState::Continue,
+                };
 
-            if stopped.load(Ordering::Relaxed) {
-                return WalkState::Quit;
-            }
-            if !entry.file_type().map_or(false, |ft| ft.is_file()) {
-                return WalkState::Continue;
-            }
-
-            // -g glob 过滤
-            if !glob_filters.is_empty() {
-                let file_name = entry.file_name().to_string_lossy();
-                if !glob_filters.iter().any(|p| p.matches(&file_name)) {
+                if stopped.load(Ordering::Relaxed) {
+                    return WalkState::Quit;
+                }
+                if !entry.file_type().map_or(false, |ft| ft.is_file()) {
                     return WalkState::Continue;
                 }
-            }
 
-            // 显示路径：相对于 cwd 的路径
-            let display_path = entry
-                .path()
-                .strip_prefix(cwd.as_str())
-                .unwrap_or(entry.path())
-                .to_string_lossy()
-                .to_string();
+                // -g glob 过滤
+                if !glob_filters.is_empty() {
+                    let file_name = entry.file_name().to_string_lossy();
+                    if !glob_filters.iter().any(|p| p.matches(&file_name)) {
+                        return WalkState::Continue;
+                    }
+                }
 
-            let mut searcher_builder = SearcherBuilder::new();
-            searcher_builder
-                .line_number(true)
-                .binary_detection(BinaryDetection::quit(b'\x00'));
-            if context_lines > 0 {
+                // 显示路径：相对于 cwd 的路径
+                let display_path = entry
+                    .path()
+                    .strip_prefix(cwd.as_str())
+                    .unwrap_or(entry.path())
+                    .to_string_lossy()
+                    .to_string();
+
+                let mut searcher_builder = SearcherBuilder::new();
                 searcher_builder
-                    .before_context(context_lines)
-                    .after_context(context_lines);
-            }
-            let mut searcher = searcher_builder.build();
-
-            let mut sink = SearchSink {
-                output_mode: parsed.output_mode,
-                results: Arc::clone(&results),
-                total_lines: Arc::clone(&total_lines),
-                max_limit: head_limit,
-                stopped: Arc::clone(&stopped),
-                display_path: display_path.clone(),
-                match_count: Cell::new(0),
-                has_match: Cell::new(false),
-                context_lines,
-            };
-
-            match searcher.search_path(&*matcher, entry.path(), &mut sink) {
-                Ok(_) => {}
-                Err(_) => {
-                    // 二进制文件等错误，跳过
-                    return WalkState::Continue;
+                    .line_number(true)
+                    .binary_detection(BinaryDetection::quit(b'\x00'));
+                if context_lines > 0 {
+                    searcher_builder
+                        .before_context(context_lines)
+                        .after_context(context_lines);
                 }
-            }
+                let mut searcher = searcher_builder.build();
 
-            // FilesOnly / CountOnly 模式在搜索完成后处理
-            if parsed.output_mode == OutputMode::FilesOnly && sink.has_match.get() {
-                let mut r = results.lock().unwrap();
-                r.push(display_path.clone());
-            } else if parsed.output_mode == OutputMode::CountOnly && sink.match_count.get() > 0 {
-                let mut r = results.lock().unwrap();
-                r.push(format!("{}:{}", display_path, sink.match_count.get()));
-            }
+                let mut sink = SearchSink {
+                    output_mode: parsed.output_mode,
+                    results: Arc::clone(&results),
+                    total_lines: Arc::clone(&total_lines),
+                    max_limit: head_limit,
+                    stopped: Arc::clone(&stopped),
+                    display_path: display_path.clone(),
+                    match_count: Cell::new(0),
+                    has_match: Cell::new(false),
+                    context_lines,
+                };
 
-            if stopped.load(Ordering::Relaxed) {
-                WalkState::Quit
-            } else {
-                WalkState::Continue
-            }
-        })
+                match searcher.search_path(&*matcher, entry.path(), &mut sink) {
+                    Ok(_) => {}
+                    Err(_) => {
+                        // 二进制文件等错误，跳过
+                        return WalkState::Continue;
+                    }
+                }
+
+                // FilesOnly / CountOnly 模式在搜索完成后处理
+                if parsed.output_mode == OutputMode::FilesOnly && sink.has_match.get() {
+                    let mut r = results.lock().unwrap();
+                    r.push(display_path.clone());
+                } else if parsed.output_mode == OutputMode::CountOnly && sink.match_count.get() > 0
+                {
+                    let mut r = results.lock().unwrap();
+                    r.push(format!("{}:{}", display_path, sink.match_count.get()));
+                }
+
+                if stopped.load(Ordering::Relaxed) {
+                    WalkState::Quit
+                } else {
+                    WalkState::Continue
+                }
+            },
+        )
     });
 
     // 格式化输出
@@ -454,16 +469,34 @@ impl BaseTool for GrepTool {
 
         let grep_input = GrepInput {
             pattern,
-            path: input.get("path").and_then(|v| v.as_str()).map(|s| s.to_string()),
-            glob: input.get("glob").and_then(|v| v.as_str()).map(|s| s.to_string()),
-            type_filter: input.get("type").and_then(|v| v.as_str()).map(|s| s.to_string()),
+            path: input
+                .get("path")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string()),
+            glob: input
+                .get("glob")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string()),
+            type_filter: input
+                .get("type")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string()),
             output_mode,
             case_insensitive: input.get("-i").and_then(|v| v.as_bool()).unwrap_or(false),
             context: input.get("-C").and_then(|v| v.as_u64()).map(|n| n as usize),
             _line_number: input.get("-n").and_then(|v| v.as_bool()).unwrap_or(true),
-            _multiline: input.get("multiline").and_then(|v| v.as_bool()).unwrap_or(false),
-            head_limit: input.get("head_limit").and_then(|v| v.as_u64()).unwrap_or(250) as usize,
-            offset: input.get("offset").and_then(|v| v.as_u64()).map(|n| n as usize),
+            _multiline: input
+                .get("multiline")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false),
+            head_limit: input
+                .get("head_limit")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(250) as usize,
+            offset: input
+                .get("offset")
+                .and_then(|v| v.as_u64())
+                .map(|n| n as usize),
         };
 
         let parsed = match grep_input.to_parsed_args() {
@@ -477,15 +510,20 @@ impl BaseTool for GrepTool {
         let result = timeout(
             Duration::from_secs(15),
             tokio::task::spawn_blocking(move || execute_search(&parsed, &cwd, head_limit)),
-        ).await;
+        )
+        .await;
 
         // offset 后处理（在超时/结果后应用）
-        let output = match result {
-            Err(_) => return Ok("Error: Search timed out after 15 seconds. Please use a more specific pattern.".to_string()),
-            Ok(Err(e)) => return Ok(format!("Error: {e}")),
-            Ok(Ok(Ok(output))) => output,
-            Ok(Ok(Err(e))) => return Ok(format!("Error: {e}")),
-        };
+        let output =
+            match result {
+                Err(_) => return Ok(
+                    "Error: Search timed out after 15 seconds. Please use a more specific pattern."
+                        .to_string(),
+                ),
+                Ok(Err(e)) => return Ok(format!("Error: {e}")),
+                Ok(Ok(Ok(output))) => output,
+                Ok(Ok(Err(e))) => return Ok(format!("Error: {e}")),
+            };
 
         // 应用 offset：跳过前 N 行
         let final_output = if let Some(offset) = grep_input.offset {
@@ -518,7 +556,9 @@ mod tests {
         .unwrap();
         let tool = GrepTool::new(dir.path().to_str().unwrap());
         let result = tool
-            .invoke(serde_json::json!({"pattern": "needle", "output_mode": "content", "path": "./"}))
+            .invoke(
+                serde_json::json!({"pattern": "needle", "output_mode": "content", "path": "./"}),
+            )
             .await
             .unwrap();
         assert!(result.contains("needle"), "should find needle: {result}");
@@ -543,7 +583,10 @@ mod tests {
     async fn test_grep_missing_pattern() {
         let dir = tempfile::tempdir().unwrap();
         let tool = GrepTool::new(dir.path().to_str().unwrap());
-        let result = tool.invoke(serde_json::json!({"output_mode": "content"})).await.unwrap();
+        let result = tool
+            .invoke(serde_json::json!({"output_mode": "content"}))
+            .await
+            .unwrap();
         assert!(
             result.contains("Missing required parameter 'pattern'"),
             "should report missing pattern: {result}"
@@ -587,7 +630,10 @@ mod tests {
             .unwrap();
         assert!(result.contains("a.txt"), "should find a.txt: {result}");
         assert!(result.contains("c.txt"), "should find c.txt: {result}");
-        assert!(!result.contains("needle here"), "should not include line content: {result}");
+        assert!(
+            !result.contains("needle here"),
+            "should not include line content: {result}"
+        );
     }
 
     #[tokio::test]
@@ -600,8 +646,14 @@ mod tests {
             .invoke(serde_json::json!({"pattern": "needle", "output_mode": "count", "path": "./"}))
             .await
             .unwrap();
-        assert!(result.contains("a.txt:3"), "a.txt should have 3 matches: {result}");
-        assert!(result.contains("b.txt:1"), "b.txt should have 1 match: {result}");
+        assert!(
+            result.contains("a.txt:3"),
+            "a.txt should have 3 matches: {result}"
+        );
+        assert!(
+            result.contains("b.txt:1"),
+            "b.txt should have 1 match: {result}"
+        );
     }
 
     #[tokio::test]
@@ -613,9 +665,18 @@ mod tests {
             .invoke(serde_json::json!({"pattern": "NEEDLE", "output_mode": "content", "-i": true, "path": "./"}))
             .await
             .unwrap();
-        assert!(result.contains("NEEDLE"), "should match uppercase: {result}");
-        assert!(result.contains("needle"), "should match lowercase: {result}");
-        assert!(result.contains("Needle"), "should match mixed case: {result}");
+        assert!(
+            result.contains("NEEDLE"),
+            "should match uppercase: {result}"
+        );
+        assert!(
+            result.contains("needle"),
+            "should match lowercase: {result}"
+        );
+        assert!(
+            result.contains("Needle"),
+            "should match mixed case: {result}"
+        );
     }
 
     #[tokio::test]
@@ -629,7 +690,10 @@ mod tests {
             .await
             .unwrap();
         assert!(result.contains("test.txt"), "should find in .txt: {result}");
-        assert!(!result.contains("test.rs"), "should not find in .rs: {result}");
+        assert!(
+            !result.contains("test.rs"),
+            "should not find in .rs: {result}"
+        );
     }
 
     #[tokio::test]
@@ -648,7 +712,10 @@ mod tests {
             .await
             .unwrap();
         assert!(result.contains("test.rs"), "should find in .rs: {result}");
-        assert!(!result.contains("test.txt"), "should not find in .txt with type=rust: {result}");
+        assert!(
+            !result.contains("test.txt"),
+            "should not find in .txt with type=rust: {result}"
+        );
     }
 
     #[test]
@@ -668,7 +735,10 @@ mod tests {
             }))
             .await
             .unwrap();
-        assert!(result.contains("Error"), "should report invalid output_mode: {result}");
+        assert!(
+            result.contains("Error"),
+            "should report invalid output_mode: {result}"
+        );
     }
 
     #[tokio::test]
@@ -686,7 +756,13 @@ mod tests {
             }))
             .await
             .unwrap();
-        assert!(!result.contains("line 0"), "should skip first 5 lines: {result}");
-        assert!(result.contains("line 5"), "should include line 5+: {result}");
+        assert!(
+            !result.contains("line 0"),
+            "should skip first 5 lines: {result}"
+        );
+        assert!(
+            result.contains("line 5"),
+            "should include line 5+: {result}"
+        );
     }
 }

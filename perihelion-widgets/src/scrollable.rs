@@ -213,6 +213,10 @@ mod tests {
     fn scroll_state_scroll_down_clamps_to_max() {
         let mut state = ScrollState::new();
         state.scroll_down(100, 10, 5);
-        assert_eq!(state.offset(), 5, "offset 应不超过 content_height - visible_height");
+        assert_eq!(
+            state.offset(),
+            5,
+            "offset 应不超过 content_height - visible_height"
+        );
     }
 }

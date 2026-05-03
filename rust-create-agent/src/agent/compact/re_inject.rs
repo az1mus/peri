@@ -220,11 +220,7 @@ mod tests {
     fn ai_read_file(tc_id: &str, path: &str) -> BaseMessage {
         BaseMessage::ai_with_tool_calls(
             MessageContent::text("reading file"),
-            vec![ToolCallRequest::new(
-                tc_id,
-                "Read",
-                json!({"path": path}),
-            )],
+            vec![ToolCallRequest::new(tc_id, "Read", json!({"path": path}))],
         )
     }
 

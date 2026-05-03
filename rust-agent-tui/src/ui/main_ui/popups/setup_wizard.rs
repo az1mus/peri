@@ -92,7 +92,8 @@ fn render_step_provider(f: &mut Frame, wizard: &SetupWizardPanel, area: Rect) {
     let pid_active = wizard.step1_focus == Step1Field::ProviderId;
     let (pid_label, pid_val) = focused(pid_active);
     let pid_display = if pid_active {
-        let (before, after) = crate::app::edit_display_parts(&wizard.provider_id, wizard.cur_provider_id);
+        let (before, after) =
+            crate::app::edit_display_parts(&wizard.provider_id, wizard.cur_provider_id);
         format!("{}▏{}", before, after)
     } else {
         wizard.provider_id.clone()
@@ -124,11 +125,7 @@ fn render_step_provider(f: &mut Frame, wizard: &SetupWizardPanel, area: Rect) {
     } else {
         "•".repeat(wizard.api_key.len())
     };
-    let key_display = if key_active {
-        masked
-    } else {
-        masked
-    };
+    let key_display = if key_active { masked } else { masked };
     let line_key = Line::from(vec![
         Span::styled(" API Key  ", key_label),
         Span::styled(format!(" {}", key_display), key_val),

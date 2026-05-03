@@ -1,12 +1,10 @@
 use std::sync::Arc;
 
-use anyhow::Result;
-use agent_client_protocol::{
-    on_receive_dispatch, on_receive_request, Agent,
-};
+use agent_client_protocol::{on_receive_dispatch, on_receive_request, Agent};
 use agent_client_protocol_tokio::Stdio;
-use rust_create_agent::thread::{SqliteThreadStore, ThreadStore};
+use anyhow::Result;
 use rust_agent_middlewares::prelude::{PermissionMode, SharedPermissionMode};
+use rust_create_agent::thread::{SqliteThreadStore, ThreadStore};
 
 use super::dispatch;
 use super::request_handler;
@@ -20,21 +18,15 @@ pub async fn run_acp_mode(_cwd: String, model_override: Option<String>) -> Resul
     let zen_config = Arc::new(config::load().unwrap_or_default());
     let provider = resolve_provider(&zen_config, model_override.as_deref());
 
-    let thread_store: Arc<dyn ThreadStore> = Arc::new(
-        SqliteThreadStore::default_path().unwrap_or_else(|_| {
+    let thread_store: Arc<dyn ThreadStore> =
+        Arc::new(SqliteThreadStore::default_path().unwrap_or_else(|_| {
             SqliteThreadStore::new(std::env::temp_dir().join("peri-acp-threads.db"))
                 .expect("无法创建临时数据库")
-        }),
-    );
+        }));
 
     let permission_mode = SharedPermissionMode::new(PermissionMode::AutoMode);
 
-    let session_mgr = SessionManager::new(
-        thread_store,
-        provider,
-        zen_config,
-        permission_mode,
-    );
+    let session_mgr = SessionManager::new(thread_store, provider, zen_config, permission_mode);
 
     dispatch::init_session_manager(session_mgr);
 

@@ -148,10 +148,7 @@ pub async fn next_event(app: &mut App) -> Result<Option<Action>> {
                                     Ok(cfg) => app.refresh_after_setup(cfg),
                                     Err(e) => {
                                         let msg = MessageViewModel::from_base_message(
-                                            &BaseMessage::system(format!(
-                                                "配置保存失败: {}",
-                                                e
-                                            )),
+                                            &BaseMessage::system(format!("配置保存失败: {}", e)),
                                             &[],
                                         );
                                         let _ =
@@ -600,8 +597,10 @@ pub async fn next_event(app: &mut App) -> Result<Option<Action>> {
             MouseEventKind::ScrollUp => {
                 // MCP 面板区域滚轮滚动面板，否则滚动消息区
                 if let Some(area) = app.core.panel_area {
-                    if mouse.row >= area.y && mouse.row < area.y + area.height
-                        && mouse.column >= area.x && mouse.column < area.x + area.width
+                    if mouse.row >= area.y
+                        && mouse.row < area.y + area.height
+                        && mouse.column >= area.x
+                        && mouse.column < area.x + area.width
                         && app.mcp_panel.is_some()
                     {
                         app.mcp_panel_scroll_up(3);
@@ -612,8 +611,10 @@ pub async fn next_event(app: &mut App) -> Result<Option<Action>> {
             }
             MouseEventKind::ScrollDown => {
                 if let Some(area) = app.core.panel_area {
-                    if mouse.row >= area.y && mouse.row < area.y + area.height
-                        && mouse.column >= area.x && mouse.column < area.x + area.width
+                    if mouse.row >= area.y
+                        && mouse.row < area.y + area.height
+                        && mouse.column >= area.x
+                        && mouse.column < area.x + area.width
                         && app.mcp_panel.is_some()
                     {
                         app.mcp_panel_scroll_down(3);
@@ -819,8 +820,7 @@ fn handle_thread_browser(app: &mut App, input: Input) {
                 }
             }
             Input {
-                key: Key::Char(c),
-                ..
+                key: Key::Char(c), ..
             } => {
                 if let Some(b) = app.core.thread_browser.as_mut() {
                     b.search_query.insert(c);
@@ -844,9 +844,7 @@ fn handle_thread_browser(app: &mut App, input: Input) {
                     b.refresh_filter();
                 }
             }
-            Input {
-                key: Key::Left, ..
-            } => {
+            Input { key: Key::Left, .. } => {
                 if let Some(b) = app.core.thread_browser.as_mut() {
                     b.search_query.cursor_left();
                 }
@@ -1176,9 +1174,7 @@ fn handle_model_panel(app: &mut App, input: Input) {
                 _ => {}
             }
         }
-        Input {
-            key: Key::Left, ..
-        } => {
+        Input { key: Key::Left, .. } => {
             app.core.model_panel.as_mut().unwrap().cycle_effort(true);
         }
         Input {
@@ -1207,7 +1203,9 @@ fn handle_config_panel(app: &mut App, input: Input) {
             Input { key: Key::Down, .. } => {
                 panel.cursor = (panel.cursor + 1) % ConfigPanel::field_count();
             }
-            Input { key: Key::Enter, .. } => {
+            Input {
+                key: Key::Enter, ..
+            } => {
                 panel.enter_edit();
             }
             Input { key: Key::Esc, .. } => {
@@ -1219,7 +1217,9 @@ fn handle_config_panel(app: &mut App, input: Input) {
             Input { key: Key::Esc, .. } => {
                 panel.mode = ConfigPanelMode::Browse;
             }
-            Input { key: Key::Enter, .. } => {
+            Input {
+                key: Key::Enter, ..
+            } => {
                 app.config_panel_apply();
             }
             Input { key: Key::Up, .. } => {
@@ -1287,7 +1287,9 @@ fn handle_status_panel(app: &mut App, input: Input) {
                 panel.tab.prev();
             }
         }
-        Input { key: Key::Right, .. } => {
+        Input {
+            key: Key::Right, ..
+        } => {
             if let Some(panel) = &mut app.status_panel {
                 panel.tab.next();
             }
@@ -1307,7 +1309,9 @@ fn handle_memory_panel(app: &mut App, input: Input) {
         Input { key: Key::Down, .. } => {
             panel.move_cursor_down();
         }
-        Input { key: Key::Enter, .. } => {
+        Input {
+            key: Key::Enter, ..
+        } => {
             // 标记需要打开编辑器 — 需要特别处理
             // 在 handle_memory_panel 返回后由 main loop 处理
             // 这里先 drop borrow
@@ -1462,22 +1466,34 @@ fn handle_oauth_prompt(app: &mut App, input: Input) {
         None => return,
     };
     match input {
-        Input { key: Key::Enter, .. } => {
+        Input {
+            key: Key::Enter, ..
+        } => {
             if prompt.submit() {
                 app.oauth_prompt = None;
             }
         }
-        Input { key: Key::Char('o'), ctrl: true, .. } => {
+        Input {
+            key: Key::Char('o'),
+            ctrl: true,
+            ..
+        } => {
             let url = prompt.authorization_url.clone();
             #[cfg(unix)]
             let _ = std::process::Command::new("open").arg(&url).spawn();
             #[cfg(windows)]
-            let _ = std::process::Command::new("cmd").args(["/C", "start", &url]).spawn();
+            let _ = std::process::Command::new("cmd")
+                .args(["/C", "start", &url])
+                .spawn();
         }
         Input { key: Key::Esc, .. } => {
             app.oauth_prompt = None;
         }
-        Input { key: Key::Char('c'), ctrl: true, .. } => {
+        Input {
+            key: Key::Char('c'),
+            ctrl: true,
+            ..
+        } => {
             // Ctrl+C 在弹窗中不退出，忽略
         }
         _ => {

@@ -108,7 +108,10 @@ mod tests {
 
     #[test]
     fn test_from_openai_unknown() {
-        assert!(matches!(StopReason::from_openai("content_filter"), StopReason::Other(_)));
+        assert!(matches!(
+            StopReason::from_openai("content_filter"),
+            StopReason::Other(_)
+        ));
     }
 
     #[test]
@@ -123,12 +126,18 @@ mod tests {
 
     #[test]
     fn test_from_anthropic_max_tokens() {
-        assert_eq!(StopReason::from_anthropic("max_tokens"), StopReason::MaxTokens);
+        assert_eq!(
+            StopReason::from_anthropic("max_tokens"),
+            StopReason::MaxTokens
+        );
     }
 
     #[test]
     fn test_from_anthropic_unknown() {
-        assert!(matches!(StopReason::from_anthropic("pause_turn"), StopReason::Other(_)));
+        assert!(matches!(
+            StopReason::from_anthropic("pause_turn"),
+            StopReason::Other(_)
+        ));
     }
 
     #[test]

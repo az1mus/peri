@@ -209,7 +209,8 @@ impl MessagePipeline {
                 task_preview,
                 is_background: _,
             } => {
-                let input = serde_json::json!({"subagent_type": &agent_id, "prompt": &task_preview});
+                let input =
+                    serde_json::json!({"subagent_type": &agent_id, "prompt": &task_preview});
                 let tc_id = format!("subagent_{}", agent_id);
                 vec![self.tool_start(&tc_id, "Agent", input)]
             }
@@ -283,7 +284,10 @@ impl MessagePipeline {
 
         // 构建 ToolBlock VM（从 BaseMessage 路径，保持一致）
         if name == "Agent" {
-            let agent_id = input["subagent_type"].as_str().unwrap_or("Agent").to_string();
+            let agent_id = input["subagent_type"]
+                .as_str()
+                .unwrap_or("Agent")
+                .to_string();
             let task_preview: String = input["prompt"]
                 .as_str()
                 .unwrap_or("")
@@ -619,8 +623,7 @@ impl MessagePipeline {
             .unwrap_or(0);
 
         // 从最后一条 Human 消息开始重建
-        let tail_vms =
-            Self::messages_to_view_models(&self.completed[last_human_idx..], &self.cwd);
+        let tail_vms = Self::messages_to_view_models(&self.completed[last_human_idx..], &self.cwd);
 
         (round_start_vm_idx, tail_vms)
     }
@@ -793,8 +796,7 @@ mod tests {
     #[test]
     fn test_pipeline_tool_end_no_duplicate() {
         let mut pipeline = MessagePipeline::new("/tmp".to_string());
-        let _action =
-            pipeline.tool_start("tc1", "Read", json!({"file_path": "/tmp/test.txt"}));
+        let _action = pipeline.tool_start("tc1", "Read", json!({"file_path": "/tmp/test.txt"}));
         let _action = pipeline.tool_end("tc1", "Read", "content here", false);
 
         // tool_end 不 push 到 completed
@@ -987,10 +989,8 @@ mod tests {
         let (prefix_len, tail_vms) = pipeline.reconcile_tail(0);
         assert_eq!(prefix_len, 0);
         // tail_vms 应包含从最后一条 Human 开始重建的所有 VMs
-        let full_vms = MessagePipeline::messages_to_view_models(
-            &pipeline.completed[2..],
-            &pipeline.cwd,
-        );
+        let full_vms =
+            MessagePipeline::messages_to_view_models(&pipeline.completed[2..], &pipeline.cwd);
         assert_eq!(format!("{:?}", tail_vms), format!("{:?}", full_vms));
     }
 
@@ -1006,10 +1006,8 @@ mod tests {
         ];
         let (prefix_len, tail_vms) = pipeline.reconcile_tail(2);
         assert_eq!(prefix_len, 2);
-        let full_vms = MessagePipeline::messages_to_view_models(
-            &pipeline.completed[2..],
-            &pipeline.cwd,
-        );
+        let full_vms =
+            MessagePipeline::messages_to_view_models(&pipeline.completed[2..], &pipeline.cwd);
         assert_eq!(format!("{:?}", tail_vms), format!("{:?}", full_vms));
     }
 
@@ -1048,8 +1046,10 @@ mod tests {
             .iter()
             .rposition(|msg| matches!(msg, BaseMessage::Human { .. }))
             .unwrap_or(0);
-        let expected_tail =
-            MessagePipeline::messages_to_view_models(&pipeline.completed_messages()[last_human_idx..], &pipeline.cwd);
+        let expected_tail = MessagePipeline::messages_to_view_models(
+            &pipeline.completed_messages()[last_human_idx..],
+            &pipeline.cwd,
+        );
 
         assert_eq!(prefix_len, 2);
         assert_eq!(format!("{:?}", tail_vms), format!("{:?}", expected_tail));

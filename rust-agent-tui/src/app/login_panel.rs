@@ -237,7 +237,9 @@ impl LoginPanel {
             LoginEditField::SonnetModel => {
                 Some((&mut self.buf_sonnet_model, &mut self.cur_sonnet_model))
             }
-            LoginEditField::HaikuModel => Some((&mut self.buf_haiku_model, &mut self.cur_haiku_model)),
+            LoginEditField::HaikuModel => {
+                Some((&mut self.buf_haiku_model, &mut self.cur_haiku_model))
+            }
         }
     }
 
@@ -518,12 +520,39 @@ mod tests {
         let mut panel = LoginPanel::from_config(&ZenConfig::default());
         panel.edit_field = LoginEditField::OpusModel;
         let (buf, cur) = panel.active_field().unwrap();
-        handle_edit_key(buf, cur, Input { key: Key::Char('x'), ctrl: false, alt: false, shift: false });
+        handle_edit_key(
+            buf,
+            cur,
+            Input {
+                key: Key::Char('x'),
+                ctrl: false,
+                alt: false,
+                shift: false,
+            },
+        );
         let (buf, cur) = panel.active_field().unwrap();
-        handle_edit_key(buf, cur, Input { key: Key::Char('x'), ctrl: false, alt: false, shift: false });
+        handle_edit_key(
+            buf,
+            cur,
+            Input {
+                key: Key::Char('x'),
+                ctrl: false,
+                alt: false,
+                shift: false,
+            },
+        );
         assert_eq!(panel.buf_opus_model, "xx");
         let (buf, cur) = panel.active_field().unwrap();
-        handle_edit_key(buf, cur, Input { key: Key::Backspace, ctrl: false, alt: false, shift: false });
+        handle_edit_key(
+            buf,
+            cur,
+            Input {
+                key: Key::Backspace,
+                ctrl: false,
+                alt: false,
+                shift: false,
+            },
+        );
         assert_eq!(panel.buf_opus_model, "x");
     }
 

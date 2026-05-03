@@ -20,13 +20,13 @@ mod core;
 mod cron_ops;
 mod cron_state;
 mod hint_ops;
-mod mcp_panel;
 mod history_ops;
 mod hitl_ops;
 mod hitl_prompt;
-mod oauth_prompt;
 mod langfuse_state;
+mod mcp_panel;
 pub mod message_pipeline;
+mod oauth_prompt;
 mod panel_ops;
 mod thread_ops;
 
@@ -72,8 +72,8 @@ pub use agent_comm::AgentComm;
 pub use agent_comm::RetryStatus;
 pub use core::AppCore;
 pub use cron_state::{CronPanel, CronState};
-pub use mcp_panel::{DetailAction, McpPanel, McpPanelView};
 pub use langfuse_state::LangfuseState;
+pub use mcp_panel::{DetailAction, McpPanel, McpPanelView};
 
 // ─── App ──────────────────────────────────────────────────────────────────────
 
@@ -100,7 +100,8 @@ pub struct App {
     /// MCP 连接池：首次 agent 启动时惰性初始化，App 退出时 shutdown
     pub mcp_pool: Option<Arc<rust_agent_middlewares::mcp::McpClientPool>>,
     /// MCP 后台初始化状态接收端
-    pub mcp_init_rx: Option<tokio::sync::watch::Receiver<rust_agent_middlewares::mcp::McpInitStatus>>,
+    pub mcp_init_rx:
+        Option<tokio::sync::watch::Receiver<rust_agent_middlewares::mcp::McpInitStatus>>,
     /// MCP 管理面板状态
     /// OAuth 授权弹窗状态（None 表示无弹窗）
     pub oauth_prompt: Option<OAuthPrompt>,
@@ -252,12 +253,21 @@ impl App {
                 // 无需额外事件转发。
             });
         tokio::spawn(async move {
-            McpClientPool::run_initialize(pool, std::path::Path::new(&cwd), init_tx, Some(oauth_cb)).await;
+            McpClientPool::run_initialize(
+                pool,
+                std::path::Path::new(&cwd),
+                init_tx,
+                Some(oauth_cb),
+            )
+            .await;
         });
     }
 
     /// 保存配置：优先写入 override 路径（测试用），否则写入全局路径
-    pub fn save_config(cfg: &ZenConfig, override_path: Option<&std::path::Path>) -> anyhow::Result<()> {
+    pub fn save_config(
+        cfg: &ZenConfig,
+        override_path: Option<&std::path::Path>,
+    ) -> anyhow::Result<()> {
         match override_path {
             Some(path) => crate::config::store::save_to(cfg, path),
             None => crate::config::save(cfg),
@@ -448,9 +458,7 @@ pub fn handle_edit_key(buf: &mut String, cursor: &mut usize, input: tui_textarea
             }
             true
         }
-        tui_textarea::Input {
-            key: Key::Home, ..
-        }
+        tui_textarea::Input { key: Key::Home, .. }
         | tui_textarea::Input {
             key: Key::Char('a'),
             ctrl: true,
@@ -470,9 +478,7 @@ pub fn handle_edit_key(buf: &mut String, cursor: &mut usize, input: tui_textarea
             }
             true
         }
-        tui_textarea::Input {
-            key: Key::End, ..
-        }
+        tui_textarea::Input { key: Key::End, .. }
         | tui_textarea::Input {
             key: Key::Char('e'),
             ctrl: true,

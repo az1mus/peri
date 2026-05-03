@@ -1,7 +1,7 @@
 use agent_client_protocol::schema::{
     Content, ContentBlock, ContentChunk, Plan, PlanEntry, PlanEntryPriority, PlanEntryStatus,
-    SessionUpdate, TextContent, ToolCall, ToolCallContent, ToolCallStatus, ToolKind, ToolCallUpdate,
-    ToolCallUpdateFields,
+    SessionUpdate, TextContent, ToolCall, ToolCallContent, ToolCallStatus, ToolCallUpdate,
+    ToolCallUpdateFields, ToolKind,
 };
 use rust_agent_middlewares::tools::TodoStatus;
 use rust_create_agent::agent::events::AgentEvent as ExecutorEvent;
@@ -58,15 +58,17 @@ pub fn map_event_to_updates(event: &AgentEvent) -> Vec<SessionUpdate> {
         AgentEvent::TodoUpdate(todos) => {
             let entries: Vec<PlanEntry> = todos
                 .iter()
-                .map(|t| PlanEntry::new(
-                    t.content.clone(),
-                    PlanEntryPriority::Medium,
-                    match t.status {
-                        TodoStatus::Completed => PlanEntryStatus::Completed,
-                        TodoStatus::InProgress => PlanEntryStatus::InProgress,
-                        TodoStatus::Pending => PlanEntryStatus::Pending,
-                    },
-                ))
+                .map(|t| {
+                    PlanEntry::new(
+                        t.content.clone(),
+                        PlanEntryPriority::Medium,
+                        match t.status {
+                            TodoStatus::Completed => PlanEntryStatus::Completed,
+                            TodoStatus::InProgress => PlanEntryStatus::InProgress,
+                            TodoStatus::Pending => PlanEntryStatus::Pending,
+                        },
+                    )
+                })
                 .collect();
             vec![SessionUpdate::Plan(Plan::new(entries))]
         }

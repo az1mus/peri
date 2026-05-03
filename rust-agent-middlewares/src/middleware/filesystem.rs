@@ -4,8 +4,7 @@ use rust_create_agent::middleware::r#trait::Middleware;
 use rust_create_agent::tools::BaseTool;
 
 use crate::tools::{
-    EditFileTool, FolderOperationsTool, GlobFilesTool, GrepTool, ReadFileTool,
-    WriteFileTool,
+    EditFileTool, FolderOperationsTool, GlobFilesTool, GrepTool, ReadFileTool, WriteFileTool,
 };
 
 /// FilesystemMiddleware - 与 TypeScript FilesystemMiddleware 对齐
@@ -28,14 +27,7 @@ impl FilesystemMiddleware {
     }
 
     pub fn tool_names() -> Vec<&'static str> {
-        vec![
-            "Read",
-            "Write",
-            "Edit",
-            "Glob",
-            "Grep",
-            "folder_operations",
-        ]
+        vec!["Read", "Write", "Edit", "Glob", "Grep", "folder_operations"]
     }
 }
 

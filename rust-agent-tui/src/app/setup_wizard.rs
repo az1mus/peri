@@ -315,7 +315,9 @@ fn handle_step_provider(
         _ => {
             if wizard.step1_focus != Step1Field::ProviderType {
                 let (buf, cursor) = match wizard.step1_focus {
-                    Step1Field::ProviderId => (&mut wizard.provider_id, &mut wizard.cur_provider_id),
+                    Step1Field::ProviderId => {
+                        (&mut wizard.provider_id, &mut wizard.cur_provider_id)
+                    }
                     Step1Field::BaseUrl => (&mut wizard.base_url, &mut wizard.cur_base_url),
                     Step1Field::ApiKey => (&mut wizard.api_key, &mut wizard.cur_api_key),
                     _ => return None,

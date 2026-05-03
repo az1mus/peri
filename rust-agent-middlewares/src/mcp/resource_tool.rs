@@ -13,7 +13,10 @@ pub enum ResourceError {
     #[error("MCP 服务器 \"{server}\" 未找到")]
     ServerNotFound { server: String },
     #[error("MCP 服务器 \"{server}\" 未连接 (状态: {status:?})")]
-    NotConnected { server: String, status: ClientStatus },
+    NotConnected {
+        server: String,
+        status: ClientStatus,
+    },
     #[error("MCP 资源读取失败: {server}: {reason}")]
     ReadFailed { server: String, reason: String },
     #[error("MCP 资源读取参数错误: {0}")]
@@ -105,10 +108,13 @@ impl BaseTool for McpResourceTool {
             }));
         }
 
-        let peer = handle.peer.as_ref().ok_or_else(|| ResourceError::NotConnected {
-            server: server_name.to_string(),
-            status: ClientStatus::Disconnected,
-        })?;
+        let peer = handle
+            .peer
+            .as_ref()
+            .ok_or_else(|| ResourceError::NotConnected {
+                server: server_name.to_string(),
+                status: ClientStatus::Disconnected,
+            })?;
 
         // 4. 调用 rmcp read_resource
         let request = ReadResourceRequestParams::new(uri);
@@ -172,7 +178,11 @@ mod tests {
     fn test_parameters_schema() {
         let tool = McpResourceTool::new(empty_pool());
         let params = tool.parameters();
-        assert!(params.get("properties").unwrap().get("server_name").is_some());
+        assert!(params
+            .get("properties")
+            .unwrap()
+            .get("server_name")
+            .is_some());
         assert!(params.get("properties").unwrap().get("uri").is_some());
         let required = params.get("required").unwrap().as_array().unwrap();
         assert!(required.iter().any(|r| r.as_str() == Some("server_name")));

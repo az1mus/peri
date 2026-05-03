@@ -39,58 +39,110 @@ impl FileCredentialStore {
             .unwrap_or_else(|| PathBuf::from("."))
             .join(".zen-code")
             .join("oauth_tokens.json");
-        Self { path, mutex: Mutex::new(()) }
+        Self {
+            path,
+            mutex: Mutex::new(()),
+        }
     }
 
     pub fn with_path(path: PathBuf) -> Self {
-        Self { path, mutex: Mutex::new(()) }
+        Self {
+            path,
+            mutex: Mutex::new(()),
+        }
     }
 
-    pub fn path(&self) -> &Path { &self.path }
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
 
     fn ensure_file(&self) -> Result<(), AuthStoreError> {
         if !self.path.exists() {
             if let Some(parent) = self.path.parent() {
-                std::fs::create_dir_all(parent).map_err(|e| AuthStoreError::WriteFailed { path: parent.to_path_buf(), detail: e.to_string() })?;
+                std::fs::create_dir_all(parent).map_err(|e| AuthStoreError::WriteFailed {
+                    path: parent.to_path_buf(),
+                    detail: e.to_string(),
+                })?;
             }
-            let initial_content = serde_json::to_string_pretty(&OAuthTokenFile { version: TOKEN_FILE_VERSION, tokens: HashMap::new() })
-                .map_err(|e| AuthStoreError::WriteFailed { path: self.path.clone(), detail: e.to_string() })?;
-            std::fs::write(&self.path, initial_content).map_err(|e| AuthStoreError::WriteFailed { path: self.path.clone(), detail: e.to_string() })?;
+            let initial_content = serde_json::to_string_pretty(&OAuthTokenFile {
+                version: TOKEN_FILE_VERSION,
+                tokens: HashMap::new(),
+            })
+            .map_err(|e| AuthStoreError::WriteFailed {
+                path: self.path.clone(),
+                detail: e.to_string(),
+            })?;
+            std::fs::write(&self.path, initial_content).map_err(|e| {
+                AuthStoreError::WriteFailed {
+                    path: self.path.clone(),
+                    detail: e.to_string(),
+                }
+            })?;
         }
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
-            std::fs::set_permissions(&self.path, std::fs::Permissions::from_mode(0o600))
-                .map_err(|e| AuthStoreError::WriteFailed { path: self.path.clone(), detail: e.to_string() })?;
+            std::fs::set_permissions(&self.path, std::fs::Permissions::from_mode(0o600)).map_err(
+                |e| AuthStoreError::WriteFailed {
+                    path: self.path.clone(),
+                    detail: e.to_string(),
+                },
+            )?;
         }
         Ok(())
     }
 
     fn read_file(&self) -> Result<OAuthTokenFile, AuthStoreError> {
         self.ensure_file()?;
-        let content = std::fs::read_to_string(&self.path).map_err(|e| AuthStoreError::ReadFailed { path: self.path.clone(), detail: e.to_string() })?;
-        let file: OAuthTokenFile = serde_json::from_str(&content).map_err(|e| AuthStoreError::InvalidFormat { reason: format!("JSON 解析失败: {}", e) })?;
+        let content =
+            std::fs::read_to_string(&self.path).map_err(|e| AuthStoreError::ReadFailed {
+                path: self.path.clone(),
+                detail: e.to_string(),
+            })?;
+        let file: OAuthTokenFile =
+            serde_json::from_str(&content).map_err(|e| AuthStoreError::InvalidFormat {
+                reason: format!("JSON 解析失败: {}", e),
+            })?;
         if file.version != TOKEN_FILE_VERSION {
-            return Err(AuthStoreError::InvalidFormat { reason: format!("不支持的版本号: {}，期望: {}", file.version, TOKEN_FILE_VERSION) });
+            return Err(AuthStoreError::InvalidFormat {
+                reason: format!(
+                    "不支持的版本号: {}，期望: {}",
+                    file.version, TOKEN_FILE_VERSION
+                ),
+            });
         }
         Ok(file)
     }
 
     fn write_file(&self, file: &OAuthTokenFile) -> Result<(), AuthStoreError> {
         self.ensure_file()?;
-        let content = serde_json::to_string_pretty(file).map_err(|e| AuthStoreError::WriteFailed { path: self.path.clone(), detail: e.to_string() })?;
-        std::fs::write(&self.path, content).map_err(|e| AuthStoreError::WriteFailed { path: self.path.clone(), detail: e.to_string() })?;
+        let content =
+            serde_json::to_string_pretty(file).map_err(|e| AuthStoreError::WriteFailed {
+                path: self.path.clone(),
+                detail: e.to_string(),
+            })?;
+        std::fs::write(&self.path, content).map_err(|e| AuthStoreError::WriteFailed {
+            path: self.path.clone(),
+            detail: e.to_string(),
+        })?;
         debug!("Token 文件已写入: {}", self.path.display());
         Ok(())
     }
 
-    pub async fn load_server(&self, server_name: &str) -> Result<Option<StoredCredentials>, AuthStoreError> {
+    pub async fn load_server(
+        &self,
+        server_name: &str,
+    ) -> Result<Option<StoredCredentials>, AuthStoreError> {
         let _lock = self.mutex.lock().await;
         let file = self.read_file()?;
         Ok(file.tokens.get(server_name).cloned())
     }
 
-    pub async fn save_server(&self, server_name: &str, credentials: StoredCredentials) -> Result<(), AuthStoreError> {
+    pub async fn save_server(
+        &self,
+        server_name: &str,
+        credentials: StoredCredentials,
+    ) -> Result<(), AuthStoreError> {
         let _lock = self.mutex.lock().await;
         let mut file = self.read_file()?;
         file.tokens.insert(server_name.to_string(), credentials);
@@ -106,7 +158,10 @@ impl FileCredentialStore {
 
     pub async fn clear_all(&self) -> Result<(), AuthStoreError> {
         let _lock = self.mutex.lock().await;
-        self.write_file(&OAuthTokenFile { version: TOKEN_FILE_VERSION, tokens: HashMap::new() })
+        self.write_file(&OAuthTokenFile {
+            version: TOKEN_FILE_VERSION,
+            tokens: HashMap::new(),
+        })
     }
 
     pub async fn list_servers(&self) -> Result<Vec<String>, AuthStoreError> {
@@ -129,17 +184,23 @@ impl PerServerCredentialStore {
 #[async_trait]
 impl CredentialStore for PerServerCredentialStore {
     async fn load(&self) -> Result<Option<StoredCredentials>, AuthError> {
-        self.inner.load_server(&self.server_name).await
+        self.inner
+            .load_server(&self.server_name)
+            .await
             .map_err(|e| AuthError::InternalError(e.to_string()))
     }
 
     async fn save(&self, credentials: StoredCredentials) -> Result<(), AuthError> {
-        self.inner.save_server(&self.server_name, credentials).await
+        self.inner
+            .save_server(&self.server_name, credentials)
+            .await
             .map_err(|e| AuthError::InternalError(e.to_string()))
     }
 
     async fn clear(&self) -> Result<(), AuthError> {
-        self.inner.clear_server(&self.server_name).await
+        self.inner
+            .clear_server(&self.server_name)
+            .await
             .map_err(|e| AuthError::InternalError(e.to_string()))
     }
 }
@@ -185,7 +246,13 @@ mod tests {
         let path = tmp.path().to_path_buf();
         drop(tmp);
         let store1 = Arc::new(FileCredentialStore::with_path(path.clone()));
-        store1.save_server("srv1", StoredCredentials::new("client1".into(), None, vec![], None)).await.unwrap();
+        store1
+            .save_server(
+                "srv1",
+                StoredCredentials::new("client1".into(), None, vec![], None),
+            )
+            .await
+            .unwrap();
         let store2 = Arc::new(FileCredentialStore::with_path(path));
         assert!(store2.load_server("srv1").await.unwrap().is_some());
     }
@@ -193,7 +260,13 @@ mod tests {
     #[tokio::test]
     async fn test_clear_server() {
         let (store, _tmp) = temp_store();
-        store.save_server("srv", StoredCredentials::new("c".into(), None, vec![], None)).await.unwrap();
+        store
+            .save_server(
+                "srv",
+                StoredCredentials::new("c".into(), None, vec![], None),
+            )
+            .await
+            .unwrap();
         store.clear_server("srv").await.unwrap();
         assert!(store.load_server("srv").await.unwrap().is_none());
     }
@@ -201,16 +274,37 @@ mod tests {
     #[tokio::test]
     async fn test_overwrite_server_token() {
         let (store, _tmp) = temp_store();
-        store.save_server("srv", StoredCredentials::new("c1".into(), None, vec![], None)).await.unwrap();
-        store.save_server("srv", StoredCredentials::new("c2".into(), None, vec![], None)).await.unwrap();
-        assert_eq!(store.load_server("srv").await.unwrap().unwrap().client_id, "c2");
+        store
+            .save_server(
+                "srv",
+                StoredCredentials::new("c1".into(), None, vec![], None),
+            )
+            .await
+            .unwrap();
+        store
+            .save_server(
+                "srv",
+                StoredCredentials::new("c2".into(), None, vec![], None),
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            store.load_server("srv").await.unwrap().unwrap().client_id,
+            "c2"
+        );
     }
 
     #[tokio::test]
     async fn test_clear_all() {
         let (store, _tmp) = temp_store();
-        store.save_server("s1", StoredCredentials::new("c".into(), None, vec![], None)).await.unwrap();
-        store.save_server("s2", StoredCredentials::new("c".into(), None, vec![], None)).await.unwrap();
+        store
+            .save_server("s1", StoredCredentials::new("c".into(), None, vec![], None))
+            .await
+            .unwrap();
+        store
+            .save_server("s2", StoredCredentials::new("c".into(), None, vec![], None))
+            .await
+            .unwrap();
         store.clear_all().await.unwrap();
         assert!(store.load_server("s1").await.unwrap().is_none());
     }
@@ -218,8 +312,14 @@ mod tests {
     #[tokio::test]
     async fn test_list_servers() {
         let (store, _tmp) = temp_store();
-        store.save_server("s1", StoredCredentials::new("c".into(), None, vec![], None)).await.unwrap();
-        store.save_server("s2", StoredCredentials::new("c".into(), None, vec![], None)).await.unwrap();
+        store
+            .save_server("s1", StoredCredentials::new("c".into(), None, vec![], None))
+            .await
+            .unwrap();
+        store
+            .save_server("s2", StoredCredentials::new("c".into(), None, vec![], None))
+            .await
+            .unwrap();
         let servers = store.list_servers().await.unwrap();
         assert_eq!(servers.len(), 2);
     }
@@ -231,10 +331,17 @@ mod tests {
         for i in 0..10 {
             let s = store.clone();
             handles.push(tokio::spawn(async move {
-                s.save_server(&format!("srv{}", i), StoredCredentials::new(format!("c{}", i), None, vec![], None)).await.unwrap();
+                s.save_server(
+                    &format!("srv{}", i),
+                    StoredCredentials::new(format!("c{}", i), None, vec![], None),
+                )
+                .await
+                .unwrap();
             }));
         }
-        for h in handles { h.await.unwrap(); }
+        for h in handles {
+            h.await.unwrap();
+        }
         assert_eq!(store.list_servers().await.unwrap().len(), 10);
     }
 }

@@ -87,17 +87,23 @@ pub(crate) fn render_login_panel(f: &mut Frame, app: &App, area: Rect) {
                     Span::styled("       ", Style::default().fg(theme::MUTED)),
                     Span::styled(
                         "Opus ",
-                        Style::default().fg(theme::MUTED).add_modifier(Modifier::BOLD),
+                        Style::default()
+                            .fg(theme::MUTED)
+                            .add_modifier(Modifier::BOLD),
                     ),
                     Span::styled(fmt_model(&m.opus), Style::default().fg(theme::MUTED)),
                     Span::styled(
                         "  Sonnet ",
-                        Style::default().fg(theme::MUTED).add_modifier(Modifier::BOLD),
+                        Style::default()
+                            .fg(theme::MUTED)
+                            .add_modifier(Modifier::BOLD),
                     ),
                     Span::styled(fmt_model(&m.sonnet), Style::default().fg(theme::MUTED)),
                     Span::styled(
                         "  Haiku ",
-                        Style::default().fg(theme::MUTED).add_modifier(Modifier::BOLD),
+                        Style::default()
+                            .fg(theme::MUTED)
+                            .add_modifier(Modifier::BOLD),
                     ),
                     Span::styled(fmt_model(&m.haiku), Style::default().fg(theme::MUTED)),
                 ]));
@@ -115,10 +121,25 @@ pub(crate) fn render_login_panel(f: &mut Frame, app: &App, area: Rect) {
         LoginPanelMode::Edit | LoginPanelMode::New => {
             let mut lines: Vec<Line> = vec![Line::from("")];
             let fields: &[(LoginEditField, &str, &str, usize)] = &[
-                (LoginEditField::Name, "Name        ", &panel.buf_name, panel.cur_name),
+                (
+                    LoginEditField::Name,
+                    "Name        ",
+                    &panel.buf_name,
+                    panel.cur_name,
+                ),
                 (LoginEditField::Type, "Type        ", &panel.buf_type, 0),
-                (LoginEditField::BaseUrl, "Base URL    ", &panel.buf_base_url, panel.cur_base_url),
-                (LoginEditField::ApiKey, "API Key     ", &panel.buf_api_key, panel.cur_api_key),
+                (
+                    LoginEditField::BaseUrl,
+                    "Base URL    ",
+                    &panel.buf_base_url,
+                    panel.cur_base_url,
+                ),
+                (
+                    LoginEditField::ApiKey,
+                    "API Key     ",
+                    &panel.buf_api_key,
+                    panel.cur_api_key,
+                ),
                 (
                     LoginEditField::OpusModel,
                     "Opus Model  ",

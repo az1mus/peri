@@ -34,7 +34,8 @@ where
     /// 上下文窗口预算配置（用于监控 token 用量和触发 compact 建议）
     context_budget: Option<ContextBudget>,
     /// 后台任务通知接收端：后台 agent 完成时推送结果
-    notification_rx: Option<tokio::sync::Mutex<tokio::sync::mpsc::UnboundedReceiver<BackgroundTaskResult>>>,
+    notification_rx:
+        Option<tokio::sync::Mutex<tokio::sync::mpsc::UnboundedReceiver<BackgroundTaskResult>>>,
 }
 
 impl<L: ReactLLM, S: State> ReActAgent<L, S> {
@@ -525,9 +526,7 @@ impl<L: ReactLLM, S: State> ReActAgent<L, S> {
                         } else {
                             format!(
                                 "[后台任务 {} 执行失败] Agent: {}\n错误:\n{}",
-                                result.task_id,
-                                result.agent_name,
-                                result.output,
+                                result.task_id, result.agent_name, result.output,
                             )
                         };
                         let msg = BaseMessage::human(notification);
@@ -586,9 +585,7 @@ impl<L: ReactLLM, S: State> ReActAgent<L, S> {
                         } else {
                             format!(
                                 "[后台任务 {} 执行失败] Agent: {}\n错误:\n{}",
-                                result.task_id,
-                                result.agent_name,
-                                result.output,
+                                result.task_id, result.agent_name, result.output,
                             )
                         };
                         let msg = BaseMessage::human(notification);

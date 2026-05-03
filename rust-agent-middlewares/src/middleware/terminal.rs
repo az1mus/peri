@@ -145,7 +145,10 @@ impl BaseTool for BashTool {
             .as_str()
             .ok_or("Missing command parameter")?;
 
-        let timeout_ms = input["timeout"].as_u64().unwrap_or(120_000).clamp(1, 600_000);
+        let timeout_ms = input["timeout"]
+            .as_u64()
+            .unwrap_or(120_000)
+            .clamp(1, 600_000);
         let _description = input["description"].as_str();
         let _run_in_background = input["run_in_background"].as_bool().unwrap_or(false);
 
@@ -422,7 +425,10 @@ mod tests {
     async fn test_bash_default_timeout_is_120_seconds() {
         let tool = BashTool::new(std::env::temp_dir().to_str().unwrap());
         // 不传 timeout → 默认 120000ms = 120s
-        let result = tool.invoke(serde_json::json!({"command": "echo ok"})).await.unwrap();
+        let result = tool
+            .invoke(serde_json::json!({"command": "echo ok"}))
+            .await
+            .unwrap();
         assert!(result.contains("ok"));
     }
 
@@ -430,11 +436,14 @@ mod tests {
     async fn test_bash_description_and_run_in_background_parsed() {
         let tool = BashTool::new(std::env::temp_dir().to_str().unwrap());
         // description 和 run_in_background 不影响执行
-        let result = tool.invoke(serde_json::json!({
-            "command": "echo ok",
-            "description": "test description",
-            "run_in_background": true
-        })).await.unwrap();
+        let result = tool
+            .invoke(serde_json::json!({
+                "command": "echo ok",
+                "description": "test description",
+                "run_in_background": true
+            }))
+            .await
+            .unwrap();
         assert!(result.contains("ok"));
     }
 

@@ -344,7 +344,10 @@ impl MessageViewModel {
                 let raw_content = content.text_content();
                 // Agent 工具恢复为 SubAgentGroup（完成状态，折叠）
                 if tool_name == "Agent" {
-                    let agent_id = input["subagent_type"].as_str().unwrap_or("Agent").to_string();
+                    let agent_id = input["subagent_type"]
+                        .as_str()
+                        .unwrap_or("Agent")
+                        .to_string();
                     let task_preview = input["prompt"]
                         .as_str()
                         .unwrap_or("")
@@ -540,8 +543,8 @@ pub fn tool_color(name: &str) -> Color {
         // 读取/搜索 — 哑光绿
         "Read" | "Glob" | "Grep" => theme::SAGE,
         // 写入/编辑 — 暖米灰
-        "Write" | "Edit" | "folder_operations" | "delete_file" | "delete_folder"
-        | "rm" | "rm_rf" => theme::WARNING,
+        "Write" | "Edit" | "folder_operations" | "delete_file" | "delete_folder" | "rm"
+        | "rm_rf" => theme::WARNING,
         // 执行 — Bash 粉红边框色
         "Bash" => theme::BASH_BORDER,
         // 代理/交互 — 紫色
@@ -677,9 +680,18 @@ mod tests {
 
     #[test]
     fn test_tool_category_new_names() {
-        assert_eq!(ToolCategory::from_tool_name("Read"), Some(ToolCategory::Read));
-        assert_eq!(ToolCategory::from_tool_name("Grep"), Some(ToolCategory::Search));
-        assert_eq!(ToolCategory::from_tool_name("Glob"), Some(ToolCategory::Glob));
+        assert_eq!(
+            ToolCategory::from_tool_name("Read"),
+            Some(ToolCategory::Read)
+        );
+        assert_eq!(
+            ToolCategory::from_tool_name("Grep"),
+            Some(ToolCategory::Search)
+        );
+        assert_eq!(
+            ToolCategory::from_tool_name("Glob"),
+            Some(ToolCategory::Glob)
+        );
         assert_eq!(ToolCategory::from_tool_name("Write"), None);
         assert_eq!(ToolCategory::from_tool_name("Bash"), None);
         assert_eq!(ToolCategory::from_tool_name("Agent"), None);

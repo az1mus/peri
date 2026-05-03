@@ -1,10 +1,10 @@
+use agent_client_protocol::role::acp::Client;
 use agent_client_protocol::schema::{
-    Content, ContentBlock, PermissionOption, PermissionOptionKind, RequestPermissionRequest,
-    RequestPermissionOutcome, RequestPermissionResponse, SelectedPermissionOutcome, SessionId,
+    Content, ContentBlock, PermissionOption, PermissionOptionKind, RequestPermissionOutcome,
+    RequestPermissionRequest, RequestPermissionResponse, SelectedPermissionOutcome, SessionId,
     TextContent, ToolCallContent, ToolCallStatus, ToolCallUpdate, ToolCallUpdateFields,
 };
 use agent_client_protocol::ConnectionTo;
-use agent_client_protocol::role::acp::Client;
 use async_trait::async_trait;
 use rust_create_agent::interaction::{
     ApprovalDecision, InteractionContext, InteractionResponse, UserInteractionBroker,
@@ -28,10 +28,7 @@ impl AcpInteractionBroker {
 
 #[async_trait]
 impl UserInteractionBroker for AcpInteractionBroker {
-    async fn request(
-        &self,
-        context: InteractionContext,
-    ) -> InteractionResponse {
+    async fn request(&self, context: InteractionContext) -> InteractionResponse {
         let (response_tx, response_rx) = oneshot::channel();
 
         if self
@@ -48,11 +45,13 @@ impl UserInteractionBroker for AcpInteractionBroker {
             }]);
         }
 
-        response_rx.await.unwrap_or(InteractionResponse::Decisions(
-            vec![ApprovalDecision::Reject {
-                reason: "Permission timeout".into(),
-            }],
-        ))
+        response_rx
+            .await
+            .unwrap_or(InteractionResponse::Decisions(vec![
+                ApprovalDecision::Reject {
+                    reason: "Permission timeout".into(),
+                },
+            ]))
     }
 }
 
@@ -104,11 +103,8 @@ async fn handle_pending_permission(
                     ),
                 ];
 
-                let request = RequestPermissionRequest::new(
-                    session_id.clone(),
-                    tool_update,
-                    options,
-                );
+                let request =
+                    RequestPermissionRequest::new(session_id.clone(), tool_update, options);
 
                 // 发送请求并等待 Client 响应（block_task 仅在 spawned task 中安全）
                 let decision = match conn.send_request(request).block_task().await {

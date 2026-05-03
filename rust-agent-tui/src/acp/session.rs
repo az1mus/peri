@@ -2,9 +2,9 @@ use std::sync::Arc;
 
 use chrono::Utc;
 use dashmap::DashMap;
+use rust_agent_middlewares::prelude::{PermissionMode, SharedPermissionMode};
 use rust_create_agent::messages::BaseMessage;
 use rust_create_agent::thread::{ThreadId, ThreadMeta, ThreadStore};
-use rust_agent_middlewares::prelude::{PermissionMode, SharedPermissionMode};
 use tokio_util::sync::CancellationToken;
 
 use crate::app::agent::LlmProvider;
@@ -57,11 +57,7 @@ impl SessionManager {
     }
 
     /// 使用指定 session_id 创建会话（用于 session/load 和 session/resume）
-    pub async fn new_session_with_id(
-        &self,
-        session_id: &str,
-        cwd: &str,
-    ) -> anyhow::Result<()> {
+    pub async fn new_session_with_id(&self, session_id: &str, cwd: &str) -> anyhow::Result<()> {
         if self.inner.sessions.contains_key(session_id) {
             return Ok(());
         }
@@ -135,10 +131,17 @@ impl SessionManager {
     }
 
     pub async fn list_sessions(&self) -> anyhow::Result<Vec<ThreadMeta>> {
-        self.inner.thread_store.list_threads().await.map_err(Into::into)
+        self.inner
+            .thread_store
+            .list_threads()
+            .await
+            .map_err(Into::into)
     }
 
-    pub fn get_session(&self, session_id: &str) -> Option<dashmap::mapref::one::Ref<'_, String, AcpSession>> {
+    pub fn get_session(
+        &self,
+        session_id: &str,
+    ) -> Option<dashmap::mapref::one::Ref<'_, String, AcpSession>> {
         self.inner.sessions.get(session_id)
     }
 

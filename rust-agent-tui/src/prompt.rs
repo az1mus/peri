@@ -67,9 +67,7 @@ fn format_available_agents(cwd: &str) -> String {
     }
     agents
         .iter()
-        .map(|(agent_id, _name, description)| {
-            format!("- {}: {}", agent_id, description)
-        })
+        .map(|(agent_id, _name, description)| format!("- {}: {}", agent_id, description))
         .collect::<Vec<_>>()
         .join("\n")
 }

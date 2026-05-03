@@ -1,7 +1,7 @@
-use agent_client_protocol::{Client, ConnectionTo, Responder};
 use agent_client_protocol::schema::{
     AgentCapabilities, Implementation, InitializeRequest, InitializeResponse,
 };
+use agent_client_protocol::{Client, ConnectionTo, Responder};
 
 pub async fn handle_initialize(
     req: InitializeRequest,
@@ -15,8 +15,8 @@ pub async fn handle_initialize(
     caps.session_capabilities.list = Some(Default::default());
     caps.session_capabilities.resume = Some(Default::default());
 
-    let agent_info = Implementation::new("perihelion", env!("CARGO_PKG_VERSION"))
-        .title("Perihelion Agent");
+    let agent_info =
+        Implementation::new("perihelion", env!("CARGO_PKG_VERSION")).title("Perihelion Agent");
 
     let response = InitializeResponse::new(req.protocol_version)
         .agent_capabilities(caps)

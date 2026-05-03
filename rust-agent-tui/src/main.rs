@@ -233,9 +233,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> Resul
     // 关闭 MCP 连接池（断开所有 MCP 服务器连接，清理子进程）
     if let Some(pool) = app.mcp_pool.take() {
         tracing::info!("正在关闭 MCP 连接池...");
-        tokio::task::block_in_place(|| {
-            tokio::runtime::Handle::current().block_on(pool.shutdown())
-        });
+        tokio::task::block_in_place(|| tokio::runtime::Handle::current().block_on(pool.shutdown()));
         tracing::info!("MCP 连接池已关闭");
     }
 

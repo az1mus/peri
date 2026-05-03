@@ -67,7 +67,10 @@ pub(crate) fn render_cron_panel(f: &mut Frame, app: &mut App, area: Rect) {
         };
 
         lines.push(Line::from(vec![
-            Span::styled(cursor_char.to_string(), Style::default().fg(theme::THINKING)),
+            Span::styled(
+                cursor_char.to_string(),
+                Style::default().fg(theme::THINKING),
+            ),
             Span::styled(format!("[{}] ", status_icon), status_style),
             Span::styled(format!("{} ", task.expression), style),
             Span::styled(format!("| {} | ", next), Style::default().fg(theme::MUTED)),
@@ -83,7 +86,6 @@ pub(crate) fn render_cron_panel(f: &mut Frame, app: &mut App, area: Rect) {
             Style::default().fg(theme::MUTED),
         )));
     }
-
 
     // 存储面板元数据供鼠标选区使用
     app.core.panel_area = Some(inner);

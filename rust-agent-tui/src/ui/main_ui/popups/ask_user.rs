@@ -25,12 +25,9 @@ pub(crate) fn render_ask_user_popup(f: &mut Frame, app: &App, area: Rect) {
 
     let cur = &prompt.questions[prompt.active_tab];
 
-    let inner = BorderedPanel::new(Span::styled(
-        "",
-        Style::default(),
-    ))
-    .border_style(Style::default().fg(theme::THINKING))
-    .render(f, area);
+    let inner = BorderedPanel::new(Span::styled("", Style::default()))
+        .border_style(Style::default().fg(theme::THINKING))
+        .render(f, area);
 
     // ── header 行：每个问题一个 tab，已确认 ✔ 未确认 ☐ ──────────────────────
     let header_area = Rect { height: 1, ..inner };

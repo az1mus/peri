@@ -42,9 +42,7 @@ impl App {
             items.push(HintItem::Cmd { name });
         }
         for skill in &skill_candidates {
-            items.push(HintItem::Skill {
-                name: &skill.name,
-            });
+            items.push(HintItem::Skill { name: &skill.name });
         }
         items.sort_by(|a, b| a.name().cmp(b.name()));
         items
@@ -94,11 +92,7 @@ mod tests {
 
         let count = app.hint_candidates_count();
         // 命令数 + 2 技能，但最多 8 项
-        let cmd_count = app
-            .core
-            .command_registry
-            .match_prefix("")
-            .len();
+        let cmd_count = app.core.command_registry.match_prefix("").len();
         let expected = cmd_count + 2;
         assert_eq!(count, expected, "/ 前缀应返回命令数 + Skills 数");
     }
@@ -112,7 +106,10 @@ mod tests {
         app.core.skills.push(make_skill("model-skill"));
 
         let count = app.hint_candidates_count();
-        assert!(count >= 2, "/mo 前缀应至少返回 model 命令 + model-skill 技能");
+        assert!(
+            count >= 2,
+            "/mo 前缀应至少返回 model 命令 + model-skill 技能"
+        );
     }
 
     #[tokio::test]
@@ -154,11 +151,7 @@ mod tests {
         // 字母排序后第一个匹配 /m 的项
         let _items = app.build_hint_items();
         // hint_complete 已经清空了 hint_cursor 并修改了 textarea，这里直接验证
-        assert!(
-            text.starts_with("/"),
-            "补全后应以 / 开头，实际: {}",
-            text
-        );
+        assert!(text.starts_with("/"), "补全后应以 / 开头，实际: {}", text);
         assert!(
             app.core.hint_cursor.is_none(),
             "补全后 hint_cursor 应为 None"

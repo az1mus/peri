@@ -203,13 +203,13 @@ impl App {
         };
         panel.apply_edit(cfg);
         if let Err(e) = Self::save_config(cfg, self.config_path_override.as_deref()) {
-            self.core.view_messages.push(MessageViewModel::system(
-                format!("配置保存失败: {}", e),
-            ));
+            self.core
+                .view_messages
+                .push(MessageViewModel::system(format!("配置保存失败: {}", e)));
         } else {
-            self.core.view_messages.push(MessageViewModel::system(
-                "配置已保存".to_string(),
-            ));
+            self.core
+                .view_messages
+                .push(MessageViewModel::system("配置已保存".to_string()));
         }
         self.core.config_panel = None;
     }
@@ -424,8 +424,10 @@ impl App {
         );
 
         // 将配置路径重定向到临时目录，防止测试污染全局 ~/.zen-code/settings.json
-        let test_config_path =
-            std::env::temp_dir().join(format!("zen-config-test-{}/settings.json", uuid::Uuid::now_v7()));
+        let test_config_path = std::env::temp_dir().join(format!(
+            "zen-config-test-{}/settings.json",
+            uuid::Uuid::now_v7()
+        ));
 
         let core = super::AppCore::new(
             "/tmp".to_string(),

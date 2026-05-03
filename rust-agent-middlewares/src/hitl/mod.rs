@@ -53,9 +53,7 @@ pub fn default_requires_approval(tool_name: &str) -> bool {
 /// `Write`、`Edit`、`folder_operations` 归类为编辑工具，在 AcceptEdits 模式下自动放行。
 /// `Bash`、`Agent`、`delete_*`、`rm_*` 不属于编辑工具，仍需审批。
 pub fn is_edit_tool(tool_name: &str) -> bool {
-    tool_name == "Write"
-        || tool_name == "Edit"
-        || tool_name == "folder_operations"
+    tool_name == "Write" || tool_name == "Edit" || tool_name == "folder_operations"
 }
 
 // ─── HumanInTheLoopMiddleware ──────────────────────────────────────────────────

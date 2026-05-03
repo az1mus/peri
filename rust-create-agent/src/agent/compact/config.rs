@@ -1,14 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::env;
 
-const DEFAULT_COMPACTABLE_TOOLS: &[&str] = &[
-    "Bash",
-    "Read",
-    "Glob",
-    "Grep",
-    "Write",
-    "Edit",
-];
+const DEFAULT_COMPACTABLE_TOOLS: &[&str] = &["Bash", "Read", "Glob", "Grep", "Write", "Edit"];
 
 fn default_true() -> bool {
     true
@@ -153,9 +146,7 @@ mod tests {
         assert_eq!(config.micro_compact_stale_steps, 5);
         assert_eq!(config.micro_compactable_tools.len(), 6);
         assert!(config.micro_compactable_tools.contains(&"Bash".to_string()));
-        assert!(config
-            .micro_compactable_tools
-            .contains(&"Read".to_string()));
+        assert!(config.micro_compactable_tools.contains(&"Read".to_string()));
         assert_eq!(config.summary_max_tokens, 16000);
         assert_eq!(config.re_inject_max_files, 5);
         assert_eq!(config.re_inject_max_tokens_per_file, 5000);

@@ -125,9 +125,9 @@ fn render_first_row(f: &mut Frame, app: &App, area: Rect) {
             McpInitStatus::Ready { total } if total > 0 => {
                 // 首次检测到 Ready 时设置 3 秒显示窗口
                 if app.mcp_ready_shown_until.get().is_none() {
-                    app.mcp_ready_shown_until.set(
-                        Some(std::time::Instant::now() + std::time::Duration::from_secs(3)),
-                    );
+                    app.mcp_ready_shown_until.set(Some(
+                        std::time::Instant::now() + std::time::Duration::from_secs(3),
+                    ));
                 }
                 if let Some(until) = app.mcp_ready_shown_until.get() {
                     if std::time::Instant::now() < until {
@@ -222,7 +222,9 @@ fn render_second_row(f: &mut Frame, app: &App, area: Rect) {
     }
 
     // 右侧：快捷键提示（统一灰色显示）
-    let key_style = Style::default().fg(theme::MUTED).add_modifier(Modifier::BOLD);
+    let key_style = Style::default()
+        .fg(theme::MUTED)
+        .add_modifier(Modifier::BOLD);
     let desc_style = Style::default().fg(theme::MUTED);
 
     macro_rules! key { ($($key:expr => $desc:expr),+ $(,)?) => { vec![$( Span::styled($key, key_style), Span::styled($desc, desc_style) ),+] } }

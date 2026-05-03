@@ -173,15 +173,14 @@ pub async fn run_universal_agent(cfg: AgentRunConfig) {
 
     // 将 MCP 工具加入 parent_tools，供 SubAgent 继承
     if let Some(ref pool) = mcp_pool {
-        let mcp_tools =
-            rust_agent_middlewares::mcp::build_tool_bridges(pool);
+        let mcp_tools = rust_agent_middlewares::mcp::build_tool_bridges(pool);
         for tool in mcp_tools {
             parent_tools.push(tool);
         }
         if pool.has_resources() {
-            parent_tools.push(Box::new(
-                rust_agent_middlewares::mcp::McpResourceTool::new(Arc::clone(pool)),
-            ));
+            parent_tools.push(Box::new(rust_agent_middlewares::mcp::McpResourceTool::new(
+                Arc::clone(pool),
+            )));
         }
     }
 
@@ -221,11 +220,10 @@ pub async fn run_universal_agent(cfg: AgentRunConfig) {
         Arc::new(parking_lot::RwLock::new(Vec::new()));
 
     // 后台任务通知通道
-    let (bg_notification_tx, bg_notification_rx) =
-        tokio::sync::mpsc::unbounded_channel();
-    let background_registry = Arc::new(
-        rust_agent_middlewares::BackgroundTaskRegistry::new(bg_notification_tx),
-    );
+    let (bg_notification_tx, bg_notification_rx) = tokio::sync::mpsc::unbounded_channel();
+    let background_registry = Arc::new(rust_agent_middlewares::BackgroundTaskRegistry::new(
+        bg_notification_tx,
+    ));
 
     // SubAgent middleware
     let subagent = SubAgentMiddleware::new(
@@ -268,9 +266,9 @@ pub async fn run_universal_agent(cfg: AgentRunConfig) {
 
     // MCP 中间件：仅在 pool 初始化成功时注册
     let executor = if let Some(pool) = mcp_pool {
-        executor.add_middleware(Box::new(
-            rust_agent_middlewares::mcp::McpMiddleware::new(pool),
-        ))
+        executor.add_middleware(Box::new(rust_agent_middlewares::mcp::McpMiddleware::new(
+            pool,
+        )))
     } else {
         executor
     };
@@ -328,7 +326,10 @@ fn map_executor_event(event: ExecutorEvent, cwd: &str) -> Option<AgentEvent> {
         ExecutorEvent::TextChunk { chunk: text, .. } => AgentEvent::AssistantChunk(text),
         // Agent ToolStart → SubAgentStart（在通用 ToolStart 分支之前）
         ExecutorEvent::ToolStart { name, input, .. } if name == "Agent" => {
-            let agent_id = input["subagent_type"].as_str().unwrap_or("unknown").to_string();
+            let agent_id = input["subagent_type"]
+                .as_str()
+                .unwrap_or("unknown")
+                .to_string();
             let task_preview = input["prompt"]
                 .as_str()
                 .unwrap_or("")
@@ -434,16 +435,14 @@ fn map_executor_event(event: ExecutorEvent, cwd: &str) -> Option<AgentEvent> {
             delay_ms,
             error,
         },
-        ExecutorEvent::BackgroundTaskCompleted(result) => {
-            AgentEvent::BackgroundTaskCompleted {
-                task_id: result.task_id,
-                agent_name: result.agent_name,
-                success: result.success,
-                output: result.output,
-                tool_calls_count: result.tool_calls_count,
-                duration_ms: result.duration_ms,
-            }
-        }
+        ExecutorEvent::BackgroundTaskCompleted(result) => AgentEvent::BackgroundTaskCompleted {
+            task_id: result.task_id,
+            agent_name: result.agent_name,
+            success: result.success,
+            output: result.output,
+            tool_calls_count: result.tool_calls_count,
+            duration_ms: result.duration_ms,
+        },
     })
 }
 

@@ -446,7 +446,10 @@ mod tests {
     fn test_app_config_persona_tone_skip_when_none() {
         let cfg = AppConfig::default();
         let out = serde_json::to_string(&cfg).unwrap();
-        assert!(!out.contains("persona"), "persona should be absent when None");
+        assert!(
+            !out.contains("persona"),
+            "persona should be absent when None"
+        );
         assert!(!out.contains("tone"), "tone should be absent when None");
     }
 }

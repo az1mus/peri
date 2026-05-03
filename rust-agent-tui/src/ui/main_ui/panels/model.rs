@@ -119,10 +119,7 @@ pub(crate) fn render_model_panel(f: &mut Frame, app: &App, area: Rect) {
             .add_modifier(Modifier::BOLD);
 
         let spans = vec![
-            Span::styled(
-                "    \u{25cf} ",
-                Style::default().fg(radio_color),
-            ),
+            Span::styled("    \u{25cf} ", Style::default().fg(radio_color)),
             Span::styled(format!("{} effort", effort_label), effort_style),
         ];
 

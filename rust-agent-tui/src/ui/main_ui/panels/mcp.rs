@@ -7,7 +7,7 @@ use ratatui::{
 
 use perihelion_widgets::{BorderedPanel, ScrollState, ScrollableArea};
 
-use crate::app::{DetailAction, McpPanelView, App};
+use crate::app::{App, DetailAction, McpPanelView};
 use crate::ui::main_ui::highlight_line_spans;
 use crate::ui::theme;
 
@@ -58,7 +58,12 @@ fn render_server_list(f: &mut Frame, app: &mut App, area: Rect) {
                 header_text,
                 Style::default().fg(theme::MUTED),
             )));
-            render_server_group(&mut lines, &project_servers, cursor, &project_start_offset(servers));
+            render_server_group(
+                &mut lines,
+                &project_servers,
+                cursor,
+                &project_start_offset(servers),
+            );
             lines.push(Line::from(""));
         }
 
@@ -71,7 +76,12 @@ fn render_server_list(f: &mut Frame, app: &mut App, area: Rect) {
                 header_text,
                 Style::default().fg(theme::MUTED),
             )));
-            render_server_group(&mut lines, &user_servers, cursor, &user_start_offset(servers));
+            render_server_group(
+                &mut lines,
+                &user_servers,
+                cursor,
+                &user_start_offset(servers),
+            );
             lines.push(Line::from(""));
         }
 
@@ -124,18 +134,14 @@ fn render_server_group(
         let cursor_char = if is_cursor { "❯ " } else { "  " };
 
         let (icon, icon_style, status_text) = match (&server.status, &server.oauth_status) {
-            (ClientStatus::Connected, _) => (
-                "✔", Style::default().fg(theme::SAGE), "connected",
-            ),
+            (ClientStatus::Connected, _) => ("✔", Style::default().fg(theme::SAGE), "connected"),
             (_, OAuthStatus::NeedsAuthorization) => (
-                "△", Style::default().fg(theme::WARNING), "needs authentication",
+                "△",
+                Style::default().fg(theme::WARNING),
+                "needs authentication",
             ),
-            (ClientStatus::Failed(_), _) => (
-                "◯", Style::default().fg(theme::MUTED), "disabled",
-            ),
-            (ClientStatus::Disconnected, _) => (
-                "◯", Style::default().fg(theme::MUTED), "disabled",
-            ),
+            (ClientStatus::Failed(_), _) => ("◯", Style::default().fg(theme::MUTED), "disabled"),
+            (ClientStatus::Disconnected, _) => ("◯", Style::default().fg(theme::MUTED), "disabled"),
         };
 
         let name_style = if is_cursor {
@@ -147,7 +153,10 @@ fn render_server_group(
         };
 
         lines.push(Line::from(vec![
-            Span::styled(cursor_char.to_string(), Style::default().fg(theme::THINKING)),
+            Span::styled(
+                cursor_char.to_string(),
+                Style::default().fg(theme::THINKING),
+            ),
             Span::styled(server.name.clone(), name_style),
             Span::styled(" · ", Style::default().fg(theme::MUTED)),
             Span::styled(icon.to_string(), icon_style),
@@ -196,9 +205,10 @@ fn render_server_detail(f: &mut Frame, app: &mut App, area: Rect) {
     let mut lines: Vec<Line> = Vec::new();
 
     // 获取当前 server info
-    let server_info = app.mcp_panel.as_ref().and_then(|p| {
-        p.servers.iter().find(|s| s.name == server_name)
-    });
+    let server_info = app
+        .mcp_panel
+        .as_ref()
+        .and_then(|p| p.servers.iter().find(|s| s.name == server_name));
 
     let label_width = 18;
 
@@ -214,23 +224,42 @@ fn render_server_detail(f: &mut Frame, app: &mut App, area: Rect) {
             (_, OAuthStatus::NeedsAuthorization) => "needs authentication",
             _ => "disabled",
         };
-        lines.push(detail_line(label_width, "Status:", &format!("{} {}", status_icon, status_label), status_style));
+        lines.push(detail_line(
+            label_width,
+            "Status:",
+            &format!("{} {}", status_icon, status_label),
+            status_style,
+        ));
     }
 
     // Auth 行
     if let Some(info) = server_info {
         let (auth_icon, auth_label, auth_style) = match &info.oauth_status {
             OAuthStatus::Authorized => ("✔", "authenticated", Style::default().fg(theme::SAGE)),
-            OAuthStatus::NeedsAuthorization => ("△", "needs authentication", Style::default().fg(theme::WARNING)),
+            OAuthStatus::NeedsAuthorization => (
+                "△",
+                "needs authentication",
+                Style::default().fg(theme::WARNING),
+            ),
             OAuthStatus::None => ("—", "none", Style::default().fg(theme::MUTED)),
         };
-        lines.push(detail_line(label_width, "Auth:", &format!("{} {}", auth_icon, auth_label), auth_style));
+        lines.push(detail_line(
+            label_width,
+            "Auth:",
+            &format!("{} {}", auth_icon, auth_label),
+            auth_style,
+        ));
     }
 
     // URL 行
     if let Some(info) = server_info {
         if let Some(url) = &info.url {
-            lines.push(detail_line(label_width, "URL:", url, Style::default().fg(theme::TEXT)));
+            lines.push(detail_line(
+                label_width,
+                "URL:",
+                url,
+                Style::default().fg(theme::TEXT),
+            ));
         }
     }
 
@@ -240,18 +269,37 @@ fn render_server_detail(f: &mut Frame, app: &mut App, area: Rect) {
             let path_str = match source {
                 ConfigSource::Project(p) | ConfigSource::Global(p) => p.display().to_string(),
             };
-            lines.push(detail_line(label_width, "Config location:", &path_str, Style::default().fg(theme::TEXT)));
+            lines.push(detail_line(
+                label_width,
+                "Config location:",
+                &path_str,
+                Style::default().fg(theme::TEXT),
+            ));
         }
     }
 
     // Capabilities 行
     let mut capabilities = Vec::new();
-    if !tools.is_empty() { capabilities.push("tools"); }
-    if !resources.is_empty() { capabilities.push("resources"); }
-    lines.push(detail_line(label_width, "Capabilities:", &capabilities.join(", "), Style::default().fg(theme::TEXT)));
+    if !tools.is_empty() {
+        capabilities.push("tools");
+    }
+    if !resources.is_empty() {
+        capabilities.push("resources");
+    }
+    lines.push(detail_line(
+        label_width,
+        "Capabilities:",
+        &capabilities.join(", "),
+        Style::default().fg(theme::TEXT),
+    ));
 
     // Tools 行
-    lines.push(detail_line(label_width, "Tools:", &format!("{} tools", tools.len()), Style::default().fg(theme::TEXT)));
+    lines.push(detail_line(
+        label_width,
+        "Tools:",
+        &format!("{} tools", tools.len()),
+        Style::default().fg(theme::TEXT),
+    ));
 
     // 展开工具列表
     if show_tools {
@@ -271,19 +319,30 @@ fn render_server_detail(f: &mut Frame, app: &mut App, area: Rect) {
         let cursor_char = if is_cursor { "❯ " } else { "  " };
         let num = i + 1;
         let label = match action {
-            DetailAction::ViewTools => if show_tools { "Hide tools" } else { "View tools" },
+            DetailAction::ViewTools => {
+                if show_tools {
+                    "Hide tools"
+                } else {
+                    "View tools"
+                }
+            }
             DetailAction::ReAuthenticate => "Re-authenticate",
             DetailAction::ClearAuth => "Clear authentication",
             DetailAction::Reconnect => "Reconnect",
             DetailAction::Disable => "Disable",
         };
         let style = if is_cursor {
-            Style::default().fg(theme::TEXT).add_modifier(Modifier::BOLD)
+            Style::default()
+                .fg(theme::TEXT)
+                .add_modifier(Modifier::BOLD)
         } else {
             Style::default().fg(theme::TEXT)
         };
         lines.push(Line::from(vec![
-            Span::styled(cursor_char.to_string(), Style::default().fg(theme::THINKING)),
+            Span::styled(
+                cursor_char.to_string(),
+                Style::default().fg(theme::THINKING),
+            ),
             Span::styled(format!("{}. {}", num, label), style),
         ]));
     }
@@ -316,7 +375,10 @@ fn detail_line<'a>(label_width: usize, label: &str, value: &str, value_style: St
 /// 将服务器按来源分组：(project_servers, user_servers)
 fn partition_by_source<'a>(
     servers: &'a [rust_agent_middlewares::mcp::ServerInfo],
-) -> (Vec<&'a rust_agent_middlewares::mcp::ServerInfo>, Vec<&'a rust_agent_middlewares::mcp::ServerInfo>) {
+) -> (
+    Vec<&'a rust_agent_middlewares::mcp::ServerInfo>,
+    Vec<&'a rust_agent_middlewares::mcp::ServerInfo>,
+) {
     let mut project = Vec::new();
     let mut user = Vec::new();
     for s in servers {
@@ -336,7 +398,10 @@ fn project_start_offset(_servers: &[ServerInfo]) -> usize {
 
 /// 计算 user 组在 flat servers 列表中的起始偏移
 fn user_start_offset(servers: &[ServerInfo]) -> usize {
-    servers.iter().filter(|s| matches!(s.source, Some(ConfigSource::Project(_)))).count()
+    servers
+        .iter()
+        .filter(|s| matches!(s.source, Some(ConfigSource::Project(_))))
+        .count()
 }
 
 fn apply_panel_selection(app: &mut App, lines: &mut Vec<Line>, area: Rect) {
@@ -378,7 +443,7 @@ fn apply_panel_selection(app: &mut App, lines: &mut Vec<Line>, area: Rect) {
 mod tests {
     use rust_agent_middlewares::mcp::{ClientStatus, ConfigSource, ServerInfo};
 
-    use crate::app::{McpPanel, McpPanelView, App};
+    use crate::app::{App, McpPanel, McpPanelView};
 
     fn make_server(name: &str, status: ClientStatus) -> ServerInfo {
         ServerInfo {
@@ -407,10 +472,7 @@ mod tests {
     async fn test_mcp_panel_empty_server_list() {
         let handle = render_mcp_panel(vec![]);
         let snap = handle.snapshot().join("\n");
-        assert!(
-            snap.contains("No MCP servers"),
-            "空 MCP 面板应显示引导文字"
-        );
+        assert!(snap.contains("No MCP servers"), "空 MCP 面板应显示引导文字");
     }
 
     #[tokio::test]
@@ -420,14 +482,8 @@ mod tests {
             make_server("test-failed", ClientStatus::Failed("timeout".into())),
         ]);
         let snap = handle.snapshot().join("\n");
-        assert!(
-            snap.contains("test-connected"),
-            "MCP 面板应显示服务器名称"
-        );
-        assert!(
-            snap.contains("connected"),
-            "MCP 面板应显示 connected 状态"
-        );
+        assert!(snap.contains("test-connected"), "MCP 面板应显示服务器名称");
+        assert!(snap.contains("connected"), "MCP 面板应显示 connected 状态");
     }
 
     #[tokio::test]
@@ -442,7 +498,9 @@ mod tests {
         match &app.mcp_panel.as_ref().unwrap().view {
             McpPanelView::ServerDetail { actions, .. } => {
                 assert!(
-                    actions.iter().any(|a| matches!(a, crate::app::DetailAction::ReAuthenticate)),
+                    actions
+                        .iter()
+                        .any(|a| matches!(a, crate::app::DetailAction::ReAuthenticate)),
                     "HTTP 服务器应有 ReAuthenticate action"
                 );
             }
@@ -454,28 +512,23 @@ mod tests {
             .draw(|f| crate::ui::main_ui::render(f, &mut app))
             .unwrap();
         let snap = handle.snapshot().join("\n");
-        assert!(
-            snap.contains("test-srv"),
-            "详情页应显示服务器名"
-        );
+        assert!(snap.contains("test-srv"), "详情页应显示服务器名");
     }
 
     #[tokio::test]
     async fn test_mcp_panel_grouped_by_source() {
         let mut project_srv = make_server("project-srv", ClientStatus::Connected);
-        project_srv.source = Some(ConfigSource::Project(std::path::PathBuf::from("/project/.mcp.json")));
+        project_srv.source = Some(ConfigSource::Project(std::path::PathBuf::from(
+            "/project/.mcp.json",
+        )));
         let mut global_srv = make_server("global-srv", ClientStatus::Connected);
-        global_srv.source = Some(ConfigSource::Global(std::path::PathBuf::from("/home/.zen-code/settings.json")));
+        global_srv.source = Some(ConfigSource::Global(std::path::PathBuf::from(
+            "/home/.zen-code/settings.json",
+        )));
 
         let handle = render_mcp_panel(vec![project_srv, global_srv]);
         let snap = handle.snapshot().join("\n");
-        assert!(
-            snap.contains("project-srv"),
-            "应显示项目级服务器"
-        );
-        assert!(
-            snap.contains("global-srv"),
-            "应显示全局服务器"
-        );
+        assert!(snap.contains("project-srv"), "应显示项目级服务器");
+        assert!(snap.contains("global-srv"), "应显示全局服务器");
     }
 }

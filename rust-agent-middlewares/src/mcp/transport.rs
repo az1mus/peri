@@ -51,9 +51,7 @@ impl TryFrom<&McpServerConfig> for TransportConfig {
 }
 
 /// 构建 MCP Transport 实例
-pub fn build_transport(
-    config: &McpServerConfig,
-) -> Result<TransportConfig, TransportError> {
+pub fn build_transport(config: &McpServerConfig) -> Result<TransportConfig, TransportError> {
     TransportConfig::try_from(config)
 }
 
@@ -62,7 +60,15 @@ mod tests {
     use super::*;
 
     fn test_config() -> McpServerConfig {
-        McpServerConfig { command: None, args: None, env: None, url: None, headers: None, oauth: None, source: None }
+        McpServerConfig {
+            command: None,
+            args: None,
+            env: None,
+            url: None,
+            headers: None,
+            oauth: None,
+            source: None,
+        }
     }
 
     fn stdio_config() -> McpServerConfig {
@@ -77,7 +83,10 @@ mod tests {
     fn http_config() -> McpServerConfig {
         McpServerConfig {
             url: Some("https://example.com/mcp".to_string()),
-            headers: Some(HashMap::from([("Auth".to_string(), "Bearer token".to_string())])),
+            headers: Some(HashMap::from([(
+                "Auth".to_string(),
+                "Bearer token".to_string(),
+            )])),
             ..test_config()
         }
     }
@@ -101,7 +110,11 @@ mod tests {
         let config = http_config();
         let tc = TransportConfig::try_from(&config).unwrap();
         match tc {
-            TransportConfig::StreamableHttp { url, headers, oauth } => {
+            TransportConfig::StreamableHttp {
+                url,
+                headers,
+                oauth,
+            } => {
                 assert_eq!(url, "https://example.com/mcp");
                 assert_eq!(headers.get("Auth").unwrap(), "Bearer token");
                 assert!(oauth.is_none());
@@ -162,7 +175,10 @@ mod tests {
     fn test_oauth_field_populated_when_enabled() {
         let config = McpServerConfig {
             url: Some("https://example.com".into()),
-            oauth: Some(super::super::config::OAuthConfig { client_id: Some("app".into()), ..Default::default() }),
+            oauth: Some(super::super::config::OAuthConfig {
+                client_id: Some("app".into()),
+                ..Default::default()
+            }),
             ..test_config()
         };
         let tc = TransportConfig::try_from(&config).unwrap();
@@ -178,7 +194,10 @@ mod tests {
     fn test_oauth_field_skipped_when_disabled() {
         let config = McpServerConfig {
             url: Some("https://example.com".into()),
-            oauth: Some(super::super::config::OAuthConfig { enabled: Some(false), ..Default::default() }),
+            oauth: Some(super::super::config::OAuthConfig {
+                enabled: Some(false),
+                ..Default::default()
+            }),
             ..test_config()
         };
         let tc = TransportConfig::try_from(&config).unwrap();

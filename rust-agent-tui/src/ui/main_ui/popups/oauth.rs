@@ -1,7 +1,7 @@
 use ratatui::layout::Rect;
 use ratatui::text::Span;
-use ratatui::Frame;
 use ratatui::widgets::{Block, Borders, Paragraph};
+use ratatui::Frame;
 
 use crate::app::{edit_display_parts, App};
 use crate::ui::theme;
@@ -12,7 +12,10 @@ pub(crate) fn render_oauth_popup(f: &mut Frame, app: &mut App, area: Rect) {
         None => return,
     };
 
-    let inner = area.inner(ratatui::layout::Margin { horizontal: 2, vertical: 1 });
+    let inner = area.inner(ratatui::layout::Margin {
+        horizontal: 2,
+        vertical: 1,
+    });
 
     let title = format!(" OAuth 授权 — {} ", prompt.server_name);
     let title_span = Span::styled(
@@ -52,7 +55,10 @@ pub(crate) fn render_oauth_popup(f: &mut Frame, app: &mut App, area: Rect) {
     // 输入行
     let (before_cursor, after_cursor) = edit_display_parts(&prompt.input, prompt.cursor);
     lines.push(ratatui::text::Line::from(vec![
-        Span::styled("回调 URL > ", ratatui::style::Style::default().fg(theme::MUTED)),
+        Span::styled(
+            "回调 URL > ",
+            ratatui::style::Style::default().fg(theme::MUTED),
+        ),
         Span::raw(before_cursor),
         Span::styled("█", ratatui::style::Style::default().fg(theme::TEXT)),
         Span::raw(after_cursor),
@@ -98,11 +104,8 @@ mod tests {
     async fn test_render_oauth_popup_shows_error() {
         let (mut app, mut handle) = crate::app::App::new_headless(80, 30);
         let (tx, _rx) = tokio::sync::oneshot::channel();
-        let mut prompt = crate::app::OAuthPrompt::new(
-            "srv".into(),
-            "http://auth.example.com".into(),
-            tx,
-        );
+        let mut prompt =
+            crate::app::OAuthPrompt::new("srv".into(), "http://auth.example.com".into(), tx);
         prompt.error_message = Some("parse error".to_string());
         app.oauth_prompt = Some(prompt);
         handle

@@ -101,19 +101,13 @@ impl SubAgentMiddleware {
     }
 
     /// Set shared parent message reference for Fork child agent inheritance
-    pub fn with_parent_messages(
-        mut self,
-        messages: Arc<RwLock<Vec<BaseMessage>>>,
-    ) -> Self {
+    pub fn with_parent_messages(mut self, messages: Arc<RwLock<Vec<BaseMessage>>>) -> Self {
         self.parent_messages = Some(messages);
         self
     }
 
     /// Set background task registry for run_in_background mode
-    pub fn with_background_registry(
-        mut self,
-        registry: Arc<BackgroundTaskRegistry>,
-    ) -> Self {
+    pub fn with_background_registry(mut self, registry: Arc<BackgroundTaskRegistry>) -> Self {
         self.background_registry = Some(registry);
         self
     }
@@ -351,7 +345,8 @@ mod tests {
 
         // Agent list has been migrated to system prompt placeholder injection, before_agent no longer prepends messages
         assert_eq!(
-            state.messages().len(), 0,
+            state.messages().len(),
+            0,
             "before_agent should not inject agent summary messages"
         );
     }
@@ -373,14 +368,14 @@ mod tests {
     /// Verify before_agent snapshots messages to shared parent_messages
     #[tokio::test]
     async fn test_before_agent_snapshots_messages() {
-        let parent_messages: Arc<RwLock<Vec<BaseMessage>>> =
-            Arc::new(RwLock::new(Vec::new()));
+        let parent_messages: Arc<RwLock<Vec<BaseMessage>>> = Arc::new(RwLock::new(Vec::new()));
 
         let m = SubAgentMiddleware::new(
             vec![],
             None,
             Arc::new(|_: Option<&str>| Box::new(EchoLLM) as Box<dyn ReactLLM + Send + Sync>),
-        ).with_parent_messages(Arc::clone(&parent_messages));
+        )
+        .with_parent_messages(Arc::clone(&parent_messages));
 
         let mut state = AgentState::new("/tmp");
         state.add_message(BaseMessage::human("Hello"));
@@ -391,7 +386,11 @@ mod tests {
             .unwrap();
 
         let snapshot = parent_messages.read();
-        assert_eq!(snapshot.len(), 2, "parent_messages should contain 2 snapshot messages");
+        assert_eq!(
+            snapshot.len(),
+            2,
+            "parent_messages should contain 2 snapshot messages"
+        );
         assert_eq!(snapshot[0].content(), "Hello");
         assert_eq!(snapshot[1].content(), "Hi");
     }
@@ -399,14 +398,14 @@ mod tests {
     /// Verify build_tool passes parent_messages to SubAgentTool
     #[test]
     fn test_build_tool_receives_parent_messages() {
-        let parent_messages: Arc<RwLock<Vec<BaseMessage>>> =
-            Arc::new(RwLock::new(Vec::new()));
+        let parent_messages: Arc<RwLock<Vec<BaseMessage>>> = Arc::new(RwLock::new(Vec::new()));
 
         let m = SubAgentMiddleware::new(
             vec![],
             None,
             Arc::new(|_: Option<&str>| Box::new(EchoLLM) as Box<dyn ReactLLM + Send + Sync>),
-        ).with_parent_messages(Arc::clone(&parent_messages));
+        )
+        .with_parent_messages(Arc::clone(&parent_messages));
 
         let tool = m.build_tool("/tmp");
         // SubAgentTool with parent_messages set should handle fork: true without error

@@ -172,8 +172,8 @@ pub fn build_tool_bridges(pool: &McpClientPool) -> Vec<Box<dyn BaseTool>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rmcp::model::RawTextContent;
     use crate::mcp::client::ClientStatus;
+    use rmcp::model::RawTextContent;
 
     fn make_tool(name: &str, description: Option<&str>) -> Tool {
         let json = serde_json::json!({

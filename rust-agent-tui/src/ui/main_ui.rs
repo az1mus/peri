@@ -142,7 +142,11 @@ fn active_panel_height(app: &App, screen_height: u16, screen_width: u16) -> u16 
         // 搜索框 3 行 + 空行 1 + items * 3 (标题+元数据+空行) + 快捷键 1 + 边框 2
         let items = panel.total() as u16;
         let base = (items * 3 + 7).max(9);
-        if panel.confirm_delete { base + 2 } else { base }
+        if panel.confirm_delete {
+            base + 2
+        } else {
+            base
+        }
     } else if let Some(panel) = &app.core.login_panel {
         let n = panel.providers.len() as u16;
         match panel.mode {
@@ -160,7 +164,8 @@ fn active_panel_height(app: &App, screen_height: u16, screen_width: u16) -> u16 
     } else if let Some(panel) = &app.core.agent_panel {
         (panel.agents.len() as u16 * 2 + 6).max(6)
     } else if app.cron.cron_panel.is_some() {
-        let base = (app.cron
+        let base = (app
+            .cron
             .cron_panel
             .as_ref()
             .map(|p| p.tasks.len())
@@ -176,7 +181,12 @@ fn active_panel_height(app: &App, screen_height: u16, screen_width: u16) -> u16 
                 let section_headers = 2; // Project + User headers (最多)
                 panel.servers.len() + section_headers + 5
             }
-            crate::app::McpPanelView::ServerDetail { actions, tools, show_tools, .. } => {
+            crate::app::McpPanelView::ServerDetail {
+                actions,
+                tools,
+                show_tools,
+                ..
+            } => {
                 // BorderedPanel(2) + info_lines(6) + tools_list + blank(1) + actions
                 let tools_lines = if *show_tools { tools.len() } else { 0 };
                 actions.len() + 9 + tools_lines
@@ -196,7 +206,7 @@ fn active_panel_height(app: &App, screen_height: u16, screen_width: u16) -> u16 
         (p.items.len() as u16 * 2 + 5).max(5)
     } else if app.oauth_prompt.is_some() {
         9 // 标题1 + 提示1 + URL1 + 空行1 + 输入框1 + 错误1 + 快捷键1 + 边框2
-        } else if let Some(crate::app::InteractionPrompt::Questions(p)) = &app.agent.interaction_prompt
+    } else if let Some(crate::app::InteractionPrompt::Questions(p)) = &app.agent.interaction_prompt
     {
         let cur = &p.questions[p.active_tab];
         // 自适应高度：考虑文本自动换行

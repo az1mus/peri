@@ -166,7 +166,10 @@ impl crate::app::App {
         match action {
             DetailAction::ViewTools => {
                 if let Some(ref mut panel) = self.mcp_panel {
-                    if let McpPanelView::ServerDetail { ref mut show_tools, .. } = panel.view {
+                    if let McpPanelView::ServerDetail {
+                        ref mut show_tools, ..
+                    } = panel.view
+                    {
                         *show_tools = !*show_tools;
                     }
                 }
@@ -209,7 +212,11 @@ impl crate::app::App {
     /// 将 MCP 面板 cursor 设置到指定服务器
     fn set_mcp_cursor_to_server(&mut self, server_name: &str) {
         if let Some(ref mut panel) = self.mcp_panel {
-            panel.cursor = panel.servers.iter().position(|s| s.name == server_name).unwrap_or(0);
+            panel.cursor = panel
+                .servers
+                .iter()
+                .position(|s| s.name == server_name)
+                .unwrap_or(0);
         }
     }
 
@@ -224,7 +231,11 @@ impl crate::app::App {
                 _ => String::new(),
             };
             panel.view = McpPanelView::ServerList;
-            panel.cursor = panel.servers.iter().position(|s| s.name == name).unwrap_or(0);
+            panel.cursor = panel
+                .servers
+                .iter()
+                .position(|s| s.name == name)
+                .unwrap_or(0);
             panel.scroll_offset = 0;
         }
     }
@@ -306,22 +317,23 @@ impl crate::app::App {
                 let pool2 = pool.clone();
                 let name2 = name.clone();
                 let tx2 = tx.clone();
-                let oauth_cb: Box<dyn Fn(rust_agent_middlewares::mcp::OAuthFlowEvent) + Send + Sync> =
-                    Box::new(move |ev| {
-                        use rust_agent_middlewares::mcp::OAuthFlowEvent;
-                        if let OAuthFlowEvent::AuthorizationNeeded {
+                let oauth_cb: Box<
+                    dyn Fn(rust_agent_middlewares::mcp::OAuthFlowEvent) + Send + Sync,
+                > = Box::new(move |ev| {
+                    use rust_agent_middlewares::mcp::OAuthFlowEvent;
+                    if let OAuthFlowEvent::AuthorizationNeeded {
+                        server_name,
+                        authorization_url,
+                        callback_tx,
+                    } = ev
+                    {
+                        let _ = tx2.try_send(AgentEvent::OAuthAuthorizationNeeded {
                             server_name,
                             authorization_url,
                             callback_tx,
-                        } = ev
-                        {
-                            let _ = tx2.try_send(AgentEvent::OAuthAuthorizationNeeded {
-                                server_name,
-                                authorization_url,
-                                callback_tx,
-                            });
-                        }
-                    });
+                        });
+                    }
+                });
                 tokio::spawn(async move {
                     let result = pool2.reconnect(&name2, Some(oauth_cb)).await;
                     let _ = tx.send(AgentEvent::McpActionCompleted {
@@ -354,37 +366,43 @@ impl crate::app::App {
                 let err_tx = self.bg_event_tx.clone();
                 tokio::spawn(async move {
                     let result = pool
-                        .start_oauth_flow(&name, Box::new(move |ev| {
-                            // 只传播 AuthorizationNeeded（弹窗需要显示 URL），
-                            // 完成/失败事件由 spawned task 在 pool 更新后统一发送，
-                            // 避免 pool 未更新时面板就刷新导致显示 0 servers
-                            use rust_agent_middlewares::mcp::OAuthFlowEvent;
-                            if let OAuthFlowEvent::AuthorizationNeeded {
-                                server_name,
-                                authorization_url,
-                                callback_tx,
-                            } = ev
-                            {
-                                let _ = tx.try_send(
-                                    super::events::AgentEvent::OAuthAuthorizationNeeded {
-                                        server_name,
-                                        authorization_url,
-                                        callback_tx,
-                                    },
-                                );
-                            }
-                        }))
+                        .start_oauth_flow(
+                            &name,
+                            Box::new(move |ev| {
+                                // 只传播 AuthorizationNeeded（弹窗需要显示 URL），
+                                // 完成/失败事件由 spawned task 在 pool 更新后统一发送，
+                                // 避免 pool 未更新时面板就刷新导致显示 0 servers
+                                use rust_agent_middlewares::mcp::OAuthFlowEvent;
+                                if let OAuthFlowEvent::AuthorizationNeeded {
+                                    server_name,
+                                    authorization_url,
+                                    callback_tx,
+                                } = ev
+                                {
+                                    let _ = tx.try_send(
+                                        super::events::AgentEvent::OAuthAuthorizationNeeded {
+                                            server_name,
+                                            authorization_url,
+                                            callback_tx,
+                                        },
+                                    );
+                                }
+                            }),
+                        )
                         .await;
                     if let Err(e) = result {
-                        let _ = err_tx.try_send(super::events::AgentEvent::OAuthAuthorizationFailed {
-                            server_name: name,
-                            error: e.to_string(),
-                        });
+                        let _ =
+                            err_tx.try_send(super::events::AgentEvent::OAuthAuthorizationFailed {
+                                server_name: name,
+                                error: e.to_string(),
+                            });
                     } else {
                         // pool 已更新（start_oauth_flow 内部插入了新的 connected handle），安全刷新
-                        let _ = ok_tx.try_send(super::events::AgentEvent::OAuthAuthorizationCompleted {
-                            server_name: name,
-                        });
+                        let _ = ok_tx.try_send(
+                            super::events::AgentEvent::OAuthAuthorizationCompleted {
+                                server_name: name,
+                            },
+                        );
                     }
                 });
             }
@@ -463,9 +481,10 @@ mod tests {
     #[tokio::test]
     async fn test_mcp_panel_request_cancel_delete() {
         let (mut app, _handle) = crate::app::App::new_headless(80, 24);
-        app.mcp_panel = Some(McpPanel::new(vec![
-            make_server_info("test-srv", ClientStatus::Connected),
-        ]));
+        app.mcp_panel = Some(McpPanel::new(vec![make_server_info(
+            "test-srv",
+            ClientStatus::Connected,
+        )]));
 
         app.mcp_panel_request_delete();
         assert_eq!(

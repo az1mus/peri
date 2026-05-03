@@ -1,3 +1,7 @@
+use crate::app::status_panel::{STATUS_TAB_CONTEXT, STATUS_TAB_COST};
+use crate::app::App;
+use crate::ui::theme;
+use perihelion_widgets::{tab_bar::TabBar, BorderedPanel};
 use ratatui::{
     layout::Rect,
     style::{Modifier, Style},
@@ -5,10 +9,6 @@ use ratatui::{
     widgets::Paragraph,
     Frame,
 };
-use perihelion_widgets::{BorderedPanel, tab_bar::TabBar};
-use crate::app::status_panel::{STATUS_TAB_COST, STATUS_TAB_CONTEXT};
-use crate::app::App;
-use crate::ui::theme;
 
 pub(crate) fn render_status_panel(f: &mut Frame, app: &App, area: Rect) {
     let Some(panel) = &app.status_panel else {
@@ -147,7 +147,10 @@ fn build_context_lines(app: &App) -> Vec<Line<'static>> {
     // Autocompact 阈值
     let compact_config = app.get_compact_config();
     let threshold_pct = (compact_config.auto_compact_threshold * 100.0) as u32;
-    lines.push(label_value("Autocompact 阈值", &format!("{}%", threshold_pct)));
+    lines.push(label_value(
+        "Autocompact 阈值",
+        &format!("{}%", threshold_pct),
+    ));
 
     lines
 }

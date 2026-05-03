@@ -60,9 +60,17 @@ fn format_relative_time(dt: &chrono::DateTime<Utc>) -> String {
     if secs < 60 {
         "just now".to_string()
     } else if secs < 3600 {
-        format!("{} minute{} ago", secs / 60, if secs / 60 > 1 { "s" } else { "" })
+        format!(
+            "{} minute{} ago",
+            secs / 60,
+            if secs / 60 > 1 { "s" } else { "" }
+        )
     } else if secs < 86400 {
-        format!("{} hour{} ago", secs / 3600, if secs / 3600 > 1 { "s" } else { "" })
+        format!(
+            "{} hour{} ago",
+            secs / 3600,
+            if secs / 3600 > 1 { "s" } else { "" }
+        )
     } else {
         let days = secs / 86400;
         format!("{} day{} ago", days, if days > 1 { "s" } else { "" })
@@ -122,11 +130,7 @@ pub(crate) fn render_thread_browser(f: &mut Frame, app: &mut App, area: Rect) {
     // BorderedPanel 标题
     let total = browser.total();
     let total_all = browser.total_all();
-    let cursor_display = if total == 0 {
-        0
-    } else {
-        browser.cursor + 1
-    };
+    let cursor_display = if total == 0 { 0 } else { browser.cursor + 1 };
     let title_text = format!(" Resume Session ({}/{}) ", cursor_display, total_all);
 
     let inner = BorderedPanel::new(Span::styled(
@@ -192,9 +196,7 @@ pub(crate) fn render_thread_browser(f: &mut Frame, app: &mut App, area: Rect) {
         let current_tag = if is_current { "✓ " } else { "" };
 
         let title_style = if is_cursor {
-            Style::default()
-                .fg(SELECTED)
-                .add_modifier(Modifier::BOLD)
+            Style::default().fg(SELECTED).add_modifier(Modifier::BOLD)
         } else if is_current {
             Style::default().fg(theme::ACCENT)
         } else {

@@ -263,8 +263,14 @@ mod tests {
 
     #[test]
     fn test_alias_tab_description() {
-        assert_eq!(AliasTab::Opus.description(), "Most capable for complex work");
-        assert_eq!(AliasTab::Sonnet.description(), "Balanced performance and speed");
+        assert_eq!(
+            AliasTab::Opus.description(),
+            "Most capable for complex work"
+        );
+        assert_eq!(
+            AliasTab::Sonnet.description(),
+            "Balanced performance and speed"
+        );
         assert_eq!(AliasTab::Haiku.description(), "Fastest for quick answers");
     }
 }

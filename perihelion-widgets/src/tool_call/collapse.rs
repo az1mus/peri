@@ -1,9 +1,4 @@
-pub const READ_ONLY_TOOLS: &[&str] = &[
-    "Read",
-    "Glob",
-    "Grep",
-    "AskUserQuestion",
-];
+pub const READ_ONLY_TOOLS: &[&str] = &["Read", "Glob", "Grep", "AskUserQuestion"];
 
 pub const MAX_RESULT_LINES: usize = 20;
 

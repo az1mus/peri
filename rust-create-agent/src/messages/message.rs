@@ -286,11 +286,7 @@ mod tests {
         use crate::messages::ContentBlock;
         let blocks = vec![
             ContentBlock::text("I'll read a file"),
-            ContentBlock::tool_use(
-                "toolu_123",
-                "Read",
-                serde_json::json!({"path": "test.txt"}),
-            ),
+            ContentBlock::tool_use("toolu_123", "Read", serde_json::json!({"path": "test.txt"})),
         ];
         let ai_msg = BaseMessage::ai_from_blocks(blocks);
 
