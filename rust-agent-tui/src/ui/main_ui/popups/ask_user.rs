@@ -11,7 +11,12 @@ use perihelion_widgets::{BorderedPanel, ScrollState, ScrollableArea, TabBar, Tab
 use crate::app::App;
 use crate::ui::theme;
 
-/// AskUser 批量弹窗（底部展开区）：header tab 行 + 当前问题选项
+/// AskUser 批量弹窗（底部展开区）：header tab 行 + 编号选项列表
+///
+/// 风格对齐 Claude Code 原生 AskUser UI：
+/// - Tab 栏带 ☐/✔ 状态标记
+/// - 选项编号格式（单选: `❯ 1. label`，多选: `❯ ● 1. label`）
+/// - 自定义输入合并为最后一个编号选项
 pub(crate) fn render_ask_user_popup(f: &mut Frame, app: &App, area: Rect) {
     let Some(crate::app::InteractionPrompt::Questions(prompt)) = &app.agent.interaction_prompt
     else {
@@ -19,37 +24,36 @@ pub(crate) fn render_ask_user_popup(f: &mut Frame, app: &App, area: Rect) {
     };
 
     let cur = &prompt.questions[prompt.active_tab];
-    let popup_area = area;
 
     let inner = BorderedPanel::new(Span::styled(
-        " ? Agent 提问 ",
-        Style::default()
-            .fg(theme::WARNING)
-            .add_modifier(Modifier::BOLD),
+        "",
+        Style::default(),
     ))
-    .border_style(Style::default().fg(theme::WARNING))
-    .render(f, popup_area);
+    .border_style(Style::default().fg(theme::THINKING))
+    .render(f, area);
 
-    // ── header 行：每个问题一个 tab，激活的反色，已确认的显示 ✓ ──────────────
+    // ── header 行：每个问题一个 tab，已确认 ✔ 未确认 ☐ ──────────────────────
     let header_area = Rect { height: 1, ..inner };
     let labels: Vec<String> = prompt
         .questions
         .iter()
         .enumerate()
         .map(|(i, q)| {
-            if q.data.header.is_empty() {
+            let done = prompt.confirmed.get(i).copied().unwrap_or(false);
+            let header = if q.data.header.is_empty() {
                 format!("Q{}", i + 1)
             } else {
-                q.data.header.chars().take(12).collect()
+                q.data.header.chars().take(10).collect()
+            };
+            if done {
+                format!("✔ {}", header)
+            } else {
+                format!("☐ {}", header)
             }
         })
         .collect();
     let mut tab_state = TabState::new(labels);
     tab_state.set_active(prompt.active_tab);
-    for (i, _) in prompt.questions.iter().enumerate() {
-        let done = prompt.confirmed.get(i).copied().unwrap_or(false);
-        tab_state.set_indicator(i, if done { Some('✓') } else { None });
-    }
     let tab_bar = TabBar::new().style(TabStyle {
         active: Style::default()
             .fg(theme::THINKING)
@@ -72,7 +76,7 @@ pub(crate) fn render_ask_user_popup(f: &mut Frame, app: &App, area: Rect) {
         sep_area,
     );
 
-    // ── 当前问题内容 ──────────────────────────────────────────────────────────
+    // ── 内容区 ────────────────────────────────────────────────────────────────
     let content_area = Rect {
         y: inner.y + 2,
         height: inner.height.saturating_sub(2),
@@ -87,93 +91,78 @@ pub(crate) fn render_ask_user_popup(f: &mut Frame, app: &App, area: Rect) {
             Style::default().fg(theme::TEXT),
         )));
     }
-    let select_hint = if cur.data.multi_select {
-        "[多选]"
-    } else {
-        "[单选]"
-    };
-    lines.push(Line::from(Span::styled(
-        select_hint,
-        Style::default().fg(theme::MUTED),
-    )));
+    lines.push(Line::from(""));
 
-    // 选项列表
+    // 选项列表（编号格式）
+    let multi = cur.data.multi_select;
+    let option_count = cur.data.options.len();
     for (i, opt) in cur.data.options.iter().enumerate() {
         let is_cursor = !cur.in_custom_input && cur.option_cursor == i as isize;
         let is_selected = cur.selected.get(i).copied().unwrap_or(false);
-        let check = if is_selected { "●" } else { "○" };
+        let num = i + 1;
+        let cursor_mark = if is_cursor { "❯" } else { " " };
+
         let row_style = if is_cursor {
-            Style::default().fg(theme::THINKING)
+            Style::default()
+                .fg(theme::THINKING)
+                .add_modifier(Modifier::BOLD)
         } else if is_selected {
-            Style::default().fg(theme::ACCENT)
+            Style::default().fg(theme::SAGE)
         } else {
             Style::default().fg(theme::TEXT)
         };
-        lines.push(Line::from(vec![
-            Span::styled(
-                format!(" {} {} ", if is_cursor { "❯" } else { " " }, check),
-                row_style,
-            ),
-            Span::styled(opt.label.clone(), row_style),
-        ]));
+
+        if multi {
+            let check = if is_selected { "●" } else { "○" };
+            lines.push(Line::from(vec![
+                Span::styled(format!("{} {} {}. ", cursor_mark, check, num), row_style),
+                Span::styled(opt.label.clone(), row_style),
+            ]));
+        } else {
+            lines.push(Line::from(vec![
+                Span::styled(format!("{} {}. ", cursor_mark, num), row_style),
+                Span::styled(opt.label.clone(), row_style),
+            ]));
+        }
+
         // 选项 description（若有）
         if let Some(ref desc) = opt.description {
             if !desc.is_empty() {
+                let indent = if multi { "       " } else { "     " };
                 lines.push(Line::from(Span::styled(
-                    format!("      {}", desc),
+                    format!("{}{}", indent, desc),
                     Style::default().fg(theme::MUTED),
                 )));
             }
         }
     }
 
-    // 自定义输入行（始终显示）
-    lines.push(Line::from(""));
-    let is_cur = cur.in_custom_input;
-    let ph = "↓ 自定义输入…";
-    let display = if cur.custom_input.is_empty() && !is_cur {
-        ph.to_string()
-    } else if is_cur {
-        let (before, after) = crate::app::edit_display_parts(&cur.custom_input, cur.custom_cursor);
-        format!("{}█{}", before, after)
-    } else {
-        cur.custom_input.clone()
-    };
-    let style = if is_cur {
-        Style::default().fg(theme::TEXT).bg(theme::WARNING)
-    } else {
-        Style::default().fg(theme::MUTED)
-    };
-    lines.push(Line::from(vec![
-        Span::styled(if is_cur { " ▶ " } else { "   " }, style),
-        Span::styled(display, style),
-    ]));
-
-    // 底部快捷键提示
-    lines.push(Line::from(""));
-    lines.push(Line::from(vec![
-        Span::styled(
-            " Tab",
+    // 自定义输入作为最后一个编号选项
+    {
+        let custom_num = option_count + 1;
+        let is_cursor = cur.in_custom_input;
+        let cursor_mark = if is_cursor { "❯" } else { " " };
+        let display = if cur.custom_input.is_empty() && !is_cursor {
+            "Type something.".to_string()
+        } else if is_cursor {
+            let (before, after) =
+                crate::app::edit_display_parts(&cur.custom_input, cur.custom_cursor);
+            format!("{}█{}", before, after)
+        } else {
+            cur.custom_input.clone()
+        };
+        let style = if is_cursor {
             Style::default()
-                .fg(theme::WARNING)
-                .add_modifier(Modifier::BOLD),
-        ),
-        Span::styled(":切换问题  ", Style::default().fg(theme::MUTED)),
-        Span::styled(
-            "Space",
-            Style::default()
-                .fg(theme::WARNING)
-                .add_modifier(Modifier::BOLD),
-        ),
-        Span::styled(":选择  ", Style::default().fg(theme::MUTED)),
-        Span::styled(
-            "Enter",
-            Style::default()
-                .fg(theme::WARNING)
-                .add_modifier(Modifier::BOLD),
-        ),
-        Span::styled(":确认", Style::default().fg(theme::MUTED)),
-    ]));
+                .fg(theme::THINKING)
+                .add_modifier(Modifier::BOLD)
+        } else {
+            Style::default().fg(theme::MUTED)
+        };
+        lines.push(Line::from(vec![
+            Span::styled(format!("{} {}. ", cursor_mark, custom_num), style),
+            Span::styled(display, style),
+        ]));
+    }
 
     let mut scroll_state = ScrollState::with_offset(prompt.scroll_offset);
     ScrollableArea::new(Text::from(lines))

@@ -84,44 +84,17 @@ pub(crate) fn render_hitl_popup(f: &mut Frame, app: &App, area: Rect) {
         ]));
     }
 
-    lines.push(Line::from(""));
-
-    // 底部提示
+    // 底部：多项时显示统计摘要（快捷键由状态栏统一负责）
     if item_count > 1 {
-        lines.push(Line::from(vec![
-            Span::styled(
-                format!(
-                    "已选: {} 批准 / {} 拒绝  ",
-                    prompt.approved.iter().filter(|&&v| v).count(),
-                    prompt.approved.iter().filter(|&&v| !v).count()
-                ),
-                Style::default().fg(theme::MUTED),
+        lines.push(Line::from(""));
+        lines.push(Line::from(Span::styled(
+            format!(
+                "已选: {} 批准 / {} 拒绝",
+                prompt.approved.iter().filter(|&&v| v).count(),
+                prompt.approved.iter().filter(|&&v| !v).count()
             ),
-            Span::styled(
-                "Enter",
-                Style::default()
-                    .fg(theme::MUTED)
-                    .add_modifier(Modifier::BOLD),
-            ),
-            Span::styled(":确认", Style::default().fg(theme::MUTED)),
-        ]));
-    } else {
-        lines.push(Line::from(vec![
-            Span::styled(
-                "Space",
-                Style::default()
-                    .fg(theme::MUTED)
-                    .add_modifier(Modifier::BOLD),
-            ),
-            Span::styled(":切换  ", Style::default().fg(theme::MUTED)),
-            Span::styled(
-                "Enter",
-                Style::default()
-                    .fg(theme::MUTED)
-                    .add_modifier(Modifier::BOLD),
-            ),
-            Span::styled(":确认", Style::default().fg(theme::MUTED)),
-        ]));
+            Style::default().fg(theme::MUTED),
+        )));
     }
 
     let para = Paragraph::new(Text::from(lines));
