@@ -72,7 +72,7 @@ pub use agent_comm::AgentComm;
 pub use agent_comm::RetryStatus;
 pub use core::AppCore;
 pub use cron_state::{CronPanel, CronState};
-pub use mcp_panel::{McpPanel, McpPanelView};
+pub use mcp_panel::{DetailAction, McpPanel, McpPanelView};
 pub use langfuse_state::LangfuseState;
 
 // ─── App ──────────────────────────────────────────────────────────────────────

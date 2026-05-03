@@ -62,7 +62,7 @@ mod tests {
     use super::*;
 
     fn test_config() -> McpServerConfig {
-        McpServerConfig { command: None, args: None, env: None, url: None, headers: None, oauth: None }
+        McpServerConfig { command: None, args: None, env: None, url: None, headers: None, oauth: None, source: None }
     }
 
     fn stdio_config() -> McpServerConfig {

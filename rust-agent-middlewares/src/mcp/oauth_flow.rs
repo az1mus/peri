@@ -198,22 +198,20 @@ impl OAuthFlowManager {
     }
 
     /// 获取指定服务器的 AuthorizationManager（用于构建 AuthClient 传输层）
+    ///
+    /// 同时接受 Authorized（刚完成授权）和 Unauthorized（从存储恢复凭证）两种状态，
+    /// 因为 Unauthorized 的 manager 可能已通过 `initialize_from_store` 加载了有效凭证。
     pub fn get_authorization_manager(
         &mut self,
         server_name: &str,
     ) -> Option<rmcp::transport::auth::AuthorizationManager> {
         let state = self.states.remove(server_name)?;
         match state {
-            OAuthState::Authorized(manager) => Some(manager),
-            OAuthState::Unauthorized(manager) => {
-                self.states
-                    .insert(server_name.to_string(), OAuthState::Unauthorized(manager));
-                None
-            }
+            OAuthState::Authorized(manager) | OAuthState::Unauthorized(manager) => Some(manager),
             _ => {
                 warn!(
                     server = %server_name,
-                    "OAuth 状态不是 Authorized，无法提取 AuthorizationManager"
+                    "OAuth 状态不是 Authorized/Unauthorized，无法提取 AuthorizationManager"
                 );
                 None
             }

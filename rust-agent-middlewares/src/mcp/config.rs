@@ -3,6 +3,15 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use thiserror::Error;
 
+/// MCP 服务器配置来源
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ConfigSource {
+    /// 项目级配置（{cwd}/.mcp.json）
+    Project(PathBuf),
+    /// 全局配置（~/.zen-code/settings.json）
+    Global(PathBuf),
+}
+
 /// 单个 MCP 服务器配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct McpServerConfig {
@@ -22,6 +31,9 @@ pub struct McpServerConfig {
     /// OAuth 2.0 配置
     #[serde(default)]
     pub oauth: Option<OAuthConfig>,
+    /// 配置来源（运行时标记，不序列化）
+    #[serde(skip)]
+    pub source: Option<ConfigSource>,
 }
 
 /// MCP 服务器 OAuth 2.0 配置
@@ -177,6 +189,7 @@ pub fn expand_server_config(config: &McpServerConfig) -> McpServerConfig {
             client_secret: o.client_secret.as_ref().map(|s| expand_env_vars(s)),
             scopes: o.scopes.clone(),
         }),
+        source: config.source.clone(),
     }
 }
 
@@ -188,7 +201,7 @@ pub fn load_merged_config(cwd: &Path) -> McpConfigFile {
         .unwrap_or_else(|| PathBuf::from("."))
         .join(".zen-code")
         .join("settings.json");
-    let global = load_global_config(&global_path).unwrap_or_else(|e| {
+    let mut global = load_global_config(&global_path).unwrap_or_else(|e| {
         tracing::warn!(
             path = %global_path.display(),
             error = %e,
@@ -196,10 +209,14 @@ pub fn load_merged_config(cwd: &Path) -> McpConfigFile {
         );
         McpConfigFile::default()
     });
+    // 标记全局 servers 来源
+    for cfg in global.mcp_servers.values_mut() {
+        cfg.source = Some(ConfigSource::Global(global_path.clone()));
+    }
 
     // 2. 加载项目级配置
     let project_path = cwd.join(".mcp.json");
-    let project = load_from_path(&project_path).unwrap_or_else(|e| {
+    let mut project = load_from_path(&project_path).unwrap_or_else(|e| {
         tracing::warn!(
             path = %project_path.display(),
             error = %e,
@@ -207,6 +224,10 @@ pub fn load_merged_config(cwd: &Path) -> McpConfigFile {
         );
         McpConfigFile::default()
     });
+    // 标记项目 servers 来源
+    for cfg in project.mcp_servers.values_mut() {
+        cfg.source = Some(ConfigSource::Project(project_path.clone()));
+    }
 
     // 3. 合并：项目级覆盖全局
     let mut merged = global;
@@ -343,7 +364,7 @@ fn remove_server_from_config_with_paths(
 }
 
 fn test_config() -> McpServerConfig {
-    McpServerConfig { command: None, args: None, env: None, url: None, headers: None, oauth: None }
+    McpServerConfig { command: None, args: None, env: None, url: None, headers: None, oauth: None, source: None }
 }
 
 #[cfg(test)]

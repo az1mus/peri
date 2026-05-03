@@ -253,11 +253,11 @@ fn render_second_row(f: &mut Frame, app: &App, area: Rect) {
                         if p.confirm_delete.is_some() {
                             key!["Enter" => ":确认  ", "其他键" => ":取消"]
                         } else {
-                            key!["↑↓" => ":移动  ", "Enter" => ":详情  ", "r" => ":授权  ", "Ctrl+R" => ":重连  ", "Ctrl+D" => ":删除  ", "Esc" => ":关闭"]
+                            key!["↑↓" => ":移动  ", "Enter" => ":详情  ", "Ctrl+R" => ":重连  ", "Ctrl+D" => ":删除  ", "Esc" => ":关闭"]
                         }
                     }
                     crate::app::McpPanelView::ServerDetail { .. } => {
-                        key!["↑↓" => ":移动  ", "Tab" => ":切换  ", "Esc" => ":返回"]
+                        key!["↑↓" => ":移动  ", "Enter" => ":执行  ", "Esc" => ":返回"]
                     }
                 });
                 view_label.unwrap_or_default()

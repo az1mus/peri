@@ -9,8 +9,8 @@ pub mod callback_server;
 pub mod oauth_flow;
 
 pub use config::{
-    load_merged_config, remove_server_from_config, McpConfigError, McpConfigFile, McpServerConfig,
-    OAuthConfig,
+    load_merged_config, remove_server_from_config, ConfigSource, McpConfigError, McpConfigFile,
+    McpServerConfig, OAuthConfig,
 };
 pub use transport::{TransportConfig, TransportError};
 pub use auth_store::{AuthStoreError, FileCredentialStore, PerServerCredentialStore};

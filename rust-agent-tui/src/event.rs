@@ -1399,9 +1399,7 @@ fn handle_mcp_panel(app: &mut App, input: Input) {
         Input {
             key: Key::Enter, ..
         } => {
-            if is_server_list {
-                app.mcp_panel_enter();
-            }
+            app.mcp_panel_enter();
         }
         Input { key: Key::Esc, .. } => {
             if is_server_list {
@@ -1422,26 +1420,12 @@ fn handle_mcp_panel(app: &mut App, input: Input) {
             }
         }
         Input {
-            key: Key::Char('r'),
-            ctrl: false,
-            ..
-        } => {
-            if is_server_list {
-                app.mcp_panel_request_oauth();
-            }
-        }
-        Input {
             key: Key::Char('d'),
             ctrl: true,
             ..
         } => {
             if is_server_list {
                 app.mcp_panel_request_delete();
-            }
-        }
-        Input { key: Key::Tab, .. } => {
-            if !is_server_list {
-                app.mcp_panel_tab();
             }
         }
         _ => {}

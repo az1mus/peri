@@ -170,17 +170,18 @@ fn active_panel_height(app: &App, screen_height: u16, screen_width: u16) -> u16 
         // 确认删除提示替换帮助行，高度不变
         base
     } else if let Some(panel) = &app.mcp_panel {
-        let item_count = match &panel.view {
-            crate::app::McpPanelView::ServerList => panel.servers.len(),
-            crate::app::McpPanelView::ServerDetail { tools, resources, active_tab, .. } => {
-                match *active_tab {
-                    0 => tools.len(),
-                    1 => resources.len(),
-                    _ => 0,
-                }
+        let line_count = match &panel.view {
+            crate::app::McpPanelView::ServerList => {
+                // separator(1) + title(1) + count(1) + blank(1) + sections + blank(1) + help(1)
+                let section_headers = 2; // Project + User headers (最多)
+                panel.servers.len() + section_headers + 6
+            }
+            crate::app::McpPanelView::ServerDetail { actions, .. } => {
+                // separator(1) + title(1) + blank(1) + info_lines(6) + blank(1) + actions
+                actions.len() + 10
             }
         };
-        (item_count as u16 + 4).max(6)
+        (line_count as u16).max(8)
     } else if app.status_panel.is_some() {
         14
     } else if app.memory_panel.is_some() {

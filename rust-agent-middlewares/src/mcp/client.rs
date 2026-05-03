@@ -6,7 +6,7 @@ use thiserror::Error;
 use rmcp::model::{Resource, Tool};
 use rmcp::service::{Peer, RoleClient, RunningService};
 
-use super::config::McpServerConfig;
+use super::config::{ConfigSource, McpServerConfig};
 use super::transport::TransportConfig;
 
 use super::auth_store::FileCredentialStore;
@@ -51,6 +51,10 @@ pub struct ServerInfo {
     pub resource_count: usize,
     /// OAuth 授权状态
     pub oauth_status: OAuthStatus,
+    /// 配置来源
+    pub source: Option<ConfigSource>,
+    /// 服务器 URL（HTTP 传输）
+    pub url: Option<String>,
 }
 
 /// 连接池级别错误
@@ -75,6 +79,10 @@ pub struct McpClientHandle {
     pub resources: Vec<Resource>,
     pub status: ClientStatus,
     pub oauth_status: OAuthStatus,
+    /// 配置来源
+    pub source: Option<ConfigSource>,
+    /// 服务器 URL（HTTP 传输）
+    pub url: Option<String>,
 }
 
 /// MCP 客户端连接池
@@ -170,7 +178,11 @@ impl McpClientPool {
                     tracing::info!(server = %name, tools = tools.len(), resources = resources.len(), "MCP 连接成功");
                     let peer = rs.peer().clone();
                     let oauth_status = if used_oauth { OAuthStatus::Authorized } else { OAuthStatus::default() };
-                    let handle = Arc::new(McpClientHandle { name: name.clone(), peer: Some(peer), tools, resources, status: ClientStatus::Connected, oauth_status });
+                    let handle = Arc::new(McpClientHandle {
+                        name: name.clone(), peer: Some(peer), tools, resources,
+                        status: ClientStatus::Connected, oauth_status,
+                        source: server_config.source.clone(), url: server_config.url.clone(),
+                    });
                     pool.clients.write().insert(name.clone(), handle);
                     pool.services.lock().await.insert(name.clone(), rs);
                     connected += 1;
@@ -205,13 +217,27 @@ impl McpClientPool {
     }
 
     fn insert_failed(pool: &Arc<Self>, name: &str, reason: String) {
-        pool.clients.write().insert(name.to_string(), Arc::new(McpClientHandle { name: name.to_string(), peer: None, tools: vec![], resources: vec![], status: ClientStatus::Failed(reason), oauth_status: OAuthStatus::default() }));
+        let (source, url) = pool.configs.read().get(name)
+            .map(|c| (c.source.clone(), c.url.clone()))
+            .unwrap_or((None, None));
+        pool.clients.write().insert(name.to_string(), Arc::new(McpClientHandle {
+            name: name.to_string(), peer: None, tools: vec![], resources: vec![],
+            status: ClientStatus::Failed(reason), oauth_status: OAuthStatus::default(),
+            source, url,
+        }));
     }
 
     /// 插入需要 OAuth 授权的服务器（HTTP 传输收到 401/AuthRequired 时使用）
     fn insert_needs_auth(pool: &Arc<Self>, name: &str, reason: String) {
         tracing::info!(server = %name, "HTTP 服务器需要 OAuth 授权，可在 MCP 面板按 r 键触发");
-        pool.clients.write().insert(name.to_string(), Arc::new(McpClientHandle { name: name.to_string(), peer: None, tools: vec![], resources: vec![], status: ClientStatus::Failed(reason), oauth_status: OAuthStatus::NeedsAuthorization }));
+        let (source, url) = pool.configs.read().get(name)
+            .map(|c| (c.source.clone(), c.url.clone()))
+            .unwrap_or((None, None));
+        pool.clients.write().insert(name.to_string(), Arc::new(McpClientHandle {
+            name: name.to_string(), peer: None, tools: vec![], resources: vec![],
+            status: ClientStatus::Failed(reason), oauth_status: OAuthStatus::NeedsAuthorization,
+            source, url,
+        }));
     }
 
     /// 检测错误是否为 HTTP 401 认证错误
@@ -268,7 +294,11 @@ impl McpClientPool {
                 let resources = rs.list_all_resources().await.unwrap_or_default();
                 let peer = rs.peer().clone();
                 let oauth_status = if used_oauth { OAuthStatus::Authorized } else { OAuthStatus::default() };
-                self.clients.write().insert(server_name.to_string(), Arc::new(McpClientHandle { name: server_name.to_string(), peer: Some(peer), tools, resources, status: ClientStatus::Connected, oauth_status }));
+                self.clients.write().insert(server_name.to_string(), Arc::new(McpClientHandle {
+                    name: server_name.to_string(), peer: Some(peer), tools, resources,
+                    status: ClientStatus::Connected, oauth_status,
+                    source: server_config.source.clone(), url: server_config.url.clone(),
+                }));
                 self.services.lock().await.insert(server_name.to_string(), rs);
                 Ok(())
             }
@@ -336,6 +366,8 @@ impl McpClientPool {
                     resources,
                     status: ClientStatus::Connected,
                     oauth_status: OAuthStatus::Authorized,
+                    source: cfg.source.clone(),
+                    url: cfg.url.clone(),
                 });
                 self.clients.write().insert(server_name.to_string(), handle);
                 self.services.lock().await.insert(server_name.to_string(), rs);
@@ -365,10 +397,17 @@ impl McpClientPool {
     }
 
     pub fn server_infos(&self) -> Vec<ServerInfo> {
-        let configs = self.configs.read();
         self.clients.read().values().map(|h| {
-            let tt = configs.get(&h.name).map(|c| if c.command.is_some() { "stdio" } else if c.url.is_some() { "http" } else { "unknown" }).unwrap_or("unknown").to_string();
-            ServerInfo { name: h.name.clone(), transport_type: tt, status: h.status.clone(), tool_count: h.tools.len(), resource_count: h.resources.len(), oauth_status: h.oauth_status.clone() }
+            ServerInfo {
+                name: h.name.clone(),
+                transport_type: if h.url.is_some() { "http" } else { "stdio" }.to_string(),
+                status: h.status.clone(),
+                tool_count: h.tools.len(),
+                resource_count: h.resources.len(),
+                oauth_status: h.oauth_status.clone(),
+                source: h.source.clone(),
+                url: h.url.clone(),
+            }
         }).collect()
     }
 
@@ -440,7 +479,11 @@ impl McpClientPool {
                     let resources = rs.list_all_resources().await.unwrap_or_default();
                     let peer = rs.peer().clone();
                     let oauth_status = if used_oauth { OAuthStatus::Authorized } else { OAuthStatus::default() };
-                    pool.clients.write().insert(name.clone(), Arc::new(McpClientHandle { name: name.clone(), peer: Some(peer), tools, resources, status: ClientStatus::Connected, oauth_status }));
+                    pool.clients.write().insert(name.clone(), Arc::new(McpClientHandle {
+                        name: name.clone(), peer: Some(peer), tools, resources,
+                        status: ClientStatus::Connected, oauth_status,
+                        source: server_config.source.clone(), url: server_config.url.clone(),
+                    }));
                     pool.services.lock().await.insert(name.clone(), rs);
                 }
                 Ok(Err(e)) => {
@@ -518,6 +561,6 @@ mod tests {
     #[test] fn test_new_pending_creates_empty_pool() { let pool = McpClientPool::new_pending(); assert!(pool.clients.read().is_empty()); }
     #[test] fn test_server_infos_empty_pool() { assert!(McpClientPool::new_pending().server_infos().is_empty()); }
     #[tokio::test] async fn test_insert_failed() { let pool = Arc::new(McpClientPool::new_pending()); McpClientPool::insert_failed(&pool, "s", "err".into()); assert_eq!(pool.server_infos()[0].status, ClientStatus::Failed("err".into())); }
-    #[tokio::test] async fn test_remove_server() { let pool = Arc::new(McpClientPool::new_pending()); pool.clients.write().insert("a".into(), Arc::new(McpClientHandle { name: "a".into(), peer: None, tools: vec![], resources: vec![], status: ClientStatus::Connected, oauth_status: OAuthStatus::default() })); pool.remove_server("a").await; assert!(pool.server_infos().is_empty()); }
-    #[tokio::test] async fn test_get_tools_resources() { let pool = McpClientPool::new_pending(); pool.clients.write().insert("s".into(), Arc::new(McpClientHandle { name: "s".into(), peer: None, tools: vec![], resources: vec![], status: ClientStatus::Connected, oauth_status: OAuthStatus::default() })); assert!(pool.get_tools("s").is_empty()); assert!(pool.get_tools("x").is_empty()); }
+    #[tokio::test] async fn test_remove_server() { let pool = Arc::new(McpClientPool::new_pending()); pool.clients.write().insert("a".into(), Arc::new(McpClientHandle { name: "a".into(), peer: None, tools: vec![], resources: vec![], status: ClientStatus::Connected, oauth_status: OAuthStatus::default(), source: None, url: None })); pool.remove_server("a").await; assert!(pool.server_infos().is_empty()); }
+    #[tokio::test] async fn test_get_tools_resources() { let pool = McpClientPool::new_pending(); pool.clients.write().insert("s".into(), Arc::new(McpClientHandle { name: "s".into(), peer: None, tools: vec![], resources: vec![], status: ClientStatus::Connected, oauth_status: OAuthStatus::default(), source: None, url: None })); assert!(pool.get_tools("s").is_empty()); assert!(pool.get_tools("x").is_empty()); }
 }

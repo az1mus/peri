@@ -1,4 +1,19 @@
-use rust_agent_middlewares::mcp::{ClientStatus, Resource, ServerInfo, Tool};
+use rust_agent_middlewares::mcp::{ClientStatus, ConfigSource, Resource, ServerInfo, Tool};
+
+/// 详情视图中的操作菜单项
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DetailAction {
+    /// 查看工具列表
+    ViewTools,
+    /// 重新进行 OAuth 授权
+    ReAuthenticate,
+    /// 清除 OAuth 凭证
+    ClearAuth,
+    /// 重新连接
+    Reconnect,
+    /// 禁用/删除
+    Disable,
+}
 
 /// MCP 管理面板
 pub struct McpPanel {
@@ -18,13 +33,13 @@ pub struct McpPanel {
 pub enum McpPanelView {
     /// 服务器列表
     ServerList,
-    /// 服务器详情（工具 + 资源合并视图）
+    /// 服务器详情（元信息 + 操作菜单）
     ServerDetail {
         server_name: String,
         tools: Vec<Tool>,
         resources: Vec<Resource>,
-        /// 当前激活的 Tab：0=工具, 1=资源
-        active_tab: usize,
+        /// 可用的操作菜单
+        actions: Vec<DetailAction>,
     },
 }
 
@@ -33,17 +48,11 @@ impl McpPanelView {
         matches!(self, McpPanelView::ServerList)
     }
 
-    /// 获取当前 Tab 对应的列表长度
-    fn active_list_len(&self) -> usize {
+    /// 获取详情视图操作列表长度
+    fn action_count(&self) -> usize {
         match self {
             McpPanelView::ServerList => 0,
-            McpPanelView::ServerDetail { tools, resources, active_tab, .. } => {
-                match *active_tab {
-                    0 => tools.len(),
-                    1 => resources.len(),
-                    _ => 0,
-                }
-            }
+            McpPanelView::ServerDetail { actions, .. } => actions.len(),
         }
     }
 }
@@ -68,7 +77,7 @@ impl crate::app::App {
                     panel.cursor = panel.cursor.saturating_sub(1);
                 }
                 McpPanelView::ServerDetail { .. } => {
-                    let max = panel.view.active_list_len().saturating_sub(1);
+                    let max = panel.view.action_count().saturating_sub(1);
                     panel.cursor = panel.cursor.saturating_sub(1).min(max);
                 }
             }
@@ -85,7 +94,7 @@ impl crate::app::App {
                     }
                 }
                 McpPanelView::ServerDetail { .. } => {
-                    let max = panel.view.active_list_len().saturating_sub(1);
+                    let max = panel.view.action_count().saturating_sub(1);
                     if panel.cursor < max {
                         panel.cursor += 1;
                     }
@@ -96,31 +105,88 @@ impl crate::app::App {
 
     pub fn mcp_panel_enter(&mut self) {
         if let Some(ref mut panel) = self.mcp_panel {
-            if !panel.view.is_server_list() {
-                return;
+            match &panel.view {
+                McpPanelView::ServerList => {
+                    if panel.cursor >= panel.servers.len() {
+                        return;
+                    }
+                    let name = panel.servers[panel.cursor].name.clone();
+                    let server = &panel.servers[panel.cursor];
+                    let tools = self
+                        .mcp_pool
+                        .as_ref()
+                        .map(|p| p.get_tools(&name))
+                        .unwrap_or_default();
+                    let resources = self
+                        .mcp_pool
+                        .as_ref()
+                        .map(|p| p.get_resources(&name))
+                        .unwrap_or_default();
+
+                    // 构建操作菜单
+                    let mut actions = vec![DetailAction::ViewTools];
+                    if server.transport_type == "http" {
+                        actions.push(DetailAction::ReAuthenticate);
+                        actions.push(DetailAction::ClearAuth);
+                    }
+                    actions.push(DetailAction::Reconnect);
+                    actions.push(DetailAction::Disable);
+
+                    panel.view = McpPanelView::ServerDetail {
+                        server_name: name,
+                        tools,
+                        resources,
+                        actions,
+                    };
+                    panel.cursor = 0;
+                    panel.scroll_offset = 0;
+                }
+                McpPanelView::ServerDetail { ref actions, .. } => {
+                    if panel.cursor >= actions.len() {
+                        return;
+                    }
+                    let action = actions[panel.cursor].clone();
+                    self.mcp_panel_execute_action(action);
+                }
             }
-            if panel.cursor >= panel.servers.len() {
-                return;
+        }
+    }
+
+    /// 执行详情视图选中的操作
+    fn mcp_panel_execute_action(&mut self, action: DetailAction) {
+        let server_name = match &self.mcp_panel.as_ref().unwrap().view {
+            McpPanelView::ServerDetail { server_name, .. } => server_name.clone(),
+            _ => return,
+        };
+        match action {
+            DetailAction::ViewTools => {
+                // 暂时只显示在工具数量中，后续可扩展为独立视图
             }
-            let name = panel.servers[panel.cursor].name.clone();
-            let tools = self
-                .mcp_pool
-                .as_ref()
-                .map(|p| p.get_tools(&name))
-                .unwrap_or_default();
-            let resources = self
-                .mcp_pool
-                .as_ref()
-                .map(|p| p.get_resources(&name))
-                .unwrap_or_default();
-            panel.view = McpPanelView::ServerDetail {
-                server_name: name,
-                tools,
-                resources,
-                active_tab: 0,
-            };
-            panel.cursor = 0;
-            panel.scroll_offset = 0;
+            DetailAction::ReAuthenticate => {
+                self.mcp_panel_back();
+                self.set_mcp_cursor_to_server(&server_name);
+                self.mcp_panel_request_oauth();
+            }
+            DetailAction::ClearAuth => {
+                // TODO: 清除 OAuth 凭证
+            }
+            DetailAction::Reconnect => {
+                self.mcp_panel_back();
+                self.set_mcp_cursor_to_server(&server_name);
+                self.mcp_panel_reconnect();
+            }
+            DetailAction::Disable => {
+                self.mcp_panel_back();
+                self.set_mcp_cursor_to_server(&server_name);
+                self.mcp_panel_request_delete();
+            }
+        }
+    }
+
+    /// 将 MCP 面板 cursor 设置到指定服务器
+    fn set_mcp_cursor_to_server(&mut self, server_name: &str) {
+        if let Some(ref mut panel) = self.mcp_panel {
+            panel.cursor = panel.servers.iter().position(|s| s.name == server_name).unwrap_or(0);
         }
     }
 
@@ -129,19 +195,14 @@ impl crate::app::App {
             if panel.view.is_server_list() {
                 return;
             }
+            // 记住之前选中的服务器名称，返回列表时恢复 cursor
+            let name = match &panel.view {
+                McpPanelView::ServerDetail { server_name, .. } => server_name.clone(),
+                _ => String::new(),
+            };
             panel.view = McpPanelView::ServerList;
-            panel.cursor = 0;
+            panel.cursor = panel.servers.iter().position(|s| s.name == name).unwrap_or(0);
             panel.scroll_offset = 0;
-        }
-    }
-
-    pub fn mcp_panel_tab(&mut self) {
-        if let Some(ref mut panel) = self.mcp_panel {
-            if let McpPanelView::ServerDetail { active_tab, .. } = &mut panel.view {
-                *active_tab = if *active_tab == 0 { 1 } else { 0 };
-                panel.cursor = 0;
-                panel.scroll_offset = 0;
-            }
         }
     }
 
@@ -221,10 +282,6 @@ impl crate::app::App {
             if panel.cursor >= panel.servers.len() {
                 return;
             }
-            let status = &panel.servers[panel.cursor].status;
-            if !matches!(status, ClientStatus::Failed(_)) {
-                return;
-            }
             let name = panel.servers[panel.cursor].name.clone();
             if let Some(pool) = self.mcp_pool.clone() {
                 tokio::spawn(async move {
@@ -256,43 +313,40 @@ impl crate::app::App {
             let name = server.name.clone();
             if let Some(pool) = self.mcp_pool.clone() {
                 let tx = self.bg_event_tx.clone();
+                let ok_tx = self.bg_event_tx.clone();
                 let err_tx = self.bg_event_tx.clone();
                 tokio::spawn(async move {
                     let result = pool
                         .start_oauth_flow(&name, Box::new(move |ev| {
+                            // 只传播 AuthorizationNeeded（弹窗需要显示 URL），
+                            // 完成/失败事件由 spawned task 在 pool 更新后统一发送，
+                            // 避免 pool 未更新时面板就刷新导致显示 0 servers
                             use rust_agent_middlewares::mcp::OAuthFlowEvent;
-                            let event = match ev {
-                                OAuthFlowEvent::AuthorizationNeeded {
-                                    server_name,
-                                    authorization_url,
-                                    callback_tx,
-                                } => {
+                            if let OAuthFlowEvent::AuthorizationNeeded {
+                                server_name,
+                                authorization_url,
+                                callback_tx,
+                            } = ev
+                            {
+                                let _ = tx.try_send(
                                     super::events::AgentEvent::OAuthAuthorizationNeeded {
                                         server_name,
                                         authorization_url,
                                         callback_tx,
-                                    }
-                                }
-                                OAuthFlowEvent::AuthorizationCompleted { server_name } => {
-                                    super::events::AgentEvent::OAuthAuthorizationCompleted {
-                                        server_name,
-                                    }
-                                }
-                                OAuthFlowEvent::AuthorizationFailed {
-                                    server_name,
-                                    error,
-                                } => super::events::AgentEvent::OAuthAuthorizationFailed {
-                                    server_name,
-                                    error,
-                                },
-                            };
-                            let _ = tx.try_send(event);
+                                    },
+                                );
+                            }
                         }))
                         .await;
                     if let Err(e) = result {
                         let _ = err_tx.try_send(super::events::AgentEvent::OAuthAuthorizationFailed {
                             server_name: name,
                             error: e.to_string(),
+                        });
+                    } else {
+                        // pool 已更新（start_oauth_flow 内部插入了新的 connected handle），安全刷新
+                        let _ = ok_tx.try_send(super::events::AgentEvent::OAuthAuthorizationCompleted {
+                            server_name: name,
                         });
                     }
                 });
@@ -317,6 +371,8 @@ mod tests {
             tool_count: 0,
             resource_count: 0,
             oauth_status: Default::default(),
+            source: None,
+            url: None,
         }
     }
 
@@ -346,13 +402,11 @@ mod tests {
         ];
         app.mcp_panel = Some(McpPanel::new(servers));
 
-        // move_up 5 次，应停在 0
         for _ in 0..5 {
             app.mcp_panel_move_up();
         }
         assert_eq!(app.mcp_panel.as_ref().unwrap().cursor, 0);
 
-        // move_down 5 次，应停在 2
         for _ in 0..5 {
             app.mcp_panel_move_down();
         }
@@ -383,5 +437,37 @@ mod tests {
 
         app.mcp_panel_cancel_delete();
         assert!(app.mcp_panel.as_ref().unwrap().confirm_delete.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_mcp_panel_enter_builds_actions() {
+        let (mut app, _handle) = crate::app::App::new_headless(80, 24);
+        let mut srv = make_server_info("http-srv", ClientStatus::Connected);
+        srv.transport_type = "http".to_string();
+        app.mcp_panel = Some(McpPanel::new(vec![srv]));
+
+        app.mcp_panel_enter();
+        match &app.mcp_panel.as_ref().unwrap().view {
+            McpPanelView::ServerDetail { actions, .. } => {
+                assert!(actions.contains(&DetailAction::ReAuthenticate));
+                assert!(actions.contains(&DetailAction::ClearAuth));
+                assert!(actions.contains(&DetailAction::Reconnect));
+                assert!(actions.contains(&DetailAction::Disable));
+            }
+            _ => panic!("应进入 ServerDetail 视图"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_mcp_panel_back_restores_cursor() {
+        let (mut app, _handle) = crate::app::App::new_headless(80, 24);
+        app.mcp_panel = Some(McpPanel::new(vec![
+            make_server_info("a", ClientStatus::Connected),
+            make_server_info("b", ClientStatus::Connected),
+        ]));
+        app.mcp_panel.as_mut().unwrap().cursor = 1;
+        app.mcp_panel_enter();
+        app.mcp_panel_back();
+        assert_eq!(app.mcp_panel.as_ref().unwrap().cursor, 1);
     }
 }

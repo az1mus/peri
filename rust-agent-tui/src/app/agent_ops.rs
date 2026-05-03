@@ -353,6 +353,14 @@ impl App {
             }
             AgentEvent::OAuthAuthorizationCompleted { server_name } => {
                 self.oauth_prompt = None;
+                // 刷新 MCP 面板的服务器列表以反映新的连接状态
+                if let Some(ref mut panel) = self.mcp_panel {
+                    panel.servers = self
+                        .mcp_pool
+                        .as_ref()
+                        .map(|p| p.server_infos())
+                        .unwrap_or_default();
+                }
                 let vm = MessageViewModel::system(format!("[i] OAuth 授权完成: {}", server_name));
                 self.core.view_messages.push(vm.clone());
                 let _ = self.core.render_tx.send(RenderEvent::AddMessage(vm));
@@ -360,6 +368,14 @@ impl App {
             }
             AgentEvent::OAuthAuthorizationFailed { server_name, error } => {
                 self.oauth_prompt = None;
+                // 刷新 MCP 面板的服务器列表（可能仍是 Failed 状态但信息已更新）
+                if let Some(ref mut panel) = self.mcp_panel {
+                    panel.servers = self
+                        .mcp_pool
+                        .as_ref()
+                        .map(|p| p.server_infos())
+                        .unwrap_or_default();
+                }
                 let vm = MessageViewModel::system(format!("[i] OAuth 授权失败: {} - {}", server_name, error));
                 self.core.view_messages.push(vm.clone());
                 let _ = self.core.render_tx.send(RenderEvent::AddMessage(vm));

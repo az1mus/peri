@@ -195,6 +195,8 @@ mod tests {
             resources: vec![],
             status: ClientStatus::Failed("connection lost".to_string()),
             oauth_status: Default::default(),
+            source: None,
+            url: None,
         })
     }
 
