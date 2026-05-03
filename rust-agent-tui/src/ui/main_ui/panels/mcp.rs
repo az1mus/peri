@@ -51,12 +51,12 @@ fn render_server_list(f: &mut Frame, app: &mut App, area: Rect) {
 
         if !project_servers.is_empty() {
             let header_text = match &project_servers[0].source {
-                Some(ConfigSource::Project(path)) => format!("    Project MCPs ({})", path.display()),
-                _ => "    Project MCPs".to_string(),
+                Some(ConfigSource::Project(path)) => format!("  Project MCPs ({})", path.display()),
+                _ => "  Project MCPs".to_string(),
             };
             lines.push(Line::from(Span::styled(
                 header_text,
-                Style::default().fg(theme::MUTED).add_modifier(Modifier::ITALIC),
+                Style::default().fg(theme::MUTED),
             )));
             render_server_group(&mut lines, &project_servers, cursor, &project_start_offset(servers));
             lines.push(Line::from(""));
@@ -64,12 +64,12 @@ fn render_server_list(f: &mut Frame, app: &mut App, area: Rect) {
 
         if !user_servers.is_empty() {
             let header_text = match &user_servers[0].source {
-                Some(ConfigSource::Global(path)) => format!("    User MCPs ({})", path.display()),
-                _ => "    User MCPs".to_string(),
+                Some(ConfigSource::Global(path)) => format!("  User MCPs ({})", path.display()),
+                _ => "  User MCPs".to_string(),
             };
             lines.push(Line::from(Span::styled(
                 header_text,
-                Style::default().fg(theme::MUTED).add_modifier(Modifier::ITALIC),
+                Style::default().fg(theme::MUTED),
             )));
             render_server_group(&mut lines, &user_servers, cursor, &user_start_offset(servers));
             lines.push(Line::from(""));
