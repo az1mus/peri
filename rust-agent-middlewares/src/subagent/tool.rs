@@ -379,9 +379,9 @@ impl SubAgentTool {
             agent_builder = agent_builder.register_tool(tool);
         }
 
-        if let Some(handler) = &self.event_handler {
-            agent_builder = agent_builder.with_event_handler(Arc::clone(handler));
-        }
+        // Background agent 不共享父的 event_handler，避免子 agent 的事件
+        // （TextChunk、ToolStart、Done 等）混入父 agent 的消息流。
+        // 完成通知通过 spawn 后的 BackgroundTaskCompleted 事件单独发送。
 
         // Pass cancel token to child agent
         let cancel_token = self.cancel.clone();
@@ -481,7 +481,7 @@ impl BaseTool for SubAgentTool {
                 },
                 "subagent_type": {
                     "type": "string",
-                    "description": "The agent type/ID matching an existing agent definition file at .claude/agents/{subagent_type}.md or .claude/agents/{subagent_type}/agent.md. When empty or not provided, creates a fork of the current agent with all tools"
+                    "description": "The agent ID from the available agents list (e.g., 'code-reviewer', 'explorer'). Must exactly match an agent definition file at .claude/agents/{subagent_type}.md or .claude/agents/{subagent_type}/agent.md. When empty or not provided, creates a fork of the current agent with all tools"
                 },
                 "name": {
                     "type": "string",

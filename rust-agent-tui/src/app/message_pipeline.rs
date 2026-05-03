@@ -283,7 +283,7 @@ impl MessagePipeline {
 
         // 构建 ToolBlock VM（从 BaseMessage 路径，保持一致）
         if name == "Agent" {
-            let agent_id = input["subagent_type"].as_str().unwrap_or("unknown").to_string();
+            let agent_id = input["subagent_type"].as_str().unwrap_or("Agent").to_string();
             let task_preview: String = input["prompt"]
                 .as_str()
                 .unwrap_or("")

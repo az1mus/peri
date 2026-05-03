@@ -57,7 +57,8 @@ impl PromptEnv {
 
 /// 扫描 `.claude/agents/` 目录，格式化为 agent 列表字符串。
 ///
-/// 格式：`- **{name}** (`{agent_id}`): {description}`
+/// 格式：`- {agent_id}: {description}`
+/// agent_id 即 subagent_type 参数值（文件名去掉 .md），作为主标识符。
 /// 无 agent 时返回提示信息。
 fn format_available_agents(cwd: &str) -> String {
     let agents = rust_agent_middlewares::scan_agents(cwd);
@@ -66,8 +67,8 @@ fn format_available_agents(cwd: &str) -> String {
     }
     agents
         .iter()
-        .map(|(agent_id, name, description)| {
-            format!("- **{}** (`{}`): {}", name, agent_id, description)
+        .map(|(agent_id, _name, description)| {
+            format!("- {}: {}", agent_id, description)
         })
         .collect::<Vec<_>>()
         .join("\n")

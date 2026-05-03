@@ -399,6 +399,7 @@ impl crate::app::App {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rust_agent_middlewares::mcp::ClientStatus;
 
     fn make_server_info(name: &str, status: ClientStatus) -> ServerInfo {
         ServerInfo {

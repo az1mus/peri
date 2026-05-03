@@ -973,10 +973,11 @@ impl App {
                 // 以 ToolBlock 样式显示（紧凑单行格式，折叠长输出）
                 let short_id = &task_id[..8.min(task_id.len())];
                 let display_name = format!("bg:{}", agent_name);
-                // 输出截断为单行（取第一行，再截取前 120 字符）
+                // 输出截断为单行（取第一行，再截取前 80 字符）
                 let first_line = output.lines().next().unwrap_or("");
-                let one_line = if first_line.len() > 120 {
-                    format!("{}...", &first_line[..120])
+                let one_line = if first_line.chars().count() > 80 {
+                    let truncated: String = first_line.chars().take(80).collect();
+                    format!("{}...", truncated)
                 } else if first_line.is_empty() && !output.is_empty() {
                     String::from("(empty)")
                 } else {
@@ -1003,7 +1004,31 @@ impl App {
                     tracing::info!("all background tasks completed, auto-submitting continuation");
                     self.agent.agent_done_pending_bg = false;
                     self.agent.agent_rx = None;
-                    self.agent.pending_bg_continuation = Some(state_notification);
+                    // 截断显示文本（完整数据已在 agent_state_messages 中供 LLM 使用）
+                    let display_notification = if success {
+                        let output_preview: String = output.lines().next().unwrap_or("").chars().take(80).collect();
+                        format!(
+                            "[后台任务 {} 已完成] Agent: {} | 工具调用: {} | 耗时: {}ms\n{}",
+                            &task_id[..8.min(task_id.len())],
+                            agent_name,
+                            tool_calls_count,
+                            duration_ms,
+                            if output.chars().count() > 80 || output.lines().count() > 1 {
+                                format!("{}...", output_preview)
+                            } else {
+                                output_preview
+                            },
+                        )
+                    } else {
+                        let err_preview: String = output.chars().take(80).collect();
+                        format!(
+                            "[后台任务 {} 执行失败] Agent: {} | {}",
+                            &task_id[..8.min(task_id.len())],
+                            agent_name,
+                            err_preview,
+                        )
+                    };
+                    self.agent.pending_bg_continuation = Some(display_notification);
                     return (true, false, true);
                 }
 
@@ -1050,6 +1075,33 @@ impl App {
                     self.core.pipeline.done();
                     // 重置 subagent_depth，防止残留计数过滤后续 TokenUsageUpdate
                     self.agent.subagent_depth = 0;
+
+                    // 后台任务场景：spawn closure 结束后丢弃最后一个 sender 导致通道关闭。
+                    // 如果有后台任务，说明 BackgroundTaskCompleted 已处理或通道竞态关闭，
+                    // 不应显示 "连接异常断开" 错误。静默清理并结束 loading 状态。
+                    if self.agent.agent_done_pending_bg || self.background_task_count > 0 {
+                        tracing::info!(
+                            agent_done = self.agent.agent_done_pending_bg,
+                            bg_count = self.background_task_count,
+                            "channel disconnected during background task flow, suppressing error"
+                        );
+                        self.agent.agent_done_pending_bg = false;
+                        self.background_task_count = 0;
+                        self.agent.agent_rx = None;
+                        if let Some(ref tracer) = self.langfuse.langfuse_tracer {
+                            self.langfuse.langfuse_flush_handle =
+                                Some(tracer.lock().on_trace_end(None));
+                        }
+                        self.langfuse.langfuse_tracer = None;
+                        self.set_loading(false);
+                        self.agent.interaction_prompt = None;
+                        self.agent.pending_hitl_items = None;
+                        self.agent.pending_ask_user = None;
+                        if let Some(start) = self.agent.task_start_time {
+                            self.agent.last_task_duration = Some(start.elapsed());
+                        }
+                        return true;
+                    }
 
                     let vm = MessageViewModel::tool_block(
                         "error".to_string(),
