@@ -11,8 +11,7 @@ use ratatui::{
     Frame,
 };
 
-use crate::app::login_panel::LoginPanelMode;
-use crate::app::App;
+use crate::app::{login_panel::LoginPanelMode, App};
 use crate::ui::theme;
 use crate::ui::welcome;
 use rust_agent_middlewares::prelude::TodoStatus;
@@ -44,11 +43,14 @@ pub fn render(f: &mut Frame, app: &mut App) {
 
         app.session_areas = cols.iter().copied().collect();
 
+        // 先渲染非 active session，再渲染 active session（确保光标位置正确）
         for (i, col_area) in cols.iter().enumerate() {
-            let is_active = i == app.active;
-            // 渲染 session 列（内部垂直布局）
-            render_session_column(f, app, i, *col_area, is_active);
+            if i == app.active {
+                continue;
+            }
+            render_session_column(f, app, i, *col_area, false);
         }
+        render_session_column(f, app, app.active, cols[app.active], true);
 
         status_bar::render_status_bar(f, app, outer[1]);
     } else {
@@ -156,23 +158,9 @@ fn render_session_column(
         }
     }
 
-    // 输入框（所有 session 都显示，active 有光标；多 session 时 active 紫色边框）
-    {
-        let textarea = &app.sessions[session_idx].core.textarea;
-        let border_color = if is_active && app.sessions.len() > 1 { theme::THINKING } else { theme::MUTED };
-        let mut ta = textarea.clone();
-        ta.set_block(
-            ratatui::widgets::Block::default()
-                .borders(ratatui::widgets::Borders::TOP | ratatui::widgets::Borders::BOTTOM)
-                .border_style(Style::default().fg(border_color))
-                .padding(ratatui::widgets::Padding::new(2, 0, 0, 0)),
-        );
-        if !is_active {
-            ta.set_cursor_style(Style::default().fg(theme::MUTED));
-        }
-        f.render_widget(&ta, chunks[4]);
-        app.sessions[session_idx].core.textarea_area = Some(chunks[4]);
-    }
+    // 输入框（直接渲染，不 clone/set_block，避免 tui_textarea 内部状态丢失）
+    f.render_widget(&app.sessions[session_idx].core.textarea, chunks[4]);
+    app.sessions[session_idx].core.textarea_area = Some(chunks[4]);
 
     // ❯ 前缀
     let prompt_x = chunks[4].x;

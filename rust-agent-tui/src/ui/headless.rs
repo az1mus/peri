@@ -2787,4 +2787,41 @@ mod tests {
             snap
         );
     }
+
+    // ── Textarea Input During Loading ──────────────────────────────────────
+
+    #[tokio::test]
+    async fn test_textarea_input_visible_during_loading() {
+        use tui_textarea::{Input, Key};
+
+        let (mut app, mut handle) = App::new_headless(120, 30);
+
+        // 模拟 agent 运行中（loading = true）
+        app.set_loading(true);
+
+        // 用户在 loading 时输入文字
+        app.sessions[app.active].core.textarea.input(Input {
+            key: Key::Char('h'),
+            ctrl: false,
+            alt: false,
+            shift: false,
+        });
+        app.sessions[app.active].core.textarea.input(Input {
+            key: Key::Char('i'),
+            ctrl: false,
+            alt: false,
+            shift: false,
+        });
+
+        handle
+            .terminal
+            .draw(|f| main_ui::render(f, &mut app))
+            .unwrap();
+        let snap = handle.snapshot();
+        assert!(
+            snap.iter().any(|line| line.contains("hi")),
+            "Loading 时输入的文字 'hi' 应该可见，实际:\n{}",
+            snap.join("\n")
+        );
+    }
 }
