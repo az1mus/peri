@@ -92,8 +92,11 @@ pub async fn next_event(app: &mut App) -> Result<Option<Action>> {
                 return Ok(Some(Action::Redraw));
             }
 
-            // Ctrl+Tab 循环切换模型别名（opus → sonnet → haiku → opus）
-            if key_event.code == KeyCode::Tab && key_event.modifiers.contains(KeyModifiers::CONTROL)
+            // Alt+M 循环切换模型别名（opus → sonnet → haiku → opus）
+            // macOS 默认 Alt 作为字符修饰键，Alt+M 发送 'µ' 且不带 ALT 修饰符
+            if matches!(key_event.code, KeyCode::Char('µ'))
+                || (key_event.modifiers.contains(KeyModifiers::ALT)
+                    && matches!(key_event.code, KeyCode::Char('m')))
             {
                 if let Some(cfg) = app.zen_config.as_mut() {
                     let aliases = ["opus", "sonnet", "haiku"];
