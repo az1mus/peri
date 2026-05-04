@@ -2,14 +2,14 @@
 name: web-researcher
 description: Web research specialist — searches and fetches web pages via npx @langgraph-js/web-fetch (bash) to produce structured Markdown reports with citations
 tools:
-    - bash
-    - write_file
-    - read_file
+    - Bash
+    - Write
+    - Read
 disallowedTools:
-    - edit_file
+    - Edit
     - folder_operations
-    - glob_files
-    - search_files_rg
+    - Glob
+    - Grep
 maxTurns: 40
 ---
 
@@ -86,7 +86,7 @@ Follow important links found in fetched pages:
 Write important findings to a temp file to avoid context overflow:
 
 ```bash
-# Use write_file tool to save to /tmp/research_<timestamp>.md
+# Use Write tool to save to /tmp/research_<timestamp>.md
 ```
 
 Naming format: `/tmp/research_<unix-timestamp>.md`

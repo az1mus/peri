@@ -1,6 +1,6 @@
 # acpx-g
 
-DAG workflow engine — YAML-defined workflows, web API, SQLite persistence.
+DAG workflow engine — YAML-defined workflows, web UI, REST API, SQLite persistence, directory watcher.
 
 ## Quick Start
 
@@ -10,18 +10,34 @@ DATABASE_URL="sqlite:acpx-g.db?mode=rwc" cargo run -p acpx-g
 
 # Or with default settings
 cargo run -p acpx-g
+
+# Watch a directory for workflow YAML files (auto-submit on version change)
+cargo run -p acpx-g -- --workflow-dir ./workflows
 ```
 
-Server starts on `http://0.0.0.0:3000` (configurable via `PORT` env).
+Server starts on `http://0.0.0.0:3000` (configurable via `PORT` env). Open in browser for the built-in Web UI.
+
+## Web UI
+
+The server serves a single-page application from `static/` with:
+
+- **DAG visualization** — interactive node graph with zoom/pan, color-coded statuses
+- **Run list** — recent workflow runs with duration and status
+- **Node logs** — click any node to view stdout/stderr
+- **Template runner** — browse discovered templates, fill inputs, and run
+- **API docs** — built-in endpoint reference (also at `GET /api/v1/docs`)
 
 ## API Endpoints
 
 | Method | Path | Description |
 |--------|------|-------------|
 | `POST` | `/api/v1/workflows` | Submit and execute a workflow |
-| `GET` | `/api/v1/workflows` | List recent workflow runs |
+| `GET` | `/api/v1/workflows` | List recent workflow runs (last 50) |
 | `GET` | `/api/v1/workflows/{run_id}` | Get run details + all node statuses |
 | `GET` | `/api/v1/workflows/{run_id}/nodes/{node_id}/logs` | Get node stdout/stderr |
+| `GET` | `/api/v1/templates` | List discovered workflow templates |
+| `POST` | `/api/v1/templates/{name}/run` | Run a template by name (with inputs) |
+| `GET` | `/api/v1/docs` | API documentation |
 
 ### Submit a Workflow
 
@@ -34,6 +50,18 @@ curl -X POST http://localhost:3000/api/v1/workflows \
 Response:
 ```json
 { "run_id": "0193...", "status": "pending" }
+```
+
+### Run a Template
+
+```bash
+# List available templates
+curl http://localhost:3000/api/v1/templates
+
+# Run a template with inputs
+curl -X POST http://localhost:3000/api/v1/templates/hello/run \
+  -H "Content-Type: application/json" \
+  -d '{"inputs": {"tag": "v1.0.0", "env": "production"}}'
 ```
 
 ### Check Run Status
@@ -89,9 +117,13 @@ nodes:
   # Shell: inline script
   - id: checkout
     type: shell
-    run: "git clone https://github.com/org/repo.git && cd repo && git checkout {{ inputs.tag }}"
+    run: |
+      git clone https://github.com/org/repo.git repo
+      cd repo && git checkout {{ inputs.tag }}
     outputs:
       repo_dir: "./repo"
+    env:
+      GIT_TERMINAL_PROMPT: "0"
 
   # Shell: external file
   - id: build
@@ -100,6 +132,8 @@ nodes:
     depends: [checkout]
     timeout: 600
     retry: 1
+    outputs:
+      artifact_path: "./repo/target/release/app"
 
   # Shell: platform-specific scripts
   - id: deploy
@@ -111,10 +145,11 @@ nodes:
       default: "./scripts/deploy.sh"
     depends: [build]
 
-  # Agent: wraps acpx CLI
+  # Agent: wraps acpx CLI (default subcommand: "peri")
   - id: review
     type: agent
     prompt: "Review changes for tag {{ inputs.tag }}"
+    agent: peri                     # CLI subcommand (peri / claude / codex, default: peri)
     model: sonnet
     cwd: "{{ needs.checkout.outputs.repo_dir }}"
     depends: [build]
@@ -124,6 +159,7 @@ nodes:
     type: agent
     prompt: { file: "./prompts/summarize.md" }
     depends: [review]
+    continue_on_error: true
 
   # Reference: call another workflow
   - id: call-notify
@@ -134,12 +170,24 @@ nodes:
     depends: [deploy]
 ```
 
+### Input Validation
+
+Workflow inputs support type checking:
+
+| Type | Validation |
+|------|------------|
+| `string` | Accepted as-is |
+| `number` | Parsed as f64, rejects non-numeric |
+| `boolean` | Accepts `true`/`false` (string or bool) |
+
+Inputs with `required: true` and no `default` must be provided when submitting. Missing required inputs return a `400` error.
+
 ## Node Types
 
 | Type | Description |
 |------|-------------|
 | `shell` | Execute inline script, external file, or platform-specific scripts |
-| `agent` | Wrap `acpx` CLI as a node (inline prompt, external file, or platform-specific) |
+| `agent` | Wrap `acpx` CLI as a node. Fields: `prompt` (required), `agent` (CLI subcommand, default `"peri"`), `model`, `cwd` |
 | `reference` | Call another workflow by alias (local path or HTTPS URL) |
 
 ### Script / Prompt Sources
@@ -332,31 +380,93 @@ See `examples/` directory:
 
 | File | Description |
 |------|-------------|
-| `ci-pipeline.yaml` | Parent workflow referencing build + notify |
-| `build-lib.yaml` | Reusable build sub-workflow (checkout → build → test) |
-| `notify.yaml` | Reusable notification sub-workflow |
-| `simple-ci.yaml` | Standalone workflow (no references) |
+| `simple-ci.yaml` | Parent workflow referencing setup + agent node |
+| `setup.yml` | Simple setup sub-workflow (single shell node) |
+| `build-lib.yaml` | Reusable build sub-workflow (checkout → build → test with outputs) |
+| `notify.yaml` | Reusable notification sub-workflow (parameterized inputs) |
 
-**Before expansion** (`ci-pipeline.yaml`):
+**Before expansion** (`simple-ci.yaml`):
 
 ```
-do-build ─────────────────────┐    (reference node)
-notify-build-ok ──────┐       │    (reference node)
-deploy ───────────────┼───────┤    (depends: do-build/build)
-review ───────────────┼───────┤    (depends: do-build/checkout)
-notify-done ──────────┴───────┘    (depends: deploy, review, notify-build-ok)
+do-setup ───┐    (reference node → setup.yml)
+             │
+acpx ───────┘    (agent node, depends: do-setup)
 ```
 
 **After expansion** (flat DAG):
 
 ```
-do-build/checkout ──→ do-build/build ──→ do-build/test
-       │                     │
-       ├─→ review            ├─→ deploy
-       │                     │
-notify-ok/send ←─────────────┼──────── (depends: do-build exit nodes)
+do-setup/shell_test ──→ acpx
+```
+
+**More complex example** — a parent using `build-lib.yaml` + `notify.yaml`:
+
+```yaml
+# Parent workflow
+name: ci-pipeline
+version: "1.0"
+
+references:
+  build: "./build-lib.yaml"
+  notify: "./notify.yaml"
+
+inputs:
+  repo:
+    type: string
+    required: true
+  tag:
+    type: string
+    required: true
+
+nodes:
+  - id: do-build
+    type: reference
+    ref: build
+    with:
+      repo_url: "{{ inputs.repo }}"
+      branch: "{{ inputs.tag }}"
+
+  - id: notify-ok
+    type: reference
+    ref: notify
+    with:
+      channel: "#deploy"
+      message: "Build {{ inputs.tag }} succeeded"
+    depends: [do-build]
+
+  - id: deploy
+    type: shell
+    run: "deploy {{ needs.do-build/build.artifact_path }}"
+    depends: [do-build/build]
+
+  - id: notify-done
+    type: reference
+    ref: notify
+    with:
+      channel: "#deploy"
+      message: "Deploy done"
+    depends: [deploy, notify-ok]
+```
+
+**Before expansion:**
+
+```
+do-build ─────────────────────┐    (reference node)
+notify-ok ─────────────┐      │    (reference node)
+deploy ────────────────┼──────┤    (depends: do-build/build)
+notify-done ───────────┴──────┘    (depends: deploy, notify-ok)
+```
+
+**After expansion** (flat DAG):
+
+```
+do-build/checkout → do-build/build → do-build/test
+       │                  │
+       │                  ├─→ deploy
+       │                  │
+notify-ok/send ←──────────┼─────── (depends: do-build exit nodes)
        │
-notify-done/send ←───────────┴──────── (depends: deploy, review, notify-ok/send)
+notify-done/send ←────────┴─────── (depends: deploy, notify-ok/send)
 ```
 
 ### Summary: Reference Node Behavior
@@ -380,20 +490,32 @@ notify-done/send ←───────────┴────────
 acpx-g/
 ├── Cargo.toml
 ├── README.md
+├── examples/                 # Example workflow YAML files
+│   ├── simple-ci.yaml        # Parent workflow referencing build + notify
+│   ├── build-lib.yaml        # Reusable build sub-workflow
+│   ├── notify.yaml           # Reusable notification sub-workflow
+│   └── setup.yml             # Setup sub-workflow
+├── static/                   # Web UI (SPA)
+│   ├── index.html            # Single-page app shell
+│   ├── style.css             # Styles
+│   ├── app.js                # Main application logic + DAG visualization
+│   └── api-docs.js           # API documentation modal
 └── src/
-    ├── main.rs            # axum HTTP server
-    ├── lib.rs             # crate root
-    ├── schema.rs          # YAML schema types + platform resolution
+    ├── main.rs               # axum HTTP server, CLI arg parsing, watcher startup
+    ├── lib.rs                # crate root
+    ├── schema.rs             # YAML schema types + platform resolution
+    ├── watcher.rs            # Directory watcher for auto-submitting workflows
     ├── db/
-    │   ├── mod.rs         # SQLite init + migrations
-    │   └── models.rs      # WorkflowRun, NodeRun, API types
+    │   ├── mod.rs            # SQLite init + migrations
+    │   └── models.rs         # WorkflowRun, NodeRun, API request/response types
     ├── api/
     │   ├── mod.rs
-    │   └── workflows.rs   # axum handlers
+    │   └── workflows.rs      # axum handlers (workflows + templates + docs)
     └── runner/
-        ├── mod.rs         # DAG scheduler (topological sort, parallel exec)
-        ├── executor.rs    # Shell + agent execution
-        └── loader.rs      # YAML loading + reference resolution
+        ├── mod.rs            # DAG scheduler (topological sort, parallel exec)
+        ├── executor.rs       # Shell + agent execution with retry/timeout
+        ├── loader.rs         # YAML loading + recursive reference resolution
+        └── template.rs       # Template variable interpolation ({{ }})
 ```
 
 ### DAG Execution Model
@@ -408,10 +530,28 @@ acpx-g/
 
 SQLite via `sqlx`. Two tables:
 
-- `workflow_runs` — id, name, version, yaml_content, status, timestamps
-- `node_runs` — id, run_id, node_id, node_type, status, attempt, stdout, stderr, exit_code
+- `workflow_runs` — id, name, version, yaml_content, status, node_count, timestamps, error_message
+- `node_runs` — id, run_id, node_id, node_type, status, attempt, timestamps, exit_code, stdout, stderr, error_message, outputs (JSON), depends (JSON array)
 
 Default DB path: `acpx-g.db` (configurable via `DATABASE_URL`).
+
+## Directory Watcher
+
+When started with `--workflow-dir <DIR>`, the server watches a directory for `.yaml`/`.yml` files:
+
+1. **First scan** — tracks all workflow names and versions (no submission)
+2. **Subsequent scans** (every 10s) — submits a new run when a workflow's `version` field changes
+3. **Template list** — all discovered workflows are exposed via `GET /api/v1/templates`
+4. **Recursive** — scans subdirectories recursively
+
+This enables a GitOps-style workflow: update a YAML file's `version`, and the watcher automatically submits a new run.
+
+## CLI Options
+
+| Option | Description |
+|--------|-------------|
+| `--workflow-dir <DIR>` | Watch directory for workflow YAML files (auto-submit on version change) |
+| `--help`, `-h` | Show usage information |
 
 ## Environment Variables
 
@@ -428,9 +568,11 @@ Zero dependencies on the existing agent framework. Fully standalone.
 | Crate | Purpose |
 |-------|---------|
 | `axum` | HTTP server + routing |
-| `sqlx` | SQLite persistence |
+| `sqlx` | SQLite persistence (compile-time query checks) |
 | `serde` + `serde_yaml` | YAML schema deserialization |
 | `tokio` | Async runtime |
 | `reqwest` | Remote workflow fetching |
+| `tower-http` | CORS, tracing, static file serving |
 | `tracing` | Structured logging |
-| `uuid` | Run/node ID generation |
+| `uuid` | v7 run/node ID generation (time-sortable) |
+| `chrono` | Timestamp handling |
