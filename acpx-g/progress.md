@@ -326,3 +326,9 @@ YAML schema 新增可选 `timeout` 字段（秒），run_workflow 中用 tokio::
 ### 新增功能：节点条件执行
 
 ExecConfig 新增可选 `if` 字段（YAML key: `if`），值为模板表达式。execute_dag 在依赖满足后、spawn 任务前求值：支持 truthiness（空/false/0/no → 跳过）、`==` 和 `!=` 比较运算符。条件为 false 时节点标记 skipped，下游依赖节点因 completed 集合不含该节点也被跳过。NodeRun 新增 `mark_node_skipped()` 单节点跳过方法。template.rs 新增 `evaluate_condition()`/`evaluate_truthiness()` 函数。146 个测试全部通过（新增 15 个：schema 解析 3、条件求值 9、DAG 集成 3）。
+
+## 2026-05-04 Round 19 — UX Design Review: Web UI Improvements
+
+### 用户视角设计审查发现并修复的问题
+
+Design review 排查出 23 个 UX 问题，本轮修复 5 个最高优先级的用户不友好操作。**Web UI 新增运行管理按钮**：运行中/等待中的工作流显示 Cancel 按钮（调用已有 cancel API）；已完成/失败的工作流显示 Re-run 和 Delete 按钮；Delete 前弹出确认对话框防止误删。**进度指示器**：log 面板顶部显示进度条（completed/total nodes），直观展示工作流执行进度。**日志加载状态**：fetchLogs 展开时显示 spinner 而非空白区域，消除用户对"没有输出"还是"正在加载"的困惑。修改 3 个文件（index.html/app.js/style.css）。

@@ -173,3 +173,23 @@ pre.stderr { background:#fff8f0; }
 /* Pagination */
 .pagination { display:flex; align-items:center; justify-content:center; gap:12px; padding:10px 0; border-top:1px solid var(--border); margin-top:4px; }
 .pagination button:disabled { opacity:0.4; cursor:default; }
+
+/* Run detail header */
+.run-detail-header { margin-bottom:10px; }
+.run-detail-header h3 { font-size:12px; font-weight:600; color:var(--text2); margin-bottom:6px; display:flex; align-items:center; gap:6px; }
+
+/* Progress bar */
+.progress-bar-container { position:relative; height:18px; background:var(--bg3); border-radius:9px; overflow:hidden; margin-bottom:6px; }
+.progress-bar-fill { height:100%; background:var(--accent); border-radius:9px; transition:width 0.3s ease; opacity:0.3; }
+.progress-bar-text { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-size:10px; font-weight:600; color:var(--text); z-index:1; }
+
+/* Run actions */
+.run-actions { display:flex; gap:6px; margin-bottom:4px; }
+.btn-danger { background:#cf222e; border-color:#cf222e; color:#fff; }
+.btn-danger:hover { background:#a40e26; }
+
+/* Confirm dialog */
+.confirm-dialog { position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); background:var(--bg); border-radius:10px; padding:20px; box-shadow:0 8px 32px rgba(0,0,0,0.18); z-index:1001; width:360px; max-width:90vw; }
+.confirm-title { font-size:15px; font-weight:600; margin-bottom:8px; }
+.confirm-msg { font-size:13px; color:var(--text2); margin-bottom:16px; line-height:1.5; }
+.confirm-actions { display:flex; justify-content:flex-end; gap:8px; }

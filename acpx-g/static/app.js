@@ -433,7 +433,31 @@ function renderLogs(run) {
   const panel = document.getElementById('log-panel');
   if (!nodes.length) { panel.innerHTML = '<div class="log-empty">No nodes</div>'; return; }
 
-  panel.innerHTML = `<h3>${statusBadge(run.status)} ${esc(run.workflow_name)} <span style="font-weight:400">${fmtDuration(run.started_at, run.finished_at)}</span></h3>` +
+  // Progress indicator: completed/total nodes
+  const completed = nodes.filter(n => ['success','failed','skipped','cancelled'].includes(n.status)).length;
+  const total = nodes.length;
+  const progressPct = total ? Math.round(completed / total * 100) : 0;
+  const progressHtml = `<div class="progress-bar-container" title="${completed}/${total} nodes completed (${progressPct}%)">
+    <div class="progress-bar-fill" style="width:${progressPct}%"></div>
+    <span class="progress-bar-text">${completed}/${total} nodes</span>
+  </div>`;
+
+  // Action buttons based on workflow status
+  let actionsHtml = '<div class="run-actions">';
+  if (run.status === 'running' || run.status === 'pending') {
+    actionsHtml += `<button class="btn btn-sm btn-danger" data-action="cancel">Cancel</button>`;
+  }
+  if (['success','failed','cancelled'].includes(run.status)) {
+    actionsHtml += `<button class="btn btn-sm btn-primary" data-action="rerun">Re-run</button>`;
+    actionsHtml += `<button class="btn btn-sm btn-danger" data-action="delete">Delete</button>`;
+  }
+  actionsHtml += '</div>';
+
+  panel.innerHTML = `<div class="run-detail-header">
+    <h3>${statusBadge(run.status)} ${esc(run.workflow_name)} <span style="font-weight:400">${fmtDuration(run.started_at, run.finished_at)}</span></h3>
+    ${progressHtml}
+    ${actionsHtml}
+  </div>` +
     nodes.map(n => {
       const isFailed = n.status === 'failed';
       const hasError = !!n.error_message;
@@ -466,6 +490,16 @@ function renderLogs(run) {
   panel.querySelectorAll('.log-header[data-node-id]').forEach(hdr => {
     hdr.addEventListener('click', () => toggleLog(hdr, hdr.dataset.nodeId));
   });
+
+  // Event delegation for run action buttons
+  panel.querySelectorAll('.run-actions .btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const action = btn.dataset.action;
+      if (action === 'cancel') cancelRun(run.id);
+      else if (action === 'rerun') rerunRun(run.id);
+      else if (action === 'delete') confirmDelete(run.id, run.workflow_name);
+    });
+  });
 }
 
 function toggleLog(header, nodeId) {
@@ -493,6 +527,7 @@ function domId(nodeId) { return 'log-' + nodeId.replace(/[^a-zA-Z0-9_-]/g, '_');
 
 async function fetchLogs(nodeId, el) {
   if (!selectedRunId) return;
+  el.innerHTML = '<div style="padding:8px;text-align:center"><span class="spinner"></span> Loading...</div>';
   try {
     const r = await fetch(`${API_WF}/${selectedRunId}/nodes/${encodeURIComponent(nodeId)}/logs`);
     const d = await r.json();
@@ -505,6 +540,86 @@ async function fetchLogs(nodeId, el) {
   } catch(e) {
     el.innerHTML = '<div style="color:#cf222e;font-size:11px">Failed to load</div>';
   }
+}
+
+// ── Run Actions ──────────────────────────────────────────────────────
+async function cancelRun(runId) {
+  try {
+    const r = await fetch(`${API_WF}/${runId}/cancel`, { method: 'POST' });
+    if (r.ok) {
+      showToast('Workflow cancelled', 'success');
+      selectRun(runId);
+      loadRuns();
+    } else {
+      const d = await r.json();
+      showToast(d.error || 'Failed to cancel', 'error');
+    }
+  } catch(e) {
+    showToast('Network error: ' + e.message, 'error');
+  }
+}
+
+async function rerunRun(runId) {
+  try {
+    const r = await fetch(`${API_WF}/${runId}/rerun`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    const d = await r.json();
+    if (r.ok) {
+      showToast('Workflow re-started', 'success');
+      selectedRunId = d.run_id;
+      showRunView();
+      loadRuns();
+      selectRun(d.run_id);
+    } else {
+      showToast(d.error || 'Failed to re-run', 'error');
+    }
+  } catch(e) {
+    showToast('Network error: ' + e.message, 'error');
+  }
+}
+
+function confirmDelete(runId, name) {
+  const backdrop = document.createElement('div');
+  backdrop.className = 'modal-backdrop';
+  const dialog = document.createElement('div');
+  dialog.className = 'confirm-dialog';
+  dialog.innerHTML = `
+    <div class="confirm-title">Delete Run</div>
+    <div class="confirm-msg">Delete workflow run <b>${esc(name)}</b>? This cannot be undone.</div>
+    <div class="confirm-actions">
+      <button class="btn btn-sm confirm-cancel">Cancel</button>
+      <button class="btn btn-sm btn-danger confirm-ok">Delete</button>
+    </div>`;
+  document.body.appendChild(backdrop);
+  document.body.appendChild(dialog);
+
+  const cleanup = () => { backdrop.remove(); dialog.remove(); };
+  dialog.querySelector('.confirm-cancel').addEventListener('click', cleanup);
+  backdrop.addEventListener('click', cleanup);
+  dialog.querySelector('.confirm-ok').addEventListener('click', async () => {
+    cleanup();
+    try {
+      const r = await fetch(`${API_WF}/${runId}`, { method: 'DELETE' });
+      if (r.ok) {
+        showToast('Run deleted', 'success');
+        if (selectedRunId === runId) {
+          selectedRunId = null;
+          document.getElementById('log-panel').innerHTML = '<div class="log-empty">Select a run to view logs</div>';
+          document.getElementById('graph-placeholder').style.display = 'flex';
+          document.getElementById('graph-svg').style.display = 'none';
+          document.getElementById('zoom-ctls').style.display = 'none';
+        }
+        loadRuns();
+      } else {
+        const d = await r.json();
+        showToast(d.error || 'Failed to delete', 'error');
+      }
+    } catch(e) {
+      showToast('Network error: ' + e.message, 'error');
+    }
+  });
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────
