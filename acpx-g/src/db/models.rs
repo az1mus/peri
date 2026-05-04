@@ -107,13 +107,19 @@ impl WorkflowRun {
         Ok(row.0)
     }
 
-    /// Delete a workflow run by ID.
+    /// Delete a workflow run and all its node runs by ID (cascade delete).
     pub async fn delete(pool: &SqlitePool, id: &str) -> anyhow::Result<u64> {
-        let result = sqlx::query("DELETE FROM workflow_runs WHERE id = ?")
+        let mut tx = pool.begin().await?;
+        let _node_result = sqlx::query("DELETE FROM node_runs WHERE run_id = ?")
             .bind(id)
-            .execute(pool)
+            .execute(&mut *tx)
             .await?;
-        Ok(result.rows_affected())
+        let run_result = sqlx::query("DELETE FROM workflow_runs WHERE id = ?")
+            .bind(id)
+            .execute(&mut *tx)
+            .await?;
+        tx.commit().await?;
+        Ok(run_result.rows_affected())
     }
 }
 

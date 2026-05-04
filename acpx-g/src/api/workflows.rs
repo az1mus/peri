@@ -376,9 +376,9 @@ pub async fn list_workflows(
     State(state): State<Arc<AppState>>,
     Query(params): Query<ListWorkflowsQuery>,
 ) -> impl IntoResponse {
-    let page = params.page.max(1);
+    let page = params.page.clamp(1, 100_000);
     let per_page = params.per_page.clamp(1, 100);
-    let offset = (page - 1) * per_page;
+    let offset = (page - 1).saturating_mul(per_page);
 
     match (
         WorkflowRun::list(&state.pool, per_page, offset).await,
@@ -478,12 +478,9 @@ pub async fn delete_workflow_run(
                     })),
                 );
             }
-            // Use a transaction for atomic cascade delete
-            match delete_run_transactional(&state.pool, &run_id).await {
-                Ok(deleted) => (
-                    StatusCode::OK,
-                    Json(serde_json::json!({"deleted": run_id, "nodes_removed": deleted})),
-                ),
+            // Use cascade delete (WorkflowRun::delete handles node_runs too)
+            match WorkflowRun::delete(&state.pool, &run_id).await {
+                Ok(_) => (StatusCode::OK, Json(serde_json::json!({"deleted": run_id}))),
                 Err(e) => (
                     StatusCode::INTERNAL_SERVER_ERROR,
                     Json(serde_json::json!({"error": format!("{e}")})),
@@ -499,21 +496,6 @@ pub async fn delete_workflow_run(
             Json(serde_json::json!({"error": format!("{e}")})),
         ),
     }
-}
-
-/// Transactional cascade delete: delete node_runs then workflow_run atomically.
-async fn delete_run_transactional(pool: &SqlitePool, run_id: &str) -> anyhow::Result<u64> {
-    let mut tx = pool.begin().await?;
-    let node_result = sqlx::query("DELETE FROM node_runs WHERE run_id = ?")
-        .bind(run_id)
-        .execute(&mut *tx)
-        .await?;
-    sqlx::query("DELETE FROM workflow_runs WHERE id = ?")
-        .bind(run_id)
-        .execute(&mut *tx)
-        .await?;
-    tx.commit().await?;
-    Ok(node_result.rows_affected())
 }
 
 // ─── GET /api/v1/templates ───────────────────────────────────────

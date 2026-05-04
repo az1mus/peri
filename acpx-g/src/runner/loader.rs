@@ -63,18 +63,20 @@ fn load_workflow_inner<'a>(
     visited: &'a mut HashSet<String>,
 ) -> std::pin::Pin<Box<dyn std::future::Future<Output = anyhow::Result<Workflow>> + Send + 'a>> {
     Box::pin(async move {
-        // Cycle detection for local files
-        if !is_remote_url(path_or_url) {
+        // Cycle detection for both local files and remote URLs
+        let visit_key = if is_remote_url(path_or_url) {
+            path_or_url.to_string()
+        } else {
             let abs = resolve_path(path_or_url, base_dir);
-            let canonical = std::fs::canonicalize(&abs)
+            std::fs::canonicalize(&abs)
                 .with_context(|| format!("cannot resolve workflow path: {abs}"))?
                 .to_string_lossy()
-                .to_string();
-            if visited.contains(&canonical) {
-                anyhow::bail!("circular reference detected: {}", canonical);
-            }
-            visited.insert(canonical);
+                .to_string()
+        };
+        if visited.contains(&visit_key) {
+            anyhow::bail!("circular reference detected: {}", visit_key);
         }
+        visited.insert(visit_key);
 
         let content = fetch_content(path_or_url, base_dir).await?;
         let mut wf = parse_workflow(&content)?;

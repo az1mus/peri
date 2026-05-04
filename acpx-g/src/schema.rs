@@ -22,7 +22,7 @@ pub fn validate_workflow(wf: &Workflow) -> anyhow::Result<()> {
         anyhow::bail!("workflow must have at least one node");
     }
 
-    // Validate node IDs are non-empty and nodes don't depend on themselves
+    // Validate node IDs are non-empty, use safe characters, and nodes don't depend on themselves
     for node in &wf.nodes {
         let id = match node {
             NodeDef::Shell(n) => &n.id,
@@ -32,6 +32,17 @@ pub fn validate_workflow(wf: &Workflow) -> anyhow::Result<()> {
         if id.trim().is_empty() {
             anyhow::bail!("node id must not be empty");
         }
+        // Node IDs must be safe for use in CSS selectors, file paths, and shell commands.
+        // Allow: alphanumeric, hyphen, underscore, forward slash (for reference-expanded IDs)
+        if !id
+            .chars()
+            .all(|c| c.is_alphanumeric() || c == '-' || c == '_' || c == '/')
+        {
+            anyhow::bail!(
+                "node id '{}' contains invalid characters (allowed: alphanumeric, '-', '_', '/')",
+                id
+            );
+        }
         let depends = match node {
             NodeDef::Shell(n) => &n.depends,
             NodeDef::Agent(n) => &n.depends,
@@ -39,6 +50,19 @@ pub fn validate_workflow(wf: &Workflow) -> anyhow::Result<()> {
         };
         if depends.iter().any(|d| d == id) {
             anyhow::bail!("node '{}' cannot depend on itself", id);
+        }
+        // Validate depends IDs also use safe characters
+        for dep in depends.iter() {
+            if !dep
+                .chars()
+                .all(|c| c.is_alphanumeric() || c == '-' || c == '_' || c == '/')
+            {
+                anyhow::bail!(
+                    "dependency '{}' in node '{}' contains invalid characters",
+                    dep,
+                    id
+                );
+            }
         }
     }
 
@@ -753,5 +777,87 @@ nodes:
 "#;
         let err = parse_workflow(yaml).unwrap_err();
         assert!(err.to_string().contains("node id must not be empty"));
+    }
+
+    #[test]
+    fn test_parse_workflow_node_id_special_chars() {
+        let yaml = r#"
+name: test
+version: "1.0"
+nodes:
+  - id: "build.node"
+    type: shell
+    run: echo hello
+"#;
+        let err = parse_workflow(yaml).unwrap_err();
+        assert!(err.to_string().contains("invalid characters"));
+    }
+
+    #[test]
+    fn test_parse_workflow_node_id_with_spaces() {
+        let yaml = r#"
+name: test
+version: "1.0"
+nodes:
+  - id: "build step"
+    type: shell
+    run: echo hello
+"#;
+        let err = parse_workflow(yaml).unwrap_err();
+        assert!(err.to_string().contains("invalid characters"));
+    }
+
+    #[test]
+    fn test_parse_workflow_node_id_valid_chars() {
+        // Hyphen, underscore, and forward slash are allowed
+        let yaml = r#"
+name: test
+version: "1.0"
+nodes:
+  - id: build-step_1
+    type: shell
+    run: echo hello
+  - id: deploy/prod
+    type: shell
+    depends: [build-step_1]
+    run: echo deploy
+"#;
+        let wf = parse_workflow(yaml).unwrap();
+        assert_eq!(wf.nodes.len(), 2);
+    }
+
+    #[test]
+    fn test_parse_workflow_depends_invalid_chars() {
+        let yaml = r#"
+name: test
+version: "1.0"
+nodes:
+  - id: build
+    type: shell
+    run: echo hello
+  - id: deploy
+    type: shell
+    depends: ["build.node"]
+    run: echo deploy
+"#;
+        let err = parse_workflow(yaml).unwrap_err();
+        assert!(err.to_string().contains("invalid characters"));
+    }
+
+    #[test]
+    fn test_validate_workflow_long_name_accepted() {
+        // Long names are currently allowed — verify this behavior is stable
+        let yaml = format!(
+            r#"
+name: "{}"
+version: "1.0"
+nodes:
+  - id: greet
+    type: shell
+    run: echo hello
+"#,
+            "x".repeat(256)
+        );
+        assert!(parse_workflow(&yaml).is_ok());
     }
 }

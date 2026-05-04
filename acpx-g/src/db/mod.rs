@@ -44,14 +44,24 @@ pub async fn init(database_url: &str) -> anyhow::Result<SqlitePool> {
     .await?;
 
     // Add outputs column for node output persistence (idempotent)
-    let _ = sqlx::query("ALTER TABLE node_runs ADD COLUMN outputs TEXT")
+    match sqlx::query("ALTER TABLE node_runs ADD COLUMN outputs TEXT")
         .execute(&pool)
-        .await;
+        .await
+    {
+        Ok(_) => {}
+        Err(e) if e.to_string().contains("duplicate column") => {}
+        Err(e) => tracing::warn!("failed to add outputs column: {e}"),
+    }
 
     // Add depends column for storing expanded dependency info (idempotent)
-    let _ = sqlx::query("ALTER TABLE node_runs ADD COLUMN depends TEXT")
+    match sqlx::query("ALTER TABLE node_runs ADD COLUMN depends TEXT")
         .execute(&pool)
-        .await;
+        .await
+    {
+        Ok(_) => {}
+        Err(e) if e.to_string().contains("duplicate column") => {}
+        Err(e) => tracing::warn!("failed to add depends column: {e}"),
+    }
 
     // Enable foreign keys (SQLite has them off by default)
     sqlx::query("PRAGMA foreign_keys = ON")
@@ -65,6 +75,12 @@ pub async fn init(database_url: &str) -> anyhow::Result<SqlitePool> {
     .execute(&pool)
     .await?;
     sqlx::query("CREATE INDEX IF NOT EXISTS idx_node_runs_run_id ON node_runs(run_id)")
+        .execute(&pool)
+        .await?;
+    sqlx::query("CREATE INDEX IF NOT EXISTS idx_workflow_runs_status ON workflow_runs(status)")
+        .execute(&pool)
+        .await?;
+    sqlx::query("CREATE INDEX IF NOT EXISTS idx_node_runs_status ON node_runs(status)")
         .execute(&pool)
         .await?;
 

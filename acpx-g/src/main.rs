@@ -103,21 +103,29 @@ async fn main() -> anyhow::Result<()> {
         // Cancel the watcher first
         cancel_token.cancel();
 
-        // Mark any still-running workflows as failed
-        let running =
-            sqlx::query_as::<_, (String,)>("SELECT id FROM workflow_runs WHERE status = 'running'")
-                .fetch_all(&*shutdown_pool)
-                .await
-                .unwrap_or_default();
-        for (id,) in running {
-            tracing::warn!(run_id = %id, "marking running workflow as failed due to shutdown");
-            let _ = sqlx::query(
-                "UPDATE workflow_runs SET status = 'failed', error_message = 'server shutdown', finished_at = datetime('now') WHERE id = ?",
-            )
-            .bind(&id)
-            .execute(&*shutdown_pool)
-            .await;
-        }
+        // Atomically mark ALL running/pending workflows as failed in a single query.
+        // This avoids the race condition where a workflow transitions from pending→running
+        // between SELECT and UPDATE.
+        let result = sqlx::query(
+            "UPDATE workflow_runs SET status = 'failed', error_message = 'server shutdown', \
+             finished_at = datetime('now'), started_at = COALESCE(started_at, datetime('now')) \
+             WHERE status IN ('running', 'pending')",
+        )
+        .execute(&*shutdown_pool)
+        .await
+        .unwrap_or_default();
+        tracing::info!(
+            rows_affected = result.rows_affected(),
+            "marked workflows as failed"
+        );
+
+        // Also mark any running node_runs
+        let _ = sqlx::query(
+            "UPDATE node_runs SET status = 'failed', error_message = 'server shutdown', \
+             finished_at = datetime('now') WHERE status IN ('running', 'pending')",
+        )
+        .execute(&*shutdown_pool)
+        .await;
     };
 
     axum::serve(listener, app)
