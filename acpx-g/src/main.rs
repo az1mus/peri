@@ -81,6 +81,10 @@ async fn main() -> anyhow::Result<()> {
             post(acpx_g::api::cancel_workflow_run),
         )
         .route(
+            "/api/v1/workflows/{run_id}/rerun",
+            post(acpx_g::api::rerun_workflow),
+        )
+        .route(
             "/api/v1/workflows/{run_id}/nodes/{node_id}/logs",
             get(acpx_g::api::get_node_logs),
         )

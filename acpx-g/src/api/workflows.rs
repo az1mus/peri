@@ -97,6 +97,7 @@ pub async fn create_and_start_run(
     wf: &crate::schema::Workflow,
     expanded_wf: crate::schema::Workflow,
     yaml_content: String,
+    inputs_json: Option<String>,
 ) -> anyhow::Result<String> {
     let run_id = Uuid::now_v7().to_string();
 
@@ -114,12 +115,13 @@ pub async fn create_and_start_run(
         finished_at: None,
         created_at: chrono::Utc::now().to_rfc3339(),
         error_message: None,
+        inputs: inputs_json,
     };
 
     // Insert workflow run within transaction
     sqlx::query(
-        "INSERT INTO workflow_runs (id, workflow_name, workflow_version, yaml_content, status, node_count, started_at, finished_at, created_at, error_message)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO workflow_runs (id, workflow_name, workflow_version, yaml_content, status, node_count, started_at, finished_at, created_at, error_message, inputs)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     )
     .bind(&run.id)
     .bind(&run.workflow_name)
@@ -131,6 +133,7 @@ pub async fn create_and_start_run(
     .bind(&run.finished_at)
     .bind(&run.created_at)
     .bind(&run.error_message)
+    .bind(&run.inputs)
     .execute(&mut *tx)
     .await?;
 
@@ -244,6 +247,19 @@ pub async fn list_api_docs() -> impl IntoResponse {
             params: vec![],
             curl: "curl -X POST http://$HOST/api/v1/workflows/{run_id}/cancel".into(),
             response: r#"{ "status": "cancelled", "run_id": "019..." }"#.into(),
+            category: Some("workflows".into()),
+        },
+        ApiEndpoint {
+            method: "POST".into(),
+            path: "/api/v1/workflows/{run_id}/rerun".into(),
+            description: "Re-run a previous workflow with the same inputs. Optionally override specific inputs.".into(),
+            params: vec![
+                ApiParam { name: "inputs".into(), param_type: "object".into(), description: "Optional. Input overrides merged with original inputs.".into() },
+            ],
+            curl: r#"curl -X POST http://$HOST/api/v1/workflows/{run_id}/rerun \
+  -H 'Content-Type: application/json' \
+  -d '{"inputs": {"env": "production"}}'"#.into(),
+            response: r#"{ "run_id": "019...", "status": "pending", "rerun_of": "019..." }"#.into(),
             category: Some("workflows".into()),
         },
         ApiEndpoint {
@@ -376,12 +392,18 @@ pub async fn submit_workflow(
         }
     };
 
+    let inputs_json = req
+        .inputs
+        .as_ref()
+        .map(|i| serde_json::to_string(i).unwrap_or_default());
+
     match create_and_start_run(
         &state.pool,
         &state.cancellation_tokens,
         &wf,
         expanded_wf,
         req.yaml.clone(),
+        inputs_json,
     )
     .await
     {
@@ -596,6 +618,103 @@ pub async fn cancel_workflow_run(
     }
 }
 
+// ─── POST /api/v1/workflows/:run_id/rerun ────────────────────────────
+
+pub async fn rerun_workflow(
+    State(state): State<Arc<AppState>>,
+    Path(run_id): Path<String>,
+    body: Option<Json<crate::db::RerunWorkflowRequest>>,
+) -> impl IntoResponse {
+    let old_run = match WorkflowRun::find_by_id(&state.pool, &run_id).await {
+        Ok(Some(run)) => run,
+        Ok(None) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(serde_json::json!({"error": "workflow run not found"})),
+            )
+        }
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": format!("{e}")})),
+            )
+        }
+    };
+
+    // Parse stored YAML
+    let wf = match crate::schema::parse_workflow(&old_run.yaml_content) {
+        Ok(w) => w,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": format!("stored YAML invalid: {e}")})),
+            )
+        }
+    };
+
+    // Merge original inputs with overrides
+    let mut inputs: std::collections::HashMap<String, String> = old_run
+        .inputs
+        .as_deref()
+        .and_then(|s| serde_json::from_str(s).ok())
+        .unwrap_or_default();
+
+    if let Some(Json(body)) = body {
+        if let Some(overrides) = body.inputs {
+            inputs.extend(overrides);
+        }
+    }
+
+    // Validate merged inputs
+    let inputs = match validate_inputs(&wf.inputs, &Some(inputs)) {
+        Ok(i) => i,
+        Err(e) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({"error": format!("invalid inputs: {e}")})),
+            )
+        }
+    };
+
+    // Load and expand references
+    let expanded_wf =
+        match runner::load_workflow_from_content(&old_run.yaml_content, inputs.clone()).await {
+            Ok(w) => w,
+            Err(e) => {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    Json(serde_json::json!({"error": format!("failed to load workflow: {e}")})),
+                )
+            }
+        };
+
+    let inputs_json = Some(serde_json::to_string(&inputs).unwrap_or_default());
+
+    match create_and_start_run(
+        &state.pool,
+        &state.cancellation_tokens,
+        &wf,
+        expanded_wf,
+        old_run.yaml_content,
+        inputs_json,
+    )
+    .await
+    {
+        Ok(new_run_id) => (
+            StatusCode::CREATED,
+            Json(serde_json::json!({
+                "run_id": new_run_id,
+                "status": "pending",
+                "rerun_of": run_id,
+            })),
+        ),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": format!("failed to create run: {e}")})),
+        ),
+    }
+}
+
 // ─── GET /api/v1/templates ───────────────────────────────────────
 
 pub async fn list_templates(State(state): State<Arc<AppState>>) -> impl IntoResponse {
@@ -667,12 +786,17 @@ pub async fn run_template(
         }
     };
 
+    let inputs_json = inputs_opt
+        .as_ref()
+        .map(|i| serde_json::to_string(i).unwrap_or_default());
+
     match create_and_start_run(
         &state.pool,
         &state.cancellation_tokens,
         &wf,
         expanded_wf,
         yaml_content,
+        inputs_json,
     )
     .await
     {

@@ -63,6 +63,16 @@ pub async fn init(database_url: &str) -> anyhow::Result<SqlitePool> {
         Err(e) => tracing::warn!("failed to add depends column: {e}"),
     }
 
+    // Add inputs column for storing resolved workflow inputs (idempotent)
+    match sqlx::query("ALTER TABLE workflow_runs ADD COLUMN inputs TEXT")
+        .execute(&pool)
+        .await
+    {
+        Ok(_) => {}
+        Err(e) if e.to_string().contains("duplicate column") => {}
+        Err(e) => tracing::warn!("failed to add inputs column: {e}"),
+    }
+
     // Enable foreign keys (SQLite has them off by default)
     sqlx::query("PRAGMA foreign_keys = ON")
         .execute(&pool)

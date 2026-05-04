@@ -16,6 +16,7 @@ pub struct WorkflowRun {
     pub finished_at: Option<String>,
     pub created_at: String,
     pub error_message: Option<String>,
+    pub inputs: Option<String>,
 }
 
 impl WorkflowRun {
@@ -76,7 +77,7 @@ impl WorkflowRun {
 
     pub async fn find_by_id(pool: &SqlitePool, id: &str) -> anyhow::Result<Option<WorkflowRun>> {
         let run = sqlx::query_as::<_, WorkflowRun>(
-            "SELECT id, workflow_name, workflow_version, yaml_content, status, node_count, started_at, finished_at, created_at, error_message FROM workflow_runs WHERE id = ?",
+            "SELECT id, workflow_name, workflow_version, yaml_content, status, node_count, started_at, finished_at, created_at, error_message, inputs FROM workflow_runs WHERE id = ?",
         )
         .bind(id)
         .fetch_optional(pool)
@@ -90,7 +91,7 @@ impl WorkflowRun {
         offset: i64,
     ) -> anyhow::Result<Vec<WorkflowRun>> {
         let runs = sqlx::query_as::<_, WorkflowRun>(
-            "SELECT id, workflow_name, workflow_version, '' as yaml_content, status, node_count, started_at, finished_at, created_at, error_message FROM workflow_runs ORDER BY created_at DESC LIMIT ? OFFSET ?",
+            "SELECT id, workflow_name, workflow_version, '' as yaml_content, status, node_count, started_at, finished_at, created_at, error_message, inputs FROM workflow_runs ORDER BY created_at DESC LIMIT ? OFFSET ?",
         )
         .bind(limit)
         .bind(offset)
@@ -307,6 +308,13 @@ pub struct RunTemplateRequest {
     pub inputs: Option<HashMap<String, String>>,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct RerunWorkflowRequest {
+    /// Optional input overrides for the re-run. Merged with original inputs.
+    #[serde(default)]
+    pub inputs: Option<HashMap<String, String>>,
+}
+
 #[derive(Debug, Serialize)]
 pub struct SubmitWorkflowResponse {
     pub run_id: String,
@@ -324,6 +332,7 @@ pub struct WorkflowRunResponse {
     pub finished_at: Option<String>,
     pub created_at: String,
     pub error_message: Option<String>,
+    pub inputs: Option<serde_json::Value>,
     pub nodes: Vec<NodeRunResponse>,
 }
 
@@ -348,6 +357,10 @@ pub struct NodeRunResponse {
 
 impl From<WorkflowRun> for WorkflowRunResponse {
     fn from(r: WorkflowRun) -> Self {
+        let inputs = r
+            .inputs
+            .as_deref()
+            .and_then(|s| serde_json::from_str(s).ok());
         Self {
             id: r.id,
             workflow_name: r.workflow_name,
@@ -358,6 +371,7 @@ impl From<WorkflowRun> for WorkflowRunResponse {
             finished_at: r.finished_at,
             created_at: r.created_at,
             error_message: r.error_message,
+            inputs,
             nodes: vec![],
         }
     }

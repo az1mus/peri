@@ -250,6 +250,7 @@ async fn submit_workflow_from_file(
         wf,
         expanded_wf,
         yaml_content.to_string(),
+        None,
     )
     .await?;
 
