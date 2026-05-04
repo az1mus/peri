@@ -13,17 +13,21 @@ name = "acpx-g"
 path = "src/main.rs"
 
 [dependencies]
-anyhow = "1.0"
+anyhow.workspace = true
 axum = { version = "0.8", features = ["macros"] }
-chrono = { version = "0.4", features = ["serde"] }
-reqwest = { version = "0.13", default-features = false, features = ["rustls"] }
-serde = { version = "1.0", features = ["derive"] }
-serde_yaml = "0.9"
-serde_json = "1.0"
-sqlx = { version = "0.8", features = ["runtime-tokio", "sqlite", "chrono"] }
-tokio = { version = "1", features = ["full"] }
+chrono.workspace = true
+reqwest = { workspace = true }
+serde.workspace = true
+serde_yaml.workspace = true
+serde_json.workspace = true
+sqlx = { version = "0.8", features = [
+    "runtime-tokio",
+    "sqlite",
+    "chrono",
+] }
+tokio.workspace = true
 tower = "0.5"
 tower-http = { version = "0.6", features = ["cors", "trace", "fs"] }
-tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-uuid = { version = "1", features = ["v7", "serde"] }
+tracing.workspace = true
+tracing-subscriber = { workspace = true, features = ["env-filter"] }
+uuid.workspace = true

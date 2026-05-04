@@ -6,33 +6,24 @@ description = "Rust Agent framework with middleware system, aligned with @langgr
 license = "MIT"
 
 [dependencies]
-anyhow = "1.0"
-async-trait = "0.1"
-chrono = { version = "0.4", features = ["serde"] }
-dirs-next = "2"
-reqwest = { version = "0.13", default-features = false, features = [
-    "json",
-    "stream",
-    "rustls",
-    "blocking",
-] }
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-thiserror = "2.0"
-futures = "0.3"
-tokio = { version = "1", features = ["full"] }
-uuid = { version = "1", features = ["v7", "serde"] }
-tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = [
-    "env-filter",
-    "fmt",
-    "json",
-] }
-tokio-util = { version = "0.7.18", features = ["rt"] }
+anyhow.workspace = true
+async-trait.workspace = true
+chrono.workspace = true
+dirs-next.workspace = true
+reqwest = { workspace = true, features = ["stream", "blocking"] }
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+futures.workspace = true
+tokio.workspace = true
+uuid.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+tokio-util.workspace = true
 rusqlite = { version = "0.31", features = ["bundled"] }
-parking_lot = "0.12"
-rand = "0.8"
+parking_lot.workspace = true
+rand = "0.9"
 
 [dev-dependencies]
-tokio-test = "0.4"
-tempfile = "3"
+tokio-test.workspace = true
+tempfile.workspace = true

@@ -50,8 +50,8 @@ impl RetryConfig {
         let effective = attempt + 1;
         let base =
             (self.base_delay_ms as f64 * 2f64.powi(effective as i32)).min(self.max_delay_ms as f64);
-        let mut rng = rand::thread_rng();
-        let jitter = rng.gen_range(0.0..0.25) * base;
+        let mut rng = rand::rng();
+        let jitter = rng.random_range(0.0..0.25) * base;
         (base + jitter) as u64
     }
 }

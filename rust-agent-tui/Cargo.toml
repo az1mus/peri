@@ -18,33 +18,32 @@ headless = []
 [dev-dependencies]
 
 [dependencies]
-serde = { version = "1", features = ["derive"] }
+serde.workspace = true
 rust-create-agent = { path = "../rust-create-agent" }
 rust-agent-middlewares = { path = "../rust-agent-middlewares" }
 ratatui = { version = ">=0.30", features = ["unstable-rendered-line-info"] }
-tokio = { version = "1", features = ["full"] }
-anyhow = "1.0"
-chrono = { version = "0.4", features = ["serde"] }
-uuid = { version = "1", features = ["v7"] }
-serde_json = "1.0"
-async-trait = "0.1"
+tokio.workspace = true
+anyhow.workspace = true
+chrono.workspace = true
+uuid = { workspace = true, features = ["v7"] }
+serde_json.workspace = true
+async-trait.workspace = true
 dotenvy = "0.15"
-tracing = "0.1"
-dirs-next = "2"
+tracing.workspace = true
+dirs-next.workspace = true
 tui-textarea-2 = "0.10"
-parking_lot = "0.12"
+parking_lot.workspace = true
 arboard = "3"
 png = "0.18"
 base64 = { version = "0.22", features = ["alloc"] }
 langfuse-client = { path = "../langfuse-client" }
-perihelion-widgets = { path = "../perihelion-widgets", features = ["markdown-highlight"] }
-unicode-width = "0.2"
-reqwest = { version = "0.13", default-features = false, features = [
-    "rustls",
-    "json",
+perihelion-widgets = { path = "../perihelion-widgets", features = [
+    "markdown-highlight",
 ] }
+unicode-width = "0.2"
+reqwest.workspace = true
 clap = { version = "4", features = ["derive"] }
 agent-client-protocol = { version = "0.11", features = ["unstable"] }
 agent-client-protocol-tokio = { version = "0.11" }
 dashmap = "6"
-tokio-util = "0.7"
+tokio-util.workspace = true

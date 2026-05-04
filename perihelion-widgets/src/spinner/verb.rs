@@ -129,8 +129,8 @@ pub const DEFAULT_VERBS: &[&str] = &[
 
 pub fn pick_verb(active_form: Option<&str>) -> String {
     active_form.map(|s| format!("{}…", s)).unwrap_or_else(|| {
-        let mut rng = rand::thread_rng();
-        DEFAULT_VERBS[rng.gen_range(0..DEFAULT_VERBS.len())].to_string()
+        let mut rng = rand::rng();
+        DEFAULT_VERBS[rng.random_range(0..DEFAULT_VERBS.len())].to_string()
     })
 }
 

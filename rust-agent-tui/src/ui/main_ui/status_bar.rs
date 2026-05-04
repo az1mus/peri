@@ -308,12 +308,10 @@ fn render_second_row(f: &mut Frame, app: &App, area: Rect) {
                 } else {
                     key!["↑↓" => ":移动  ", "Enter" => ":确认  ", "Ctrl+D" => ":删除  ", "Esc" => ":关闭  ", "/" => ":搜索"]
                 }
+            } else if app.sessions.len() > 1 {
+                key!["/" => "命令  ", "Ctrl+N/P" => ":切换Session  ", "Ctrl+W" => ":关闭"]
             } else {
-                if app.sessions.len() > 1 {
-                    key!["/" => "命令  ", "Ctrl+N/P" => ":切换Session  ", "Ctrl+W" => ":关闭"]
-                } else {
-                    key!["/" => "命令  ", "Alt+Enter" => ":换行"]
-                }
+                key!["/" => "命令  ", "Alt+Enter" => ":换行"]
             }
         }
     };
