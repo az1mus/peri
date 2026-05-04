@@ -205,8 +205,11 @@ pub async fn list_api_docs() -> impl IntoResponse {
         ApiEndpoint {
             method: "GET".into(),
             path: "/api/v1/workflows".into(),
-            description: "List recent workflow runs (last 50).".into(),
-            params: vec![],
+            description: "List workflow runs with pagination.".into(),
+            params: vec![
+                ApiParam { name: "page".into(), param_type: "integer".into(), description: "Page number (default: 1)".into() },
+                ApiParam { name: "per_page".into(), param_type: "integer".into(), description: "Items per page, 1-100 (default: 50)".into() },
+            ],
             curl: "curl http://$HOST/api/v1/workflows".into(),
             response: r#"{ "runs": [{ "id": "...", "workflow_name": "hello", "status": "success", ... }] }"#.into(),
             category: Some("workflows".into()),

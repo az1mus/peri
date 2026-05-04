@@ -156,7 +156,9 @@ async fn execute_with_retry(
             }
             Err(e) => {
                 last_error = Some(e);
-                tokio::time::sleep(std::time::Duration::from_secs(1 << attempt)).await;
+                // Cap backoff at 60s to prevent overflow on high retry counts
+                let backoff_secs = 1u64.checked_shl(attempt).unwrap_or(60).min(60);
+                tokio::time::sleep(std::time::Duration::from_secs(backoff_secs)).await;
             }
         }
     }

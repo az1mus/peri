@@ -480,7 +480,13 @@ function toggleLog(header, nodeId) {
 }
 
 // Escape a string for use in CSS attribute selectors
-function cssEsc(s) { return s.replace(/([\\"])/g, '\\$1'); }
+// Escape a string for use in CSS attribute selectors
+// Covers: backslash, quotes, brackets, and non-identifier chars per CSS spec
+function cssEsc(s) {
+  return s.replace(/[\\\0-\x1f"']/g, ch => {
+    return '\\' + ch.charCodeAt(0).toString(16) + ' ';
+  }).replace(/]/g, '\\]');
+}
 
 // Sanitize node_id for use as a DOM id (replace / with -)
 function domId(nodeId) { return 'log-' + nodeId.replace(/[^a-zA-Z0-9_-]/g, '_'); }

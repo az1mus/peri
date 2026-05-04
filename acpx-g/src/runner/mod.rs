@@ -151,21 +151,25 @@ async fn execute_dag(
             }
         }
 
-        if !failed.is_empty() {
-            for &fi in &failed {
+        // Check if any hard-failed nodes (not continue_on_error) exist
+        let has_hard_failure = failed.iter().any(|&fi| !node_continue_on_error(&nodes[fi]));
+
+        if has_hard_failure {
+            // Find the first hard-failed node for the error message
+            let first_hard_fail = failed
+                .iter()
+                .find(|&&fi| !node_continue_on_error(&nodes[fi]));
+            if let Some(&fi) = first_hard_fail {
                 let node = &nodes[fi];
-                if !node_continue_on_error(node) {
-                    WorkflowRun::update_status(
-                        &pool,
-                        run_id,
-                        "failed",
-                        Some(&format!("node '{}' failed", node_id(node))),
-                    )
-                    .await?;
-                    // Mark remaining pending nodes as skipped
-                    let _ = NodeRun::mark_run_pending_as_skipped(&pool, run_id).await;
-                    return Err(anyhow::anyhow!("node '{}' failed", node_id(node)));
-                }
+                WorkflowRun::update_status(
+                    &pool,
+                    run_id,
+                    "failed",
+                    Some(&format!("node '{}' failed", node_id(node))),
+                )
+                .await?;
+                let _ = NodeRun::mark_run_pending_as_skipped(&pool, run_id).await;
+                return Err(anyhow::anyhow!("node '{}' failed", node_id(node)));
             }
         }
     }
@@ -425,15 +429,119 @@ mod tests {
 
     #[test]
     fn test_max_concurrent_nodes_custom() {
-        std::env::set_var("ACPX_MAX_CONCURRENT", "32");
+        // Use a unique key to avoid race with other tests
+        let key = "ACPX_MAX_CONCURRENT";
+        let prev = std::env::var(key).ok();
+        std::env::set_var(key, "32");
         assert_eq!(max_concurrent_nodes(), 32);
-        std::env::remove_var("ACPX_MAX_CONCURRENT");
+        match prev {
+            Some(v) => std::env::set_var(key, v),
+            None => std::env::remove_var(key),
+        }
     }
 
     #[test]
     fn test_max_concurrent_nodes_minimum() {
-        std::env::set_var("ACPX_MAX_CONCURRENT", "0");
+        let key = "ACPX_MAX_CONCURRENT";
+        let prev = std::env::var(key).ok();
+        std::env::set_var(key, "0");
         assert_eq!(max_concurrent_nodes(), 1);
-        std::env::remove_var("ACPX_MAX_CONCURRENT");
+        match prev {
+            Some(v) => std::env::set_var(key, v),
+            None => std::env::remove_var(key),
+        }
+    }
+
+    #[test]
+    fn test_build_template_context_root_inputs() {
+        let node = make_shell_node("build", vec![], false);
+        let mut root_inputs = HashMap::new();
+        root_inputs.insert("env".to_string(), "production".to_string());
+        let reference_inputs = HashMap::new();
+        let global_env = HashMap::new();
+        let completed_outputs = HashMap::new();
+
+        let ctx = build_template_context(
+            &node,
+            &root_inputs,
+            &reference_inputs,
+            &global_env,
+            &completed_outputs,
+        );
+        assert_eq!(ctx.inputs.get("env").unwrap(), "production");
+    }
+
+    #[test]
+    fn test_build_template_context_prefixed_inputs() {
+        // Node with prefixed ID (from reference expansion)
+        let node = make_shell_node("do-build/checkout", vec![], false);
+        let mut root_inputs = HashMap::new();
+        root_inputs.insert("env".to_string(), "production".to_string());
+
+        let mut ref_inputs = HashMap::new();
+        let mut build_inputs = HashMap::new();
+        build_inputs.insert("repo".to_string(), "myrepo".to_string());
+        ref_inputs.insert("do-build".to_string(), build_inputs);
+
+        let global_env = HashMap::new();
+        let completed_outputs = HashMap::new();
+
+        let ctx = build_template_context(
+            &node,
+            &root_inputs,
+            &ref_inputs,
+            &global_env,
+            &completed_outputs,
+        );
+        // Should use reference inputs for prefixed node
+        assert_eq!(ctx.inputs.get("repo").unwrap(), "myrepo");
+        assert!(ctx.inputs.get("env").is_none());
+    }
+
+    #[test]
+    fn test_get_node_env() {
+        let node = make_shell_node("x", vec![], false);
+        assert!(get_node_env(&node).is_empty());
+
+        let mut env = HashMap::new();
+        env.insert("KEY".to_string(), "VAL".to_string());
+        let node_with_env = NodeDef::Shell(ShellNode {
+            id: "y".to_string(),
+            run: crate::schema::ScriptSource::Inline("echo".to_string()),
+            depends: vec![],
+            outputs: Default::default(),
+            env,
+            continue_on_error: false,
+            exec: ExecConfig {
+                timeout: None,
+                retry: None,
+                shell: None,
+            },
+        });
+        assert_eq!(get_node_env(&node_with_env).get("KEY").unwrap(), "VAL");
+    }
+
+    #[test]
+    fn test_node_type_name() {
+        let shell = make_shell_node("s", vec![], false);
+        assert_eq!(node_type_name(&shell), "shell");
+
+        let agent = NodeDef::Agent(crate::schema::AgentNode {
+            id: "a".to_string(),
+            prompt: crate::schema::PromptSource::Inline("prompt".to_string()),
+            agent: None,
+            model: None,
+            cwd: None,
+            depends: vec![],
+            outputs: Default::default(),
+            env: Default::default(),
+            continue_on_error: false,
+            exec: ExecConfig {
+                timeout: None,
+                retry: None,
+                shell: None,
+            },
+        });
+        assert_eq!(node_type_name(&agent), "agent");
     }
 }
