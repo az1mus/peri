@@ -102,6 +102,8 @@ async fn run_shell(
 ) -> anyhow::Result<()> {
     let max_attempts = retries.unwrap_or(0) + 1;
     let mut last_error = None;
+    let mut accumulated_stdout = String::new();
+    let mut accumulated_stderr = String::new();
 
     for attempt in 0..max_attempts {
         sqlx::query("UPDATE node_runs SET attempt = ? WHERE id = ?")
@@ -116,14 +118,22 @@ async fn run_shell(
 
         match result {
             Ok((exit_code, stdout, stderr)) => {
+                // Append attempt output to accumulated buffers
+                if attempt > 0 {
+                    accumulated_stdout.push_str(&format!("--- Attempt {} ---\n", attempt + 1));
+                    accumulated_stderr.push_str(&format!("--- Attempt {} ---\n", attempt + 1));
+                }
+                accumulated_stdout.push_str(&stdout);
+                accumulated_stderr.push_str(&stderr);
+
                 let status = if exit_code == 0 { "success" } else { "failed" };
                 NodeRun::update_result(
                     pool,
                     node_run_id,
                     status,
                     Some(exit_code),
-                    Some(&stdout),
-                    Some(&stderr),
+                    Some(&accumulated_stdout),
+                    Some(&accumulated_stderr),
                     None,
                 )
                 .await?;
@@ -176,9 +186,14 @@ async fn execute_shell_command(
     cmd.kill_on_drop(true);
 
     let output = if let Some(secs) = timeout_secs {
-        tokio_timeout(Duration::from_secs(secs), cmd.output())
-            .await
-            .context("shell command timed out")??
+        match tokio_timeout(Duration::from_secs(secs), cmd.output()).await {
+            Ok(Ok(o)) => o,
+            Ok(Err(e)) => return Err(e).context("shell command failed"),
+            Err(_) => {
+                // Timeout — process was killed by kill_on_drop
+                return Err(anyhow::anyhow!("shell command timed out after {}s", secs));
+            }
+        }
     } else {
         cmd.output().await?
     };
@@ -206,6 +221,8 @@ async fn run_agent(
 ) -> anyhow::Result<()> {
     let max_attempts = retries.unwrap_or(0) + 1;
     let mut last_error = None;
+    let mut accumulated_stdout = String::new();
+    let mut accumulated_stderr = String::new();
 
     for attempt in 0..max_attempts {
         sqlx::query("UPDATE node_runs SET attempt = ? WHERE id = ?")
@@ -220,14 +237,21 @@ async fn run_agent(
 
         match result {
             Ok((exit_code, stdout, stderr)) => {
+                if attempt > 0 {
+                    accumulated_stdout.push_str(&format!("--- Attempt {} ---\n", attempt + 1));
+                    accumulated_stderr.push_str(&format!("--- Attempt {} ---\n", attempt + 1));
+                }
+                accumulated_stdout.push_str(&stdout);
+                accumulated_stderr.push_str(&stderr);
+
                 let status = if exit_code == 0 { "success" } else { "failed" };
                 NodeRun::update_result(
                     pool,
                     node_run_id,
                     status,
                     Some(exit_code),
-                    Some(&stdout),
-                    Some(&stderr),
+                    Some(&accumulated_stdout),
+                    Some(&accumulated_stderr),
                     None,
                 )
                 .await?;
@@ -288,9 +312,13 @@ async fn execute_agent_command(
     cmd.kill_on_drop(true);
 
     let output = if let Some(secs) = timeout_secs {
-        tokio_timeout(Duration::from_secs(secs), cmd.output())
-            .await
-            .context("agent command timed out")??
+        match tokio_timeout(Duration::from_secs(secs), cmd.output()).await {
+            Ok(Ok(o)) => o,
+            Ok(Err(e)) => return Err(e).context("agent command failed"),
+            Err(_) => {
+                return Err(anyhow::anyhow!("agent command timed out after {}s", secs));
+            }
+        }
     } else {
         cmd.output().await?
     };

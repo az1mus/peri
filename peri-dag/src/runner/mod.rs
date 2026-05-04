@@ -70,7 +70,7 @@ async fn execute_dag(
             let deps_ready = node_depends(node).iter().all(|dep| {
                 node_index
                     .get(dep.as_str())
-                    .is_some_and(|&di| completed.contains(&di))
+                    .is_some_and(|&di| completed.contains(&di) || failed.contains(&di))
             });
 
             if !deps_ready {
@@ -272,5 +272,77 @@ fn node_continue_on_error(node: &NodeDef) -> bool {
         NodeDef::Shell(n) => n.continue_on_error,
         NodeDef::Agent(n) => n.continue_on_error,
         NodeDef::Reference(n) => n.continue_on_error,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::schema::{ExecConfig, ShellNode};
+
+    fn make_shell_node(id: &str, depends: Vec<String>, continue_on_error: bool) -> NodeDef {
+        NodeDef::Shell(ShellNode {
+            id: id.to_string(),
+            run: crate::schema::ScriptSource::Inline("echo".to_string()),
+            depends,
+            outputs: Default::default(),
+            env: Default::default(),
+            continue_on_error,
+            exec: ExecConfig {
+                timeout: None,
+                retry: None,
+                shell: None,
+            },
+        })
+    }
+
+    #[test]
+    fn test_topological_sort_simple() {
+        let nodes = vec![
+            make_shell_node("a", vec![], false),
+            make_shell_node("b", vec!["a".to_string()], false),
+            make_shell_node("c", vec!["b".to_string()], false),
+        ];
+        let levels = topological_sort(&nodes).unwrap();
+        assert_eq!(levels.len(), 3);
+        assert_eq!(levels[0], vec![0]); // a
+        assert_eq!(levels[1], vec![1]); // b
+        assert_eq!(levels[2], vec![2]); // c
+    }
+
+    #[test]
+    fn test_topological_sort_parallel() {
+        let nodes = vec![
+            make_shell_node("a", vec![], false),
+            make_shell_node("b", vec![], false),
+            make_shell_node("c", vec!["a".to_string(), "b".to_string()], false),
+        ];
+        let levels = topological_sort(&nodes).unwrap();
+        assert_eq!(levels.len(), 2);
+        assert_eq!(levels[0].len(), 2); // a, b in parallel
+        assert_eq!(levels[1], vec![2]); // c
+    }
+
+    #[test]
+    fn test_topological_sort_cycle() {
+        let nodes = vec![
+            make_shell_node("a", vec!["b".to_string()], false),
+            make_shell_node("b", vec!["a".to_string()], false),
+        ];
+        assert!(topological_sort(&nodes).is_err());
+    }
+
+    #[test]
+    fn test_topological_sort_unknown_dep() {
+        let nodes = vec![make_shell_node("a", vec!["nonexistent".to_string()], false)];
+        assert!(topological_sort(&nodes).is_err());
+    }
+
+    #[test]
+    fn test_node_continue_on_error() {
+        let node = make_shell_node("x", vec![], true);
+        assert!(node_continue_on_error(&node));
+        let node2 = make_shell_node("y", vec![], false);
+        assert!(!node_continue_on_error(&node2));
     }
 }

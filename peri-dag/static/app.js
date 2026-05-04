@@ -371,7 +371,7 @@ function zoomFit() { dagZoom = 1; dagPanX = 0; dagPanY = 0; applyTransform(); }
 })();
 
 function jumpToLog(nodeRunId) {
-  const el = document.querySelector(`.log-section[data-node="${nodeRunId}"]`);
+  const el = document.querySelector(`.log-section[data-node="${cssEsc(nodeRunId)}"]`);
   if (el) {
     el.scrollIntoView({ behavior:'smooth', block:'center' });
     const body = el.querySelector('.log-body');
@@ -425,6 +425,9 @@ function toggleLog(header, nodeId) {
     body.classList.remove('open');
   }
 }
+
+// Escape a string for use in CSS attribute selectors
+function cssEsc(s) { return s.replace(/([\\"]/g, '\\$1'); }
 
 async function fetchLogs(nodeRunId, el) {
   if (!selectedRunId) return;
