@@ -587,6 +587,7 @@ mod tests {
                 timeout: None,
                 retry: None,
                 shell: None,
+                r#if: None,
             },
         });
         assert_eq!(node_id(&node), "build");
@@ -608,6 +609,7 @@ mod tests {
                 timeout: None,
                 retry: None,
                 shell: None,
+                r#if: None,
             },
         });
         assert_eq!(node_id(&node), "review");
@@ -626,6 +628,7 @@ mod tests {
                 timeout: None,
                 retry: None,
                 shell: None,
+                r#if: None,
             },
         });
         let ctx = TemplateContext {
@@ -655,6 +658,7 @@ mod tests {
                 timeout: None,
                 retry: None,
                 shell: None,
+                r#if: None,
             },
         });
         let mut inputs = HashMap::new();

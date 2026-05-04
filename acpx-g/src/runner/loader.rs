@@ -471,6 +471,7 @@ level: "info"
                     timeout: None,
                     retry: None,
                     shell: None,
+                    r#if: None,
                 },
             }),
             NodeDef::Shell(ShellNode {
@@ -484,6 +485,7 @@ level: "info"
                     timeout: None,
                     retry: None,
                     shell: None,
+                    r#if: None,
                 },
             }),
         ];
@@ -506,6 +508,7 @@ level: "info"
                     timeout: None,
                     retry: None,
                     shell: None,
+                    r#if: None,
                 },
             }),
             NodeDef::Shell(ShellNode {
@@ -519,6 +522,7 @@ level: "info"
                     timeout: None,
                     retry: None,
                     shell: None,
+                    r#if: None,
                 },
             }),
         ];
@@ -541,6 +545,7 @@ level: "info"
                 timeout: None,
                 retry: None,
                 shell: None,
+                r#if: None,
             },
         });
         let result = prefix_id(node, "ci/");
@@ -561,6 +566,7 @@ level: "info"
                 timeout: None,
                 retry: None,
                 shell: None,
+                r#if: None,
             },
         });
         let mut replacements = HashMap::new();
@@ -583,6 +589,7 @@ level: "info"
                 timeout: None,
                 retry: None,
                 shell: None,
+                r#if: None,
             },
         });
         rewire_depends(&mut node, &HashMap::new());

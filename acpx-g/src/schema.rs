@@ -393,6 +393,12 @@ pub struct ExecConfig {
     /// 节点级 shell 覆盖。
     #[serde(default)]
     pub shell: Option<String>,
+
+    /// 条件执行表达式。求值为 false 时跳过节点。
+    /// 支持 `{{ inputs.x }}`/`{{ needs.id.outputs.key }}`/`{{ env.KEY }}` 插值，
+    /// 以及 `==`/`!=` 比较运算符。
+    #[serde(default, rename = "if")]
+    pub r#if: Option<String>,
 }
 
 // ─── Platform Resolution ──────────────────────────────────────────
@@ -873,5 +879,71 @@ nodes:
             "x".repeat(256)
         );
         assert!(parse_workflow(&yaml).is_ok());
+    }
+
+    #[test]
+    fn test_parse_workflow_node_if_condition() {
+        let yaml = r#"
+name: test
+version: "1.0"
+inputs:
+  deploy:
+    type: string
+    default: "false"
+nodes:
+  - id: build
+    type: shell
+    run: echo build
+  - id: deploy
+    type: shell
+    if: "{{ inputs.deploy }} == true"
+    depends: [build]
+    run: echo deploy
+"#;
+        let wf = parse_workflow(yaml).unwrap();
+        assert_eq!(wf.nodes.len(), 2);
+        match &wf.nodes[1] {
+            NodeDef::Shell(n) => {
+                assert_eq!(n.exec.r#if.as_deref(), Some("{{ inputs.deploy }} == true"))
+            }
+            _ => panic!("expected shell node"),
+        }
+    }
+
+    #[test]
+    fn test_parse_workflow_node_no_if() {
+        let yaml = r#"
+name: test
+version: "1.0"
+nodes:
+  - id: build
+    type: shell
+    run: echo build
+"#;
+        let wf = parse_workflow(yaml).unwrap();
+        match &wf.nodes[0] {
+            NodeDef::Shell(n) => assert!(n.exec.r#if.is_none()),
+            _ => panic!("expected shell node"),
+        }
+    }
+
+    #[test]
+    fn test_parse_workflow_agent_if_condition() {
+        let yaml = r#"
+name: test
+version: "1.0"
+nodes:
+  - id: review
+    type: agent
+    if: "{{ env.REVIEW_ENABLED }}"
+    prompt: review the code
+"#;
+        let wf = parse_workflow(yaml).unwrap();
+        match &wf.nodes[0] {
+            NodeDef::Agent(n) => {
+                assert_eq!(n.exec.r#if.as_deref(), Some("{{ env.REVIEW_ENABLED }}"))
+            }
+            _ => panic!("expected agent node"),
+        }
     }
 }

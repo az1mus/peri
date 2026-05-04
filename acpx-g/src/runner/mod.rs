@@ -199,6 +199,16 @@ async fn execute_dag(
                 &completed_outputs,
             );
 
+            // Evaluate conditional execution: if the node has an `if` expression,
+            // interpolate and evaluate it. Skip the node if it resolves to false.
+            if let Some(condition) = node_if_condition(node) {
+                if !template::evaluate_condition(condition, &ctx) {
+                    tracing::info!(node_id = %node_id(node), "condition evaluated to false, skipping");
+                    NodeRun::mark_node_skipped(&pool, run_id, node_id(node)).await?;
+                    continue;
+                }
+            }
+
             let pool = pool.clone();
             let semaphore = semaphore.clone();
             let run_id = run_id.to_string();
@@ -300,6 +310,9 @@ async fn execute_dag(
             }
         }
     }
+
+    // Mark any remaining pending nodes as skipped (e.g., downstream of conditionally skipped nodes)
+    let _ = NodeRun::mark_run_pending_as_skipped(&pool, run_id).await;
 
     WorkflowRun::update_status(&pool, run_id, "success", None).await?;
     tracing::info!(run_id = %run_id, "workflow completed successfully");
@@ -453,6 +466,14 @@ fn node_continue_on_error(node: &NodeDef) -> bool {
     }
 }
 
+fn node_if_condition(node: &NodeDef) -> Option<&str> {
+    match node {
+        NodeDef::Shell(n) => n.exec.r#if.as_deref(),
+        NodeDef::Agent(n) => n.exec.r#if.as_deref(),
+        NodeDef::Reference(n) => n.exec.r#if.as_deref(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -470,6 +491,7 @@ mod tests {
                 timeout: None,
                 retry: None,
                 shell: None,
+                r#if: None,
             },
         })
     }
@@ -653,6 +675,7 @@ mod tests {
                 timeout: None,
                 retry: None,
                 shell: None,
+                r#if: None,
             },
         });
         assert_eq!(get_node_env(&node_with_env).get("KEY").unwrap(), "VAL");
@@ -677,6 +700,7 @@ mod tests {
                 timeout: None,
                 retry: None,
                 shell: None,
+                r#if: None,
             },
         });
         assert_eq!(node_type_name(&agent), "agent");
@@ -878,6 +902,7 @@ mod tests {
                 timeout: Some(15),
                 retry: None,
                 shell: None,
+                r#if: None,
             },
         })];
 
@@ -959,5 +984,207 @@ nodes:
 "#;
         let wf = crate::schema::parse_workflow(yaml).unwrap();
         assert_eq!(wf.timeout, None);
+    }
+
+    #[test]
+    fn test_node_if_condition_extraction() {
+        let node = NodeDef::Shell(ShellNode {
+            id: "deploy".to_string(),
+            run: crate::schema::ScriptSource::Inline("echo deploy".to_string()),
+            depends: vec![],
+            outputs: Default::default(),
+            env: Default::default(),
+            continue_on_error: false,
+            exec: ExecConfig {
+                timeout: None,
+                retry: None,
+                shell: None,
+                r#if: Some("{{ inputs.env }} == production".to_string()),
+            },
+        });
+        assert_eq!(
+            node_if_condition(&node),
+            Some("{{ inputs.env }} == production")
+        );
+
+        let node_no_if = make_shell_node("x", vec![], false);
+        assert!(node_if_condition(&node_no_if).is_none());
+    }
+
+    #[tokio::test]
+    async fn test_execute_dag_conditional_skip() {
+        let pool = init_test_pool().await;
+        let run_id = uuid::Uuid::now_v7().to_string();
+
+        sqlx::query(
+            "INSERT INTO workflow_runs (id, workflow_name, workflow_version, yaml_content, status, node_count, created_at)
+             VALUES (?, 'cond-test', '1.0', '', 'running', 3, datetime('now'))",
+        )
+        .bind(&run_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        // Node a runs, node b has if: "{{ inputs.skip }}" (which will be empty → falsy), node c depends on b
+        let nodes = vec![
+            make_shell_node("a", vec![], false),
+            NodeDef::Shell(ShellNode {
+                id: "b".to_string(),
+                run: crate::schema::ScriptSource::Inline("echo b".to_string()),
+                depends: vec!["a".to_string()],
+                outputs: Default::default(),
+                env: Default::default(),
+                continue_on_error: false,
+                exec: ExecConfig {
+                    timeout: None,
+                    retry: None,
+                    shell: None,
+                    r#if: Some("{{ inputs.should_run }}".to_string()),
+                },
+            }),
+            make_shell_node("c", vec!["b".to_string()], false),
+        ];
+
+        for node in &nodes {
+            let nid = node_id(node);
+            sqlx::query(
+                "INSERT INTO node_runs (id, run_id, node_id, node_type, status, attempt)
+                 VALUES (?, ?, ?, 'shell', 'pending', 0)",
+            )
+            .bind(uuid::Uuid::now_v7().to_string())
+            .bind(&run_id)
+            .bind(nid)
+            .execute(&pool)
+            .await
+            .unwrap();
+        }
+
+        let wf = Workflow {
+            name: "cond-test".to_string(),
+            version: "1.0".to_string(),
+            description: None,
+            timeout: None,
+            defaults: crate::schema::NodeDefaults {
+                timeout: 60,
+                retry: 0,
+                shell: String::new(),
+            },
+            inputs: Default::default(),
+            env: Default::default(),
+            references: Default::default(),
+            nodes,
+            with: serde_yaml::Value::Null,
+            reference_inputs: Default::default(),
+            output_forward: Default::default(),
+        };
+
+        let cancel_token = CancellationToken::new();
+        // No inputs → should_run is empty → node b condition is falsy → b and c skipped
+        let result = execute_dag(
+            Arc::new(pool.clone()),
+            &run_id,
+            &wf,
+            &HashMap::new(),
+            &cancel_token,
+        )
+        .await;
+
+        // Workflow should succeed (conditional skips don't cause failure)
+        // Note: node c depends on b which is skipped, so c also gets skipped
+        // The workflow succeeds because only hard failures cause workflow failure
+        // but actually, the skipped node c won't run at all (deps not satisfied)
+        // and there are no hard failures, so the workflow succeeds
+        if let Err(e) = &result {
+            // This might fail because c's dependency (b) is not in completed set
+            // Let's check what happens
+            panic!("unexpected error: {e}");
+        }
+
+        // Verify node b is marked as skipped
+        let node_b = NodeRun::find_by_run_and_node(&pool, &run_id, "b")
+            .await
+            .unwrap();
+        assert_eq!(node_b.unwrap().status, "skipped");
+
+        // Verify downstream node c is also marked as skipped (not left as pending)
+        let node_c = NodeRun::find_by_run_and_node(&pool, &run_id, "c")
+            .await
+            .unwrap();
+        assert_eq!(node_c.unwrap().status, "skipped");
+    }
+
+    #[tokio::test]
+    async fn test_execute_dag_conditional_run() {
+        let pool = init_test_pool().await;
+        let run_id = uuid::Uuid::now_v7().to_string();
+
+        sqlx::query(
+            "INSERT INTO workflow_runs (id, workflow_name, workflow_version, yaml_content, status, node_count, created_at)
+             VALUES (?, 'cond-run-test', '1.0', '', 'running', 2, datetime('now'))",
+        )
+        .bind(&run_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        let nodes = vec![
+            make_shell_node("a", vec![], false),
+            NodeDef::Shell(ShellNode {
+                id: "b".to_string(),
+                run: crate::schema::ScriptSource::Inline("echo b".to_string()),
+                depends: vec!["a".to_string()],
+                outputs: Default::default(),
+                env: Default::default(),
+                continue_on_error: false,
+                exec: ExecConfig {
+                    timeout: None,
+                    retry: None,
+                    shell: None,
+                    r#if: Some("{{ inputs.should_run }} == yes".to_string()),
+                },
+            }),
+        ];
+
+        for node in &nodes {
+            let nid = node_id(node);
+            sqlx::query(
+                "INSERT INTO node_runs (id, run_id, node_id, node_type, status, attempt)
+                 VALUES (?, ?, ?, 'shell', 'pending', 0)",
+            )
+            .bind(uuid::Uuid::now_v7().to_string())
+            .bind(&run_id)
+            .bind(nid)
+            .execute(&pool)
+            .await
+            .unwrap();
+        }
+
+        let wf = Workflow {
+            name: "cond-run-test".to_string(),
+            version: "1.0".to_string(),
+            description: None,
+            timeout: None,
+            defaults: crate::schema::NodeDefaults {
+                timeout: 60,
+                retry: 0,
+                shell: String::new(),
+            },
+            inputs: Default::default(),
+            env: Default::default(),
+            references: Default::default(),
+            nodes,
+            with: serde_yaml::Value::Null,
+            reference_inputs: Default::default(),
+            output_forward: Default::default(),
+        };
+
+        let cancel_token = CancellationToken::new();
+        let mut inputs = HashMap::new();
+        inputs.insert("should_run".to_string(), "yes".to_string());
+        let result =
+            execute_dag(Arc::new(pool.clone()), &run_id, &wf, &inputs, &cancel_token).await;
+
+        // Node b should run because condition is met
+        assert!(result.is_ok());
     }
 }

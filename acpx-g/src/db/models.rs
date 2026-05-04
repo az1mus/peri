@@ -273,6 +273,24 @@ impl NodeRun {
         Ok(result.rows_affected())
     }
 
+    /// Mark a single pending node as skipped (used for conditional execution).
+    pub async fn mark_node_skipped(
+        pool: &SqlitePool,
+        run_id: &str,
+        node_id: &str,
+    ) -> anyhow::Result<()> {
+        let now = chrono::Utc::now().to_rfc3339();
+        sqlx::query(
+            "UPDATE node_runs SET status = 'skipped', error_message = 'condition evaluated to false', finished_at = ? WHERE run_id = ? AND node_id = ? AND status = 'pending'",
+        )
+        .bind(&now)
+        .bind(run_id)
+        .bind(node_id)
+        .execute(pool)
+        .await?;
+        Ok(())
+    }
+
     /// Mark all pending nodes in a run as skipped (used when a workflow fails).
     pub async fn mark_run_pending_as_skipped(
         pool: &SqlitePool,

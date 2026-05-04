@@ -71,6 +71,39 @@ fn find_close_brace(input: &str, start: usize) -> Option<usize> {
     None
 }
 
+/// Evaluate a condition expression as a boolean.
+///
+/// The expression is first interpolated using the template context,
+/// then the result is evaluated:
+/// - `==` comparison: `"{{ inputs.env }} == production"` → true/false
+/// - `!=` comparison: `"{{ inputs.env }} != staging"` → true/false
+/// - Truthiness: non-empty, non-"false", non-"0", non-"no" → true
+pub fn evaluate_condition(condition: &str, ctx: &TemplateContext) -> bool {
+    let interpolated = interpolate(condition, ctx);
+    evaluate_truthiness(&interpolated)
+}
+
+fn evaluate_truthiness(value: &str) -> bool {
+    let trimmed = value.trim();
+
+    // Check for != comparison (before ==, since != contains =)
+    if let Some(eq_pos) = trimmed.find(" != ") {
+        let left = trimmed[..eq_pos].trim();
+        let right = trimmed[eq_pos + 4..].trim();
+        return left != right;
+    }
+
+    // Check for == comparison
+    if let Some(eq_pos) = trimmed.find(" == ") {
+        let left = trimmed[..eq_pos].trim();
+        let right = trimmed[eq_pos + 4..].trim();
+        return left == right;
+    }
+
+    let lower = trimmed.to_lowercase();
+    !lower.is_empty() && lower != "false" && lower != "0" && lower != "no"
+}
+
 fn resolve_expr(expr: &str, ctx: &TemplateContext) -> String {
     let trimmed = expr.trim();
     if trimmed.is_empty() {
@@ -248,5 +281,92 @@ mod tests {
             interpolate("{{ needs.do-build/build.outputs.artifact_path }}", &ctx),
             "./app"
         );
+    }
+
+    #[test]
+    fn test_evaluate_condition_truthy() {
+        let ctx = make_ctx();
+        assert!(evaluate_condition("{{ inputs.tag }}", &ctx));
+        assert!(evaluate_condition("{{ env.RUST_BACKTRACE }}", &ctx));
+    }
+
+    #[test]
+    fn test_evaluate_condition_falsy() {
+        let ctx = make_ctx();
+        assert!(!evaluate_condition("{{ inputs.nonexistent }}", &ctx));
+    }
+
+    #[test]
+    fn test_evaluate_condition_explicit_false() {
+        let mut inputs = HashMap::new();
+        inputs.insert("flag".to_string(), "false".to_string());
+        let ctx = TemplateContext {
+            inputs,
+            needs_outputs: HashMap::new(),
+            env: HashMap::new(),
+        };
+        assert!(!evaluate_condition("{{ inputs.flag }}", &ctx));
+    }
+
+    #[test]
+    fn test_evaluate_condition_zero_and_no() {
+        let mut inputs = HashMap::new();
+        inputs.insert("val".to_string(), "0".to_string());
+        let ctx = TemplateContext {
+            inputs: inputs.clone(),
+            needs_outputs: HashMap::new(),
+            env: HashMap::new(),
+        };
+        assert!(!evaluate_condition("{{ inputs.val }}", &ctx));
+
+        inputs.insert("val".to_string(), "no".to_string());
+        let ctx2 = TemplateContext {
+            inputs,
+            needs_outputs: HashMap::new(),
+            env: HashMap::new(),
+        };
+        assert!(!evaluate_condition("{{ inputs.val }}", &ctx2));
+    }
+
+    #[test]
+    fn test_evaluate_condition_eq() {
+        let ctx = make_ctx();
+        assert!(evaluate_condition("{{ inputs.env }} == staging", &ctx));
+        assert!(!evaluate_condition("{{ inputs.env }} == production", &ctx));
+    }
+
+    #[test]
+    fn test_evaluate_condition_ne() {
+        let ctx = make_ctx();
+        assert!(evaluate_condition("{{ inputs.env }} != production", &ctx));
+        assert!(!evaluate_condition("{{ inputs.env }} != staging", &ctx));
+    }
+
+    #[test]
+    fn test_evaluate_condition_needs_output_eq() {
+        let ctx = make_ctx();
+        assert!(evaluate_condition(
+            "{{ needs.build.outputs.artifact_path }} == ./dist/app.tar.gz",
+            &ctx
+        ));
+        assert!(!evaluate_condition(
+            "{{ needs.build.outputs.artifact_path }} == /other/path",
+            &ctx
+        ));
+    }
+
+    #[test]
+    fn test_evaluate_condition_plain_true() {
+        let ctx = make_ctx();
+        assert!(evaluate_condition("true", &ctx));
+        assert!(evaluate_condition("yes", &ctx));
+        assert!(evaluate_condition("1", &ctx));
+        assert!(evaluate_condition("anything", &ctx));
+    }
+
+    #[test]
+    fn test_evaluate_condition_missing_output_falsy() {
+        let ctx = make_ctx();
+        assert!(!evaluate_condition("{{ needs.missing.outputs.key }}", &ctx));
     }
 }
