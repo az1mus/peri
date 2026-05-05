@@ -508,6 +508,7 @@ impl App {
             oauth_prompt: None,
             bg_event_tx,
             bg_event_rx: Some(bg_event_rx),
+            quit_pending_since: None,
         };
 
         let handle = crate::ui::headless::HeadlessHandle {

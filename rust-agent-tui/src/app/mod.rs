@@ -120,6 +120,8 @@ pub struct App {
     pub status_panel: Option<status_panel::StatusPanel>,
     /// /memory 记忆文件面板状态
     pub memory_panel: Option<crate::app::memory_panel::MemoryPanel>,
+    /// 双击 Ctrl+C 退出：第一次按下时记录时间，2 秒内再次按下才真正退出
+    pub quit_pending_since: Option<std::time::Instant>,
 }
 
 impl App {
@@ -210,6 +212,7 @@ impl App {
             mcp_ready_shown_until: std::cell::Cell::new(None),
             status_panel: None,
             memory_panel: None,
+            quit_pending_since: None,
         }
     }
 

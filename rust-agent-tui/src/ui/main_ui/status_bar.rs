@@ -310,6 +310,8 @@ fn render_second_row(f: &mut Frame, app: &App, area: Rect) {
                 }
             } else if app.sessions.len() > 1 {
                 key!["/" => "命令  ", "Ctrl+N/P" => ":切换Session  ", "Ctrl+W" => ":关闭"]
+            } else if app.quit_pending_since.is_some() {
+                key!["Ctrl+C" => ":关闭  ", "其他键" => ":取消"]
             } else {
                 key!["/" => "命令  ", "Alt+Enter" => ":换行"]
             }

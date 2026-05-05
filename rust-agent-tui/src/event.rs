@@ -75,6 +75,15 @@ fn copy_panel_selection_to_clipboard(app: &mut App) -> bool {
 }
 
 pub async fn next_event(app: &mut App) -> Result<Option<Action>> {
+    // 退出待确认状态 2 秒后自动过期，快捷键栏恢复正常
+    // 退出待确认状态 2 秒后自动过期，触发重绘让快捷键栏恢复正常
+    if let Some(since) = app.quit_pending_since {
+        if since.elapsed() >= std::time::Duration::from_secs(1) {
+            app.quit_pending_since = None;
+            return Ok(Some(Action::Redraw));
+        }
+    }
+
     if !event::poll(Duration::from_millis(50))? {
         return Ok(None);
     }
@@ -355,24 +364,31 @@ pub async fn next_event(app: &mut App) -> Result<Option<Action>> {
             }
 
             match input {
-                // Ctrl+C：有选区时复制优先，无选区时中断/退出
-                // Ctrl+C：无选区时中断/退出（有选区的复制已在全局拦截处理）
+                // Ctrl+C：有选区时复制优先（已全局拦截），无选区时中断/双击退出
                 Input {
                     key: Key::Char('c'),
                     ctrl: true,
                     ..
                 } => {
                     if app.sessions[app.active].core.loading {
+                        // agent 运行中：优先中断，清除退出待确认状态
                         app.interrupt();
+                        app.quit_pending_since = None;
+                    } else if let Some(since) = app.quit_pending_since {
+                        // 非 loading，2 秒内再次 Ctrl+C → 退出
+                        if since.elapsed() < std::time::Duration::from_secs(2) {
+                            return Ok(Some(Action::Quit));
+                        } else {
+                            // 超时，重新开始计时
+                            app.quit_pending_since = Some(std::time::Instant::now());
+                        }
                     } else {
-                        return Ok(Some(Action::Quit));
+                        // 第一次 Ctrl+C，进入退出待确认状态
+                        app.quit_pending_since = Some(std::time::Instant::now());
                     }
                 }
-                Input { key: Key::Esc, .. } if !app.sessions[app.active].core.loading => {
-                    return Ok(Some(Action::Quit))
-                }
 
-                // ESC during loading: 清除缓冲的 pending_messages
+                // ESC：主界面不再退出，仅用于 loading 时清除缓冲
                 Input { key: Key::Esc, .. } if app.sessions[app.active].core.loading => {
                     if !app.sessions[app.active].core.pending_messages.is_empty() {
                         app.sessions[app.active].core.pending_messages.clear();
@@ -655,7 +671,10 @@ pub async fn next_event(app: &mut App) -> Result<Option<Action>> {
                     }
                 }
 
-                _ => {}
+                _ => {
+                    // 任何其他按键取消退出待确认状态
+                    app.quit_pending_since = None;
+                }
             }
         }
         Event::Paste(text) => {
