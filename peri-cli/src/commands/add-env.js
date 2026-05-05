@@ -40,11 +40,18 @@ function getEnvContent(installDir, shell) {
 export async function addEnv() {
   const installDir = getInstallDir();
   const platformInfo = getPlatformInfo();
-  const binPath = path.join(installDir, 'peri');
 
-  // 检查二进制文件是否存在
-  if (!await fs.pathExists(binPath)) {
-    console.error('❌ peri binary not found.');
+  // 检查安装目录中是否有任何二进制文件或符号链接
+  if (!await fs.pathExists(installDir)) {
+    console.error('❌ Perihelion is not installed.');
+    console.log('Please run `peri install` first.');
+    process.exit(1);
+  }
+
+  const entries = await fs.readdir(installDir);
+  const hasBinary = entries.some(e => !e.startsWith('.') && !e.endsWith('.txt') && !e.includes('-v'));
+  if (!hasBinary) {
+    console.error('❌ No binary found in install directory.');
     console.log('Please run `peri install` first.');
     process.exit(1);
   }
