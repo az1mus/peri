@@ -37,14 +37,13 @@
   background: var(--bg2);
   flex-shrink: 0;
 }
-#editor-toolbar .toolbar-left,
 #editor-toolbar .toolbar-center,
 #editor-toolbar .toolbar-right {
   display: flex;
   align-items: center;
   gap: 6px;
 }
-#editor-toolbar .toolbar-center { flex: 1; justify-content: center; }
+#editor-toolbar .toolbar-center { flex-shrink: 0; }
 #editor-toolbar .toolbar-right { flex-shrink: 0; }
 #wf-name, #wf-version {
   padding: 3px 8px;
@@ -55,16 +54,40 @@
   background: var(--bg);
 }
 #wf-name { width: 180px; font-weight: 600; }
-#editor-template-select {
-  padding: 3px 8px;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  font-size: 12px;
-  font-family: inherit;
-  background: var(--bg);
-}
 
-/* ─── Editor Body (3-column) ────────────────────────────────────── */
+/* ─── Editor Sidebar (Templates) ────────────────────────────────── */
+#editor-sidebar {
+  width: 260px;
+  min-width: 260px;
+  background: var(--bg2);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+#editor-sidebar .sidebar-header {
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+  font-weight: 600;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: var(--bg2);
+  flex-shrink: 0;
+}
+#editor-sidebar .sidebar-header > div {
+  display: flex;
+  gap: 6px;
+}
+#editor-template-list {
+  flex: 1;
+  overflow-y: auto;
+}
+/* Reuse .template-card styles from style.css — they apply here automatically */
+
+/* ─── Editor Body (4-column) ────────────────────────────────────── */
 #editor-body {
   flex: 1;
   display: flex;

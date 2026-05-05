@@ -43,15 +43,19 @@ pub async fn load_workflow(
 }
 
 /// Load a workflow from raw YAML content (no file path).
-/// Uses current working directory as base for relative path resolution.
+/// Uses `base_dir` for relative path resolution; falls back to `current_dir()`.
 pub async fn load_workflow_from_content(
     yaml: &str,
     inputs: HashMap<String, String>,
+    base_dir: Option<&Path>,
 ) -> anyhow::Result<Workflow> {
     let mut wf = parse_workflow(yaml)?;
     if !wf.references.is_empty() {
-        // Check for reference nodes that need expansion
-        wf = expand_references(wf, &std::env::current_dir()?, &mut HashSet::new()).await?;
+        let dir = match base_dir {
+            Some(p) => p.to_path_buf(),
+            None => std::env::current_dir()?,
+        };
+        wf = expand_references(wf, &dir, &mut HashSet::new()).await?;
     }
     wf.reference_inputs.insert("__root__".to_string(), inputs);
     Ok(wf)

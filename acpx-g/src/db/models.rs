@@ -317,6 +317,9 @@ pub struct SubmitWorkflowRequest {
     /// Runtime input values for the workflow.
     #[serde(default)]
     pub inputs: Option<HashMap<String, String>>,
+    /// Base directory for resolving relative reference paths.
+    #[serde(default)]
+    pub base_dir: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]

@@ -1,3 +1,4 @@
+use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
 
 use axum::{
@@ -383,15 +384,17 @@ pub async fn submit_workflow(
     };
 
     // Load and expand references
-    let expanded_wf = match runner::load_workflow_from_content(&req.yaml, inputs).await {
-        Ok(w) => w,
-        Err(e) => {
-            return (
-                StatusCode::BAD_REQUEST,
-                Json(serde_json::json!({"error": format!("failed to load workflow: {e}")})),
-            );
-        }
-    };
+    let base_dir = req.base_dir.as_deref().map(PathBuf::from);
+    let expanded_wf =
+        match runner::load_workflow_from_content(&req.yaml, inputs, base_dir.as_deref()).await {
+            Ok(w) => w,
+            Err(e) => {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    Json(serde_json::json!({"error": format!("failed to load workflow: {e}")})),
+                );
+            }
+        };
 
     let inputs_json = req
         .inputs
@@ -681,7 +684,8 @@ pub async fn rerun_workflow(
 
     // Load and expand references
     let expanded_wf =
-        match runner::load_workflow_from_content(&old_run.yaml_content, inputs.clone()).await {
+        match runner::load_workflow_from_content(&old_run.yaml_content, inputs.clone(), None).await
+        {
             Ok(w) => w,
             Err(e) => {
                 return (

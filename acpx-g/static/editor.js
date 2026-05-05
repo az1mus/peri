@@ -30,6 +30,9 @@ let wfMeta = {
   references: {},
 };
 
+// Base directory for resolving relative references (from template file path)
+let wfBaseDir = null;
+
 // Node data store: bizId → { type, ...fields }
 const nodeStore = new Map();
 
@@ -37,11 +40,11 @@ const nodeStore = new Map();
 function switchTab(tab) {
   document.querySelectorAll('#tab-bar .tab').forEach(t =>
     t.classList.toggle('active', t.dataset.tab === tab));
-  document.getElementById('dashboard-view').style.display = tab === 'dashboard' ? 'flex' : 'none';
+  document.getElementById('logs-view').style.display = tab === 'logs' ? 'flex' : 'none';
   document.getElementById('editor-view').style.display = tab === 'editor' ? 'flex' : 'none';
   if (tab === 'editor') {
     if (!dfEditor) initEditor();
-    populateTemplateSelect();
+    refreshEditorTemplateList();
   }
 }
 
@@ -919,15 +922,16 @@ function editorNew() {
   bizIdToDfId.clear();
   nodeIdCounter = 0;
   wfMeta = { name: 'new-workflow', version: '1.0', description: '', timeout: null, defaults: { retry: 0, timeout: 300, shell: 'bash -c' }, inputs: {}, env: {}, references: {} };
+  wfBaseDir = null;
   document.getElementById('wf-name').value = wfMeta.name;
   document.getElementById('wf-version').value = wfMeta.version;
-  document.getElementById('editor-template-select').value = '';
   hidePropertyPanel();
   clearHistory();
   pushHistory();
   updateYamlFromCanvas();
   displayValidation([]);
   localStorage.removeItem('acpx-editor-draft');
+  highlightEditorTemplate();
 }
 
 function editorImport() {
@@ -981,17 +985,19 @@ async function editorRun() {
     return;
   }
   const yaml = exportToYaml();
+  const payload = { yaml };
+  if (wfBaseDir) payload.base_dir = wfBaseDir;
   try {
     const r = await fetch('/api/v1/workflows', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ yaml }),
+      body: JSON.stringify(payload),
     });
     const result = await r.json();
     if (r.ok) {
       showToast('Workflow started: ' + result.run_id, 'success');
-      // Switch to dashboard and select the run
-      switchTab('dashboard');
+      // Switch to logs view and select the run
+      switchTab('logs');
       if (typeof loadRuns === 'function') await loadRuns();
       if (typeof selectRun === 'function') selectRun(result.run_id);
     } else {
@@ -1205,13 +1211,58 @@ function saveWorkflowSettings() {
 }
 
 // ── Template Loading ───────────────────────────────────────────────
-function populateTemplateSelect() {
-  const sel = document.getElementById('editor-template-select');
-  if (!sel) return;
-  sel.innerHTML = '<option value="">-- New Workflow --</option>';
+function renderEditorTemplateList(tpls) {
+  const el = document.getElementById('editor-template-list');
+  if (!el) return;
+  if (!tpls || !tpls.length) {
+    el.innerHTML = '<div class="template-empty">No templates found</div>';
+    return;
+  }
+  el.innerHTML = tpls.map(t => `
+    <div class="template-card${wfMeta.name === t.name ? ' active' : ''}" data-name="${esc(t.name)}">
+      <div class="template-name">${esc(t.name)}</div>
+      <div class="template-desc">${esc(t.description || 'No description')}</div>
+      <div class="template-meta">
+        <span class="tag">v${esc(t.version)}</span>
+        <span class="tag">${t.node_count} nodes</span>
+      </div>
+      <div class="template-actions">
+        <button class="btn btn-primary btn-sm run-btn" data-name="${esc(t.name)}">&#9654; Run</button>
+        <button class="btn btn-sm api-btn" data-name="${esc(t.name)}">API</button>
+      </div>
+    </div>
+  `).join('');
+
+  // Event delegation
+  el.querySelectorAll('.template-card').forEach(card => {
+    card.addEventListener('click', (e) => {
+      if (e.target.closest('.run-btn') || e.target.closest('.api-btn')) return;
+      loadTemplateToEditor(card.dataset.name);
+    });
+  });
+  el.querySelectorAll('.run-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      // Run from editor sidebar — validate and submit
+      editorRun();
+    });
+  });
+  el.querySelectorAll('.api-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (typeof showTemplateApi === 'function') showTemplateApi(btn.dataset.name);
+    });
+  });
+}
+
+function refreshEditorTemplateList() {
   if (typeof allTemplates === 'undefined') return;
-  allTemplates.forEach(t => {
-    sel.innerHTML += `<option value="${esc(t.name)}">${esc(t.name)} (v${esc(t.version)})</option>`;
+  renderEditorTemplateList(allTemplates);
+}
+
+function highlightEditorTemplate() {
+  document.querySelectorAll('#editor-template-list .template-card').forEach(card => {
+    card.classList.toggle('active', card.dataset.name === wfMeta.name);
   });
 }
 
@@ -1222,9 +1273,18 @@ async function loadTemplateToEditor(name) {
     const result = await r.json();
     if (result.yaml) {
       importFromYaml(result.yaml);
-      // Sync template dropdown
-      const sel = document.getElementById('editor-template-select');
-      if (sel) sel.value = name;
+      // Derive base directory from template file path for reference resolution
+      if (typeof allTemplates !== 'undefined') {
+        const tpl = allTemplates.find(t => t.name === name);
+        if (tpl && tpl.file_path) {
+          const parts = tpl.file_path.replace(/\\/g, '/').split('/');
+          parts.pop(); // remove filename
+          wfBaseDir = parts.length ? parts.join('/') + '/' : null;
+        } else {
+          wfBaseDir = null;
+        }
+      }
+      highlightEditorTemplate();
     } else {
       showToast(result.error || 'Failed to load template', 'error');
     }
@@ -1233,18 +1293,16 @@ async function loadTemplateToEditor(name) {
   }
 }
 
-// Listen for template select change
+// Listen for workflow metadata inputs
 document.addEventListener('DOMContentLoaded', function() {
-  const sel = document.getElementById('editor-template-select');
-  if (sel) sel.addEventListener('change', function() {
-    if (this.value) loadTemplateToEditor(this.value);
-  });
+  // Editor is now the default view — initialize after layout is computed
+  requestAnimationFrame(() => { requestAnimationFrame(() => { initEditor(); }); });
 
-  // Wire up workflow metadata inputs
   const nameInput = document.getElementById('wf-name');
   const verInput = document.getElementById('wf-version');
   if (nameInput) nameInput.addEventListener('change', function() {
     wfMeta.name = this.value || 'untitled';
+    highlightEditorTemplate();
     updateYamlFromCanvas();
     saveDraft();
   });

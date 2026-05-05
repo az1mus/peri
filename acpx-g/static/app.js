@@ -108,6 +108,7 @@ async function loadTemplates() {
       el.innerHTML = '<div class="template-empty">No templates found<br><span style="font-size:11px">Start with: acpx-g --workflow-dir ./examples</span></div>';
       document.getElementById('graph-placeholder').textContent = 'Add a workflow directory to get started';
       document.getElementById('log-panel').innerHTML = '<div class="log-empty">Workflow logs will appear here</div>';
+      if (typeof refreshEditorTemplateList === 'function') refreshEditorTemplateList();
       return;
     }
     el.innerHTML = tpls.map(t => `
@@ -151,6 +152,9 @@ async function loadTemplates() {
         showTemplateApi(btn.dataset.name);
       });
     });
+
+    // Sync editor sidebar template list
+    if (typeof refreshEditorTemplateList === 'function') refreshEditorTemplateList();
 
     // Auto-select first template on initial load
     if (!selectedRunId && !selectedTemplateName) {
