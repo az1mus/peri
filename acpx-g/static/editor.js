@@ -914,7 +914,7 @@ function doImportYaml() {
 
 async function editorSave() {
   const errors = validateWorkflow();
-  if (errors.length) { showToast('保存前请修复验证错误', 'error'); return; }
+  if (errors.length) { showToast('保存失败: ' + errors.slice(0, 3).join('; '), 'error'); return; }
 
   const btn = document.getElementById('btnSave');
   const originalHtml = btn?.innerHTML;
@@ -942,7 +942,7 @@ async function editorSave() {
 
 async function editorRun() {
   const errors = validateWorkflow();
-  if (errors.length) { showToast('运行前请修复验证错误', 'error'); return; }
+  if (errors.length) { showToast('运行失败: ' + errors.slice(0, 3).join('; '), 'error'); return; }
 
   const btn = document.getElementById('btnRun');
   const originalHtml = btn?.innerHTML;

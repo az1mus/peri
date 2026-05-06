@@ -15,10 +15,15 @@ const AppState = {
 // ── API Helper ────────────────────────────────────────────
 async function api(path, options = {}) {
   const url = path.startsWith('http') ? path : path;
-  const res = await fetch(url, {
-    headers: { 'Content-Type': 'application/json', ...options.headers },
-    ...options,
-  });
+  let res;
+  try {
+    res = await fetch(url, {
+      headers: { 'Content-Type': 'application/json', ...options.headers },
+      ...options,
+    });
+  } catch (e) {
+    throw new Error('无法连接到服务器，请检查网络或服务是否运行');
+  }
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
     throw new Error(body.error || body.message || `请求失败 (${res.status})`);

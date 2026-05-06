@@ -866,6 +866,24 @@ nodes:
     }
 
     #[test]
+    fn test_parse_workflow_partial_defaults() {
+        let yaml = r#"
+name: test
+version: "1.0"
+defaults:
+  retry: 5
+nodes:
+  - id: greet
+    type: shell
+    run: echo hello
+"#;
+        let wf = parse_workflow(yaml).unwrap();
+        assert_eq!(wf.defaults.retry, 5);
+        assert_eq!(wf.defaults.timeout, 300);
+        assert_eq!(wf.defaults.shell, "bash -c");
+    }
+
+    #[test]
     fn test_parse_workflow_per_node_exec_config() {
         let yaml = r#"
 name: test
