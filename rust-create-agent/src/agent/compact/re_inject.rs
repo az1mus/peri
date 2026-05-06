@@ -136,7 +136,7 @@ pub async fn re_inject(
         let file_contents: Vec<Option<String>> = futures::future::join_all(file_futures).await;
 
         let mut valid_files: Vec<(String, String)> = Vec::new();
-        for (path, content) in file_paths.iter().zip(file_contents.into_iter()) {
+        for (path, content) in file_paths.iter().zip(file_contents) {
             if let Some(content) = content {
                 valid_files.push((path.clone(), content));
             } else {
@@ -180,7 +180,7 @@ pub async fn re_inject(
         let skill_contents: Vec<Option<String>> = futures::future::join_all(skill_futures).await;
 
         let mut valid_skills: Vec<(String, String)> = Vec::new();
-        for (path, content) in skills_paths.iter().zip(skill_contents.into_iter()) {
+        for (path, content) in skills_paths.iter().zip(skill_contents) {
             if let Some(content) = content {
                 valid_skills.push((path.clone(), content));
             } else {

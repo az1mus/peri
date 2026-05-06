@@ -266,7 +266,7 @@ pub fn render_view_model(
                     for line in inner_lines {
                         // 每行前缀 2 空格缩进
                         let mut new_spans = vec![Span::raw("  ")];
-                        new_spans.extend(line.spans.into_iter());
+                        new_spans.extend(line.spans);
                         lines.push(Line::from(new_spans));
                     }
                 }

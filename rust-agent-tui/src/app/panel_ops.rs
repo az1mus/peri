@@ -639,7 +639,7 @@ impl App {
             .filter(|km| {
                 let km_name = match &km.source {
                     MarketplaceSource::GitHub { repo } => {
-                        repo.split('/').last().unwrap_or(repo).to_string()
+                        repo.split('/').next_back().unwrap_or(repo).to_string()
                     }
                     MarketplaceSource::Git { url } => url
                         .split('/')
