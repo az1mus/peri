@@ -258,14 +258,14 @@ pub fn load_merged_config(cwd: &Path) -> McpConfigFile {
 }
 
 /// 将插件提供的 MCP 服务器合并到已有配置中
-/// 服务器名称格式为 `{plugin_name}__{server_name}`，避免与用户配置冲突
+/// 服务器名称格式为 `plugin:{plugin_name}:{server_name}`，与 Claude Code 一致
 pub fn merge_plugin_servers(
     mut config: McpConfigFile,
     plugin_name: &str,
     servers: &HashMap<String, McpServerConfig>,
 ) -> McpConfigFile {
     for (server_name, server_config) in servers {
-        let namespaced_name = format!("{}__{}", plugin_name, server_name);
+        let namespaced_name = format!("plugin:{}:{}", plugin_name, server_name);
         let mut cfg = server_config.clone();
         cfg.source = Some(ConfigSource::Plugin);
         config.mcp_servers.insert(namespaced_name, cfg);
@@ -797,7 +797,7 @@ mod tests {
         let mut servers = HashMap::new();
         servers.insert("db".to_string(), test_config());
         let result = merge_plugin_servers(config, "my-plugin", &servers);
-        assert!(result.mcp_servers.contains_key("my-plugin__db"));
+        assert!(result.mcp_servers.contains_key("plugin:my-plugin:db"));
         assert_eq!(result.mcp_servers.len(), 1);
     }
 
@@ -813,7 +813,7 @@ mod tests {
             "original db should be preserved"
         );
         assert!(
-            result.mcp_servers.contains_key("my-plugin__db"),
+            result.mcp_servers.contains_key("plugin:my-plugin:db"),
             "namespaced db should exist"
         );
         assert_eq!(result.mcp_servers.len(), 2);
@@ -826,7 +826,7 @@ mod tests {
         servers.insert("db".to_string(), test_config());
         let result = merge_plugin_servers(config, "my-plugin", &servers);
         assert_eq!(
-            result.mcp_servers["my-plugin__db"].source,
+            result.mcp_servers["plugin:my-plugin:db"].source,
             Some(ConfigSource::Plugin),
         );
     }

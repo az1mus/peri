@@ -100,11 +100,13 @@ pub struct MarketplaceManifest {
     pub allow_cross_marketplace: Option<Vec<String>>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "source")]
 pub enum MarketplaceSource {
     #[serde(rename = "github")]
     GitHub { repo: String },
+    #[serde(rename = "git")]
+    Git { url: String },
     #[serde(rename = "url")]
     Url { url: String },
     #[serde(rename = "file")]
@@ -222,16 +224,67 @@ impl Default for InstalledPlugins {
     }
 }
 
+/// 已注册的 marketplace 配置条目
+///
+/// 与 Claude Code 的 KnownMarketplaceSchema 兼容：
+/// - source: required - marketplace 来源
+/// - installLocation: required - 本地缓存路径
+/// - lastUpdated: required - ISO 8601 时间戳
+/// - autoUpdate: optional - 是否自动更新
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct KnownMarketplace {
     pub source: MarketplaceSource,
     #[serde(rename = "installLocation")]
-    pub install_location: Option<PathBuf>,
-    #[serde(default)]
-    #[serde(rename = "autoUpdate")]
+    pub install_location: String,
+    #[serde(rename = "autoUpdate", default)]
     pub auto_update: bool,
     #[serde(rename = "lastUpdated")]
+    pub last_updated: String,
+}
+
+/// 声明格式的 marketplace（用于 settings.json 的 extraKnownMarketplaces）
+///
+/// 这是意图层（intent layer）的声明，只需要 source 字段。
+/// 当 marketplace 实际安装后，会转换为 KnownMarketplace 并添加 installLocation 和 lastUpdated。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DeclaredMarketplace {
+    pub source: MarketplaceSource,
+    #[serde(rename = "installLocation", default)]
+    pub install_location: Option<String>,
+    #[serde(rename = "autoUpdate", default)]
+    pub auto_update: bool,
+    #[serde(rename = "lastUpdated", default)]
     pub last_updated: Option<String>,
+}
+
+impl From<DeclaredMarketplace> for KnownMarketplace {
+    fn from(declared: DeclaredMarketplace) -> Self {
+        KnownMarketplace {
+            source: declared.source,
+            install_location: declared.install_location.unwrap_or_default(),
+            auto_update: declared.auto_update,
+            last_updated: declared.last_updated.unwrap_or_default(),
+        }
+    }
+}
+
+impl From<KnownMarketplace> for DeclaredMarketplace {
+    fn from(known: KnownMarketplace) -> Self {
+        DeclaredMarketplace {
+            source: known.source,
+            install_location: if known.install_location.is_empty() {
+                None
+            } else {
+                Some(known.install_location)
+            },
+            auto_update: known.auto_update,
+            last_updated: if known.last_updated.is_empty() {
+                None
+            } else {
+                Some(known.last_updated)
+            },
+        }
+    }
 }
 
 #[cfg(test)]
@@ -443,9 +496,22 @@ mod tests {
             MarketplaceSource::GitHub { repo } => assert_eq!(repo, "test/repo"),
             _ => panic!("expected GitHub variant"),
         }
-        assert_eq!(km.install_location.as_deref(), Some(Path::new("/tmp/test")));
+        assert_eq!(km.install_location, "/tmp/test");
         assert!(km.auto_update);
-        assert_eq!(km.last_updated.as_deref(), Some("2025-01-01T00:00:00Z"));
+        assert_eq!(km.last_updated, "2025-01-01T00:00:00Z");
+    }
+
+    #[test]
+    fn test_known_marketplace_without_auto_update() {
+        let json = r#"{
+            "source": {"source":"github","repo":"test/repo"},
+            "installLocation": "/tmp/test",
+            "lastUpdated": "2025-01-01T00:00:00Z"
+        }"#;
+        let km: KnownMarketplace = serde_json::from_str(json).unwrap();
+        assert!(!km.auto_update); // default value
+        assert_eq!(km.install_location, "/tmp/test");
+        assert_eq!(km.last_updated, "2025-01-01T00:00:00Z");
     }
 
     #[test]

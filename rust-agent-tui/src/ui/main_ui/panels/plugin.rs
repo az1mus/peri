@@ -20,6 +20,16 @@ pub fn render_plugin_panel(f: &mut Frame, app: &mut App, area: Rect) {
     let is_detail = app.plugin_panel.as_ref().is_some_and(|p| p.is_detail());
 
     if is_detail {
+        // 检查是否是添加 marketplace 模式
+        let is_add_marketplace = app
+            .plugin_panel
+            .as_ref()
+            .is_some_and(|p| p.add_marketplace_active);
+        if is_add_marketplace {
+            render_add_marketplace(f, app, area);
+            return;
+        }
+
         let is_discover_detail = app
             .plugin_panel
             .as_ref()
@@ -244,96 +254,174 @@ fn render_list(f: &mut Frame, app: &mut App, area: Rect) {
                 )));
             }
             PluginPanelView::Marketplaces => {
-                if panel.marketplace_entries.is_empty() {
-                    lines.push(Line::from(Span::styled(
-                        "  No marketplaces configured",
-                        Style::default().fg(theme::MUTED),
-                    )));
+                // 行布局：Tab(1) + 空行(1) + Add块(3行) + 每个marketplace(4行)
+                // cursor=0→row2, cursor=1→row5, cursor=2→row9, ... cursor=n→row(5+(n-1)*4)
+                cursor_row = if panel.marketplace_confirm_delete.is_some() {
+                    // 确认删除状态：确认消息在 row 2
+                    2
+                } else if panel.marketplace_cursor == 0 {
+                    // Add Marketplace 标题行
+                    2
                 } else {
-                    for (i, mkt) in panel.marketplace_entries.iter().enumerate() {
-                        let is_cursor = i == panel.marketplace_cursor;
-                        let cursor_char = if is_cursor { "\u{276F} " } else { "  " };
+                    // 第 (cursor-1) 个 marketplace
+                    5 + (panel.marketplace_cursor - 1) * 4
+                };
 
-                        let name_style = if is_cursor {
-                            Style::default()
-                                .fg(theme::THINKING)
-                                .add_modifier(Modifier::BOLD)
-                        } else {
-                            Style::default().fg(theme::TEXT)
-                        };
-
-                        // 状态指示
-                        let (status_text, status_style) = match mkt.status {
-                            MarketplaceViewStatus::Fresh | MarketplaceViewStatus::Cached => {
-                                ("cached", Style::default().fg(theme::SAGE))
-                            }
-                            MarketplaceViewStatus::Fetching => {
-                                ("fetching\u{2026}", Style::default().fg(theme::WARNING))
-                            }
-                            MarketplaceViewStatus::Stale => {
-                                ("stale", Style::default().fg(theme::WARNING))
-                            }
-                            MarketplaceViewStatus::Failed => {
-                                ("failed", Style::default().fg(theme::ERROR))
-                            }
-                        };
-
+                // 检查是否处于确认删除状态
+                if let Some(confirm_idx) = panel.marketplace_confirm_delete {
+                    if let Some(mkt) = panel.marketplace_entries.get(confirm_idx) {
+                        lines.push(Line::from("")); // 空行
                         lines.push(Line::from(vec![
                             Span::styled(
-                                cursor_char.to_string(),
-                                Style::default().fg(theme::THINKING),
+                                "  确认要移除 marketplace ",
+                                Style::default().fg(theme::TEXT),
                             ),
-                            Span::styled(mkt.name.clone(), name_style),
-                        ]));
-
-                        // 详情行
-                        let mut detail_parts = vec![
-                            Span::styled("     ".to_string(), Style::default()),
                             Span::styled(
-                                mkt.source_label.clone(),
-                                Style::default().fg(theme::MUTED),
+                                mkt.name.clone(),
+                                Style::default()
+                                    .fg(theme::THINKING)
+                                    .add_modifier(Modifier::BOLD),
                             ),
-                        ];
+                            Span::styled(" ?", Style::default().fg(theme::TEXT)),
+                        ]));
+                        lines.push(Line::from("")); // 空行
+                        lines.push(Line::from(vec![
+                            Span::styled("  按下 ", Style::default().fg(theme::MUTED)),
+                            Span::styled(
+                                "Enter",
+                                Style::default()
+                                    .fg(theme::ACCENT)
+                                    .add_modifier(Modifier::BOLD),
+                            ),
+                            Span::styled(" 确认，", Style::default().fg(theme::MUTED)),
+                            Span::styled(
+                                "Esc",
+                                Style::default()
+                                    .fg(theme::ACCENT)
+                                    .add_modifier(Modifier::BOLD),
+                            ),
+                            Span::styled(" 取消", Style::default().fg(theme::MUTED)),
+                        ]));
+                    }
+                } else {
+                    // 添加 "Add Marketplace" 选项（始终在第一位，cursor = 0）
+                    let is_add_cursor = panel.marketplace_cursor == 0;
+                    let add_style = if is_add_cursor {
+                        Style::default()
+                            .fg(theme::THINKING)
+                            .add_modifier(Modifier::BOLD)
+                    } else {
+                        Style::default().fg(theme::TEXT)
+                    };
+                    let add_cursor = if is_add_cursor { "\u{276F} " } else { "  " };
+                    lines.push(Line::from(vec![
+                        Span::styled(add_cursor.to_string(), Style::default().fg(theme::THINKING)),
+                        Span::styled("Add Marketplace", add_style),
+                    ]));
+                    lines.push(Line::from(vec![
+                        Span::styled("     ".to_string(), Style::default()),
+                        Span::styled("添加新的 marketplace 源", Style::default().fg(theme::MUTED)),
+                    ]));
+                    lines.push(Line::from(""));
 
-                        // 插件数
-                        detail_parts.push(Span::styled(
-                            format!(" \u{00B7} {} available", mkt.plugin_count),
+                    if panel.marketplace_entries.is_empty() {
+                        lines.push(Line::from(Span::styled(
+                            "  No marketplaces configured",
                             Style::default().fg(theme::MUTED),
-                        ));
+                        )));
+                    } else {
+                        for (i, mkt) in panel.marketplace_entries.iter().enumerate() {
+                            // cursor 0 表示 Add Marketplace，实际 marketplace 从 cursor = 1 开始
+                            let is_cursor = panel.marketplace_cursor == i + 1;
+                            let is_updating = panel.marketplace_updating.contains(&mkt.name);
+                            let cursor_char = if is_cursor { "\u{276F} " } else { "  " };
 
-                        // 已安装数
-                        if mkt.installed_count > 0 {
+                            let name_style = if is_cursor {
+                                Style::default()
+                                    .fg(theme::THINKING)
+                                    .add_modifier(Modifier::BOLD)
+                            } else {
+                                Style::default().fg(theme::TEXT)
+                            };
+
+                            // 状态指示
+                            let (status_text, status_style) = if is_updating {
+                                ("updating\u{2026}", Style::default().fg(theme::WARNING))
+                            } else {
+                                match mkt.status {
+                                    MarketplaceViewStatus::Fresh
+                                    | MarketplaceViewStatus::Cached => {
+                                        ("cached", Style::default().fg(theme::SAGE))
+                                    }
+                                    MarketplaceViewStatus::Fetching => {
+                                        ("fetching\u{2026}", Style::default().fg(theme::WARNING))
+                                    }
+                                    MarketplaceViewStatus::Stale => {
+                                        ("stale", Style::default().fg(theme::WARNING))
+                                    }
+                                    MarketplaceViewStatus::Failed => {
+                                        ("failed", Style::default().fg(theme::ERROR))
+                                    }
+                                }
+                            };
+
+                            lines.push(Line::from(vec![
+                                Span::styled(
+                                    cursor_char.to_string(),
+                                    Style::default().fg(theme::THINKING),
+                                ),
+                                Span::styled(mkt.name.clone(), name_style),
+                            ]));
+
+                            // 详情行
+                            let mut detail_parts = vec![
+                                Span::styled("     ".to_string(), Style::default()),
+                                Span::styled(
+                                    mkt.source_label.clone(),
+                                    Style::default().fg(theme::MUTED),
+                                ),
+                            ];
+
+                            // 插件数
                             detail_parts.push(Span::styled(
-                                format!(" \u{00B7} {} installed", mkt.installed_count),
-                                Style::default().fg(theme::SAGE),
-                            ));
-                        }
-
-                        lines.push(Line::from(detail_parts));
-
-                        // 状态行
-                        let mut status_parts = vec![
-                            Span::styled("     ", Style::default()),
-                            Span::styled(status_text.to_string(), status_style),
-                        ];
-
-                        // 最后更新时间
-                        if let Some(ref updated) = mkt.last_updated {
-                            status_parts.push(Span::styled(
-                                format!(" \u{00B7} Updated {}", updated),
+                                format!(" \u{00B7} {} available", mkt.plugin_count),
                                 Style::default().fg(theme::MUTED),
                             ));
+
+                            // 已安装数
+                            if mkt.installed_count > 0 {
+                                detail_parts.push(Span::styled(
+                                    format!(" \u{00B7} {} installed", mkt.installed_count),
+                                    Style::default().fg(theme::SAGE),
+                                ));
+                            }
+
+                            lines.push(Line::from(detail_parts));
+
+                            // 状态行
+                            let mut status_parts = vec![
+                                Span::styled("     ", Style::default()),
+                                Span::styled(status_text.to_string(), status_style),
+                            ];
+
+                            // 最后更新时间
+                            if let Some(ref updated) = mkt.last_updated {
+                                status_parts.push(Span::styled(
+                                    format!(" \u{00B7} Updated {}", updated),
+                                    Style::default().fg(theme::MUTED),
+                                ));
+                            }
+
+                            // auto-update
+                            let auto_label = if mkt.auto_update { "on" } else { "off" };
+                            status_parts.push(Span::styled(
+                                format!(" \u{00B7} auto-update: {}", auto_label),
+                                Style::default().fg(theme::MUTED),
+                            ));
+
+                            lines.push(Line::from(status_parts));
+                            lines.push(Line::from(""));
                         }
-
-                        // auto-update
-                        let auto_label = if mkt.auto_update { "on" } else { "off" };
-                        status_parts.push(Span::styled(
-                            format!(" \u{00B7} auto-update: {}", auto_label),
-                            Style::default().fg(theme::MUTED),
-                        ));
-
-                        lines.push(Line::from(status_parts));
-                        lines.push(Line::from(""));
                     }
                 }
             }
@@ -953,4 +1041,114 @@ fn truncate_display(s: &str, max_width: usize) -> String {
             .unwrap_or(s.len());
         format!("{}\u{2026}", &s[..end])
     }
+}
+
+/// 渲染 Add Marketplace 面板（对齐 Claude Code 设计）
+fn render_add_marketplace(f: &mut Frame, app: &mut App, area: Rect) {
+    let panel = match &app.plugin_panel {
+        Some(p) => p,
+        None => return,
+    };
+
+    let input_value = panel.add_marketplace_input.value();
+    let display_text = panel.add_marketplace_input.display_text('\u{2022}');
+
+    let inner = BorderedPanel::new(Span::styled(
+        " Add Marketplace ",
+        Style::default()
+            .fg(theme::THINKING)
+            .add_modifier(Modifier::BOLD),
+    ))
+    .border_style(Style::default().fg(theme::BORDER))
+    .render(f, area);
+
+    app.sessions[app.active].core.panel_area = Some(inner);
+
+    // 构建内容行（对齐 Claude Code 布局）
+    let mut lines = Vec::new();
+
+    // 空行（边距）
+    lines.push(Line::from(""));
+
+    // 提示文本
+    lines.push(Line::from(vec![Span::styled(
+        "  Enter marketplace source:",
+        Style::default().fg(theme::TEXT),
+    )]));
+
+    // 示例文本（输入框上方，使用暗淡颜色）
+    lines.push(Line::from(vec![
+        Span::styled("  ", Style::default()),
+        Span::styled("Examples:", Style::default().fg(theme::MUTED)),
+    ]));
+
+    let examples = [
+        ("owner/repo", "GitHub"),
+        ("git@github.com:owner/repo.git", "SSH"),
+        ("https://example.com/marketplace.json", ""),
+        ("./path/to/marketplace", ""),
+    ];
+
+    for (example, desc) in &examples {
+        if desc.is_empty() {
+            lines.push(Line::from(vec![
+                Span::styled("   · ", Style::default().fg(theme::MUTED)),
+                Span::styled(*example, Style::default().fg(theme::MUTED)),
+            ]));
+        } else {
+            lines.push(Line::from(vec![
+                Span::styled("   · ", Style::default().fg(theme::MUTED)),
+                Span::styled(*example, Style::default().fg(theme::MUTED)),
+                Span::styled(format!(" ({})", desc), Style::default().fg(theme::MUTED)),
+            ]));
+        }
+    }
+
+    // 空行分隔
+    lines.push(Line::from(""));
+
+    // 输入框行
+    let input_line = if input_value.is_empty() {
+        // 空输入框 + 光标
+        Line::from(vec![
+            Span::styled("  ", Style::default()),
+            Span::styled("\u{2588}", Style::default().fg(theme::TEXT)), // 光标
+        ])
+    } else {
+        Line::from(vec![
+            Span::styled("  ", Style::default()),
+            Span::styled(display_text, Style::default().fg(theme::TEXT)),
+            Span::styled("\u{2588}", Style::default().fg(theme::TEXT)), // 光标
+        ])
+    };
+    lines.push(input_line);
+
+    // 底部快捷键提示（左对齐，斜体，暗淡）
+    lines.push(Line::from(""));
+    lines.push(Line::from(vec![
+        Span::styled("   ", Style::default()),
+        Span::styled(
+            "Enter to add",
+            Style::default()
+                .fg(theme::MUTED)
+                .add_modifier(Modifier::ITALIC),
+        ),
+        Span::styled(" · ", Style::default().fg(theme::MUTED)),
+        Span::styled(
+            "Esc to cancel",
+            Style::default()
+                .fg(theme::MUTED)
+                .add_modifier(Modifier::ITALIC),
+        ),
+    ]));
+
+    // 保存到 panel_plain_lines
+    app.sessions[app.active].core.panel_plain_lines = lines
+        .iter()
+        .map(|l| l.spans.iter().map(|s| s.content.as_ref()).collect())
+        .collect();
+
+    // 渲染内容
+    let paragraph = Paragraph::new(lines);
+    f.render_widget(paragraph, inner);
 }

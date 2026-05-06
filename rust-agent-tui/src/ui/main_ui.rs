@@ -275,7 +275,13 @@ fn render_session_column(
 
 /// 计算底部展开区所需高度（无激活面板时返回 0）
 fn active_panel_height(app: &App, screen_height: u16, screen_width: u16) -> u16 {
-    let max_h = screen_height * 3 / 5; // 最多占 60% 屏高
+    // plugin 面板可以占 70%，其他面板最多 60%
+    let is_plugin_panel = app.plugin_panel.is_some();
+    let max_h = if is_plugin_panel {
+        screen_height * 70 / 100
+    } else {
+        screen_height * 3 / 5
+    };
     let raw = if let Some(panel) = &app.sessions[app.active].core.thread_browser {
         // 搜索框 3 行 + 空行 1 + items * 3 (标题+元数据+空行) + 快捷键 1 + 边框 2
         let items = panel.total() as u16;
@@ -341,37 +347,7 @@ fn active_panel_height(app: &App, screen_height: u16, screen_width: u16) -> u16 
             .unwrap_or(0);
         (items as u16 * 2 + 4).max(6)
     } else if app.plugin_panel.is_some() {
-        let panel = app.plugin_panel.as_ref().unwrap();
-        use crate::app::plugin_panel::PluginPanelView;
-        if panel.is_detail() {
-            20u16
-        } else {
-            match panel.view {
-                PluginPanelView::Discover => {
-                    // Tab行(2) + 搜索框(4) + 列表(每项2行, 至少显示3行) + border(2)
-                    let items = panel.discover_filtered_plugins().len();
-                    let list_height = (items as u16 * 2).min(12).max(6);
-                    list_height + 6 + 2
-                }
-                PluginPanelView::Marketplaces => {
-                    // 每个 marketplace 占 3 行(name+detail+status) + 空行
-                    let items = panel.marketplace_entries.len();
-                    (items as u16 * 4 + 4).min(25).max(8)
-                }
-                _ => {
-                    let items = panel.current_list_len();
-                    let scope_groups = {
-                        let indices = panel.visible_indices();
-                        let mut scopes = std::collections::HashSet::new();
-                        for &i in &indices {
-                            scopes.insert(panel.entries[i].scope);
-                        }
-                        scopes.len()
-                    };
-                    (items as u16 + scope_groups as u16 * 2 + 4).min(25).max(8)
-                }
-            }
-        }
+        max_h // plugin 面板使用最大高度 (70%)
     } else if let Some(crate::app::InteractionPrompt::Approval(p)) =
         &app.sessions[app.active].agent.interaction_prompt
     {

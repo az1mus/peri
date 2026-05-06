@@ -40,6 +40,7 @@ flate2 = "1"
 tar = "0.4"
 base64 = "0.22"
 urlencoding = "2"
+shellexpand = "3"
 
 
 [dev-dependencies]

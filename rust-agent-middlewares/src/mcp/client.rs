@@ -119,8 +119,15 @@ impl McpClientPool {
         cwd: &Path,
         status_tx: tokio::sync::watch::Sender<McpInitStatus>,
         oauth_event_callback: Option<Box<dyn Fn(OAuthFlowEvent) + Send + Sync>>,
+        plugin_mcp_servers: std::collections::HashMap<String, super::McpServerConfig>,
     ) {
-        let config = super::load_merged_config(cwd);
+        let mut config = super::load_merged_config(cwd);
+        // 合并插件提供的 MCP 服务器
+        for (name, server_config) in plugin_mcp_servers {
+            let mut cfg = server_config;
+            cfg.source = Some(super::ConfigSource::Plugin);
+            config.mcp_servers.insert(name, cfg);
+        }
         let connectable = config
             .mcp_servers
             .iter()
@@ -1021,13 +1028,38 @@ fn spawn_stdio_transport(
     args: &[String],
     env: &HashMap<String, String>,
 ) -> std::io::Result<rmcp::transport::child_process::TokioChildProcess> {
-    let mut child = tokio::process::Command::new(command);
-    child.args(args).envs(env);
-    child
-        .stdin(std::process::Stdio::piped())
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped());
-    rmcp::transport::child_process::TokioChildProcess::new(child)
+    use std::process::Stdio;
+
+    // 使用 builder 模式以获取 stderr 句柄
+    let mut cmd = tokio::process::Command::new(command);
+    cmd.args(args).envs(env);
+
+    let builder = rmcp::transport::child_process::TokioChildProcess::builder(cmd)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+
+    let (child_process, stderr_opt) = builder.spawn()?;
+
+    // 启动后台任务消费 stderr 并记录到 tracing
+    if let Some(stderr) = stderr_opt {
+        let cmd_name = command.to_string();
+        tokio::spawn(async move {
+            use tokio::io::{AsyncBufReadExt, BufReader};
+            let reader = BufReader::new(stderr);
+            let mut lines = reader.lines();
+
+            while let Ok(Some(line)) = lines.next_line().await {
+                tracing::warn!(
+                    command = %cmd_name,
+                    stderr = %line,
+                    "MCP 子进程 stderr"
+                );
+            }
+        });
+    }
+
+    Ok(child_process)
 }
 
 fn build_http_transport(

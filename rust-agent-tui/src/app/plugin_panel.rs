@@ -42,6 +42,7 @@ impl DiscoverDetailAction {
 #[derive(Debug, Clone)]
 pub struct MarketplaceViewEntry {
     pub name: String,
+    pub source: rust_agent_middlewares::plugin::MarketplaceSource,
     pub source_label: String,
     pub plugin_count: usize,
     pub installed_count: usize,
@@ -190,6 +191,12 @@ pub struct PluginPanel {
     pub marketplace_entries: Vec<MarketplaceViewEntry>,
     pub marketplace_cursor: usize,
     pub marketplace_scroll: u16,
+    pub marketplace_confirm_delete: Option<usize>,
+    pub marketplace_updating: HashSet<String>,
+    /// 添加 marketplace 输入框
+    pub add_marketplace_input: InputState,
+    /// 是否处于添加 marketplace 模式
+    pub add_marketplace_active: bool,
 
     // --- 安装/卸载进度 ---
     pub installing: HashSet<String>,
@@ -218,13 +225,20 @@ impl PluginPanel {
             marketplace_entries: Vec::new(),
             marketplace_cursor: 0,
             marketplace_scroll: 0,
+            marketplace_confirm_delete: None,
+            marketplace_updating: HashSet::new(),
+            add_marketplace_input: InputState::new(),
+            add_marketplace_active: false,
             installing: HashSet::new(),
             uninstalling: HashSet::new(),
         }
     }
 
     pub fn is_detail(&self) -> bool {
-        self.detail_index.is_some() || self.discover_detail_index.is_some()
+        self.detail_index.is_some()
+            || self.discover_detail_index.is_some()
+            || self.marketplace_confirm_delete.is_some()
+            || self.add_marketplace_active
     }
 
     /// 按搜索词过滤后的 Discover 插件列表
@@ -556,10 +570,156 @@ impl App {
 
     pub fn marketplace_move_down(&mut self) {
         if let Some(panel) = &mut self.plugin_panel {
-            let max = panel.marketplace_entries.len().saturating_sub(1);
+            // cursor = 0 是 Add Marketplace，最大值是 marketplace_entries.len()
+            let max = panel.marketplace_entries.len();
             if panel.marketplace_cursor < max {
                 panel.marketplace_cursor += 1;
             }
+        }
+    }
+
+    /// 检查当前是否选中了 "Add Marketplace" 选项
+    pub fn marketplace_is_add_selected(&self) -> bool {
+        self.plugin_panel
+            .as_ref()
+            .map(|p| p.marketplace_cursor == 0)
+            .unwrap_or(false)
+    }
+
+    /// 获取当前选中的 marketplace 名称（如果选中 Add Marketplace 则返回 None）
+    pub fn marketplace_current_name(&self) -> Option<String> {
+        self.plugin_panel
+            .as_ref()
+            .filter(|p| p.marketplace_cursor > 0)
+            .and_then(|p| p.marketplace_entries.get(p.marketplace_cursor - 1))
+            .map(|m| m.name.clone())
+    }
+
+    /// 请求删除当前 marketplace（进入确认状态）
+    pub fn marketplace_request_delete(&mut self) {
+        if let Some(panel) = &mut self.plugin_panel {
+            // cursor = 0 是 Add Marketplace，不能删除
+            if panel.marketplace_cursor > 0 {
+                let idx = panel.marketplace_cursor - 1;
+                if panel.marketplace_entries.get(idx).is_some() {
+                    panel.marketplace_confirm_delete = Some(idx);
+                }
+            }
+        }
+    }
+
+    /// 取消删除 marketplace
+    pub fn marketplace_cancel_delete(&mut self) {
+        if let Some(panel) = &mut self.plugin_panel {
+            panel.marketplace_confirm_delete = None;
+        }
+    }
+
+    /// 确认删除当前 marketplace，返回要删除的 marketplace 名称
+    pub fn marketplace_confirm_delete(&mut self) -> Option<String> {
+        if let Some(panel) = &mut self.plugin_panel {
+            if let Some(idx) = panel.marketplace_confirm_delete.take() {
+                if let Some(entry) = panel.marketplace_entries.get(idx) {
+                    let name = entry.name.clone();
+                    // 从列表中移除
+                    panel.marketplace_entries.remove(idx);
+                    // 调整光标位置（确保不超出范围）
+                    let max = panel.marketplace_entries.len();
+                    if panel.marketplace_cursor > max {
+                        panel.marketplace_cursor = max;
+                    }
+                    return Some(name);
+                }
+            }
+        }
+        None
+    }
+
+    /// 请求更新当前 marketplace（添加到 updating 集合）
+    pub fn marketplace_request_update(&mut self) -> Option<String> {
+        if let Some(panel) = &mut self.plugin_panel {
+            // cursor = 0 是 Add Marketplace，不能更新
+            if panel.marketplace_cursor > 0 {
+                let idx = panel.marketplace_cursor - 1;
+                if let Some(entry) = panel.marketplace_entries.get(idx) {
+                    let name = entry.name.clone();
+                    panel.marketplace_updating.insert(name.clone());
+                    return Some(name);
+                }
+            }
+        }
+        None
+    }
+
+    /// 请求更新当前 marketplace，返回名称和 source
+    pub fn marketplace_request_update_with_source(
+        &mut self,
+    ) -> Option<(String, rust_agent_middlewares::plugin::MarketplaceSource)> {
+        if let Some(panel) = &mut self.plugin_panel {
+            // cursor = 0 是 Add Marketplace，不能更新
+            if panel.marketplace_cursor > 0 {
+                let idx = panel.marketplace_cursor - 1;
+                if let Some(entry) = panel.marketplace_entries.get(idx) {
+                    let name = entry.name.clone();
+                    let source = entry.source.clone();
+                    panel.marketplace_updating.insert(name.clone());
+                    return Some((name, source));
+                }
+            }
+        }
+        None
+    }
+
+    /// 标记 marketplace 更新完成
+    pub fn marketplace_update_done(&mut self, name: &str) {
+        if let Some(panel) = &mut self.plugin_panel {
+            panel.marketplace_updating.remove(name);
+        }
+    }
+
+    /// 进入添加 marketplace 模式
+    pub fn marketplace_enter_add(&mut self) {
+        if let Some(panel) = &mut self.plugin_panel {
+            panel.add_marketplace_input = InputState::new();
+            panel.add_marketplace_active = true;
+        }
+    }
+
+    /// 退出添加 marketplace 模式
+    pub fn marketplace_exit_add(&mut self) {
+        if let Some(panel) = &mut self.plugin_panel {
+            panel.add_marketplace_active = false;
+            panel.add_marketplace_input = InputState::new();
+        }
+    }
+
+    /// 添加 marketplace 输入字符
+    pub fn marketplace_add_input(&mut self, ch: char) {
+        if let Some(panel) = &mut self.plugin_panel {
+            panel.add_marketplace_input.insert(ch);
+        }
+    }
+
+    /// 添加 marketplace 退格
+    pub fn marketplace_add_backspace(&mut self) {
+        if let Some(panel) = &mut self.plugin_panel {
+            panel.add_marketplace_input.backspace();
+        }
+    }
+
+    /// 确认添加 marketplace，返回输入的 source 字符串
+    pub fn marketplace_add_confirm(&mut self) -> Option<String> {
+        if let Some(panel) = &mut self.plugin_panel {
+            let input = panel.add_marketplace_input.value().trim().to_string();
+            panel.add_marketplace_active = false;
+            panel.add_marketplace_input = InputState::new();
+            if input.is_empty() {
+                None
+            } else {
+                Some(input)
+            }
+        } else {
+            None
         }
     }
 }

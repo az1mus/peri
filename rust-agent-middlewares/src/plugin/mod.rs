@@ -21,8 +21,8 @@ pub use loader::{
     LoaderError, PluginCommandProvider, PluginLoadResult,
 };
 pub use marketplace::{
-    AvailablePlugin, MarketplaceEntry, MarketplaceError, MarketplaceManager,
-    MarketplaceRefreshEvent, MarketplaceStatus,
+    parse_marketplace_input, AvailablePlugin, MarketplaceEntry, MarketplaceError,
+    MarketplaceManager, MarketplaceRefreshEvent, MarketplaceStatus,
 };
 pub use middleware::PluginMiddleware;
 pub use types::{

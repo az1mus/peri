@@ -719,6 +719,37 @@ pub async fn next_event(app: &mut App) -> Result<Option<Action>> {
                 return Ok(Some(Action::Redraw));
             }
 
+            // plugin_panel 的 Add Marketplace 输入框处理粘贴
+            if app.plugin_panel.is_some() {
+                let is_adding = app
+                    .plugin_panel
+                    .as_ref()
+                    .is_some_and(|p| p.add_marketplace_active);
+                let is_discover_searching = app
+                    .plugin_panel
+                    .as_ref()
+                    .is_some_and(|p| p.discover_searching);
+
+                if is_adding {
+                    // 粘贴到添加 marketplace 输入框
+                    for ch in text.chars() {
+                        app.marketplace_add_input(ch);
+                    }
+                    return Ok(Some(Action::Redraw));
+                }
+
+                if is_discover_searching {
+                    // 粘贴到搜索框
+                    for ch in text.chars() {
+                        app.discover_search_input(ch);
+                    }
+                    return Ok(Some(Action::Redraw));
+                }
+
+                // 其他 plugin_panel 状态拦截粘贴
+                return Ok(Some(Action::Redraw));
+            }
+
             // thread_browser / agent_panel / cron_panel 打开时拦截粘贴，
             // 防止文本进入后台 textarea（这些面板无文本输入字段）
             if app.sessions[app.active].core.thread_browser.is_some()
@@ -727,7 +758,6 @@ pub async fn next_event(app: &mut App) -> Result<Option<Action>> {
                 || app.mcp_panel.is_some()
                 || app.status_panel.is_some()
                 || app.memory_panel.is_some()
-                || app.plugin_panel.is_some()
             {
                 return Ok(Some(Action::Redraw));
             }
@@ -2045,32 +2075,158 @@ fn handle_plugin_panel(app: &mut App, input: Input) {
             }
         }
         PluginPanelView::Marketplaces => {
-            match input {
-                // 左右箭头切换标签
-                Input {
-                    key: Key::Right, ..
-                } => {
-                    app.plugin_panel_tab();
+            // 检查是否处于特殊状态
+            let is_confirming = app
+                .plugin_panel
+                .as_ref()
+                .is_some_and(|p| p.marketplace_confirm_delete.is_some());
+            let is_adding = app
+                .plugin_panel
+                .as_ref()
+                .is_some_and(|p| p.add_marketplace_active);
+
+            if is_confirming {
+                match input {
+                    Input { key: Key::Esc, .. } => {
+                        app.marketplace_cancel_delete();
+                    }
+                    Input {
+                        key: Key::Enter, ..
+                    } => {
+                        if let Some(name) = app.marketplace_confirm_delete() {
+                            if let Err(e) = app.marketplace_delete_and_save(&name) {
+                                app.sessions[app.active].core.view_messages.push(
+                                    crate::app::MessageViewModel::system(format!(
+                                        "删除失败: {}",
+                                        e
+                                    )),
+                                );
+                            }
+                        }
+                    }
+                    _ => {}
                 }
-                Input { key: Key::Left, .. } => {
-                    app.plugin_panel_shift_tab();
+            } else if is_adding {
+                match input {
+                    Input { key: Key::Esc, .. } => {
+                        app.marketplace_exit_add();
+                    }
+                    Input {
+                        key: Key::Enter, ..
+                    } => {
+                        if let Some(source) = app.marketplace_add_confirm() {
+                            match app.marketplace_add_and_save(&source) {
+                                Ok(()) => {}
+                                Err(e) => {
+                                    app.sessions[app.active].core.view_messages.push(
+                                        crate::app::MessageViewModel::system(format!(
+                                            "添加失败: {}",
+                                            e
+                                        )),
+                                    );
+                                }
+                            }
+                        }
+                    }
+                    Input {
+                        key: Key::Backspace,
+                        ..
+                    } => {
+                        app.marketplace_add_backspace();
+                    }
+                    Input {
+                        key: Key::Char(ch), ..
+                    } => {
+                        app.marketplace_add_input(ch);
+                    }
+                    _ => {}
                 }
-                // Tab 键切换标签
-                Input { key: Key::Tab, .. } => {
-                    app.plugin_panel_tab();
+            } else {
+                match input {
+                    // 左右箭头切换标签
+                    Input {
+                        key: Key::Right, ..
+                    } => {
+                        app.plugin_panel_tab();
+                    }
+                    Input { key: Key::Left, .. } => {
+                        app.plugin_panel_shift_tab();
+                    }
+                    // Tab 键切换标签
+                    Input { key: Key::Tab, .. } => {
+                        app.plugin_panel_tab();
+                    }
+                    Input { key: Key::Up, .. } => {
+                        app.marketplace_move_up();
+                    }
+                    Input { key: Key::Down, .. } => {
+                        app.marketplace_move_down();
+                    }
+                    // Enter 键：选中 Add Marketplace 或更新当前 marketplace
+                    Input {
+                        key: Key::Enter, ..
+                    } => {
+                        if app.marketplace_is_add_selected() {
+                            app.marketplace_enter_add();
+                        } else if let Some((name, source)) =
+                            app.marketplace_request_update_with_source()
+                        {
+                            let name_for_msg = name.clone();
+                            let tx = app.bg_event_tx.clone();
+                            tokio::spawn(async move {
+                                let result =
+                                    rust_agent_middlewares::plugin::marketplace::refresh_marketplace(
+                                        &source,
+                                        &name,
+                                    )
+                                    .await;
+
+                                match result {
+                                    Ok(_) => {
+                                        let _ = tx
+                                            .send(crate::app::AgentEvent::PluginActionCompleted {
+                                                plugin_id: name.clone(),
+                                                action: "refresh".to_string(),
+                                                success: true,
+                                                message: format!("Marketplace '{}' 已更新", name),
+                                            })
+                                            .await;
+                                    }
+                                    Err(e) => {
+                                        let _ = tx
+                                            .send(crate::app::AgentEvent::PluginActionCompleted {
+                                                plugin_id: name.clone(),
+                                                action: "refresh".to_string(),
+                                                success: false,
+                                                message: format!("更新失败: {}", e),
+                                            })
+                                            .await;
+                                    }
+                                }
+                            });
+
+                            app.sessions[app.active].core.view_messages.push(
+                                crate::app::MessageViewModel::system(format!(
+                                    "正在更新 marketplace: {}",
+                                    name_for_msg
+                                )),
+                            );
+                        }
+                    }
+                    // Backspace 键：删除（进入确认）
+                    Input {
+                        key: Key::Backspace,
+                        ..
+                    } => {
+                        app.marketplace_request_delete();
+                    }
+                    Input { key: Key::Esc, .. } => {
+                        app.plugin_panel_close();
+                        app.sessions[app.active].core.panel_selection.clear();
+                        app.sessions[app.active].core.panel_area = None;
+                    }
+                    _ => {}
                 }
-                Input { key: Key::Up, .. } => {
-                    app.marketplace_move_up();
-                }
-                Input { key: Key::Down, .. } => {
-                    app.marketplace_move_down();
-                }
-                Input { key: Key::Esc, .. } => {
-                    app.plugin_panel_close();
-                    app.sessions[app.active].core.panel_selection.clear();
-                    app.sessions[app.active].core.panel_area = None;
-                }
-                _ => {}
             }
         }
         _ => {

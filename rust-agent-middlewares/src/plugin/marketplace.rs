@@ -138,6 +138,61 @@ async fn fetch_github(
     read_manifest_from_path(&manifest_path)
 }
 
+/// 克通用的 git 仓库（任意 git URL）
+async fn fetch_git(
+    name: &str,
+    url: &str,
+    cache_base: &Path,
+    auto_update: bool,
+) -> Result<MarketplaceManifest, MarketplaceError> {
+    let cache_dir = cache_base.join(name);
+
+    if !cache_dir.exists() {
+        let output = tokio::time::timeout(
+            std::time::Duration::from_secs(30),
+            tokio::process::Command::new("git")
+                .args([
+                    "clone",
+                    "--depth",
+                    "1",
+                    url,
+                    &cache_dir.display().to_string(),
+                ])
+                .output(),
+        )
+        .await
+        .map_err(|e| MarketplaceError::GitFailed(format!("clone 超时: {e}")))?
+        .map_err(|e| MarketplaceError::GitFailed(format!("clone 执行失败: {e}")))?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(MarketplaceError::GitFailed(format!("clone 失败: {stderr}")));
+        }
+    } else if auto_update {
+        let output = tokio::time::timeout(
+            std::time::Duration::from_secs(30),
+            tokio::process::Command::new("git")
+                .args(["-C", &cache_dir.display().to_string(), "pull", "--ff-only"])
+                .output(),
+        )
+        .await
+        .map_err(|e| MarketplaceError::GitFailed(format!("pull 超时: {e}")))?
+        .map_err(|e| MarketplaceError::GitFailed(format!("pull 执行失败: {e}")))?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            warn!("git pull 失败 '{}', 回退到缓存: {stderr}", url);
+            // fall through to read cache
+        }
+    }
+
+    let manifest_path =
+        find_marketplace_json(&cache_dir).ok_or_else(|| MarketplaceError::ManifestNotFound {
+            path: cache_dir.display().to_string(),
+        })?;
+    read_manifest_from_path(&manifest_path)
+}
+
 async fn fetch_url(
     name: &str,
     url: &str,
@@ -314,6 +369,7 @@ impl MarketplaceManager {
         let cache_base = self.cache_base();
         let path: Option<PathBuf> = match source {
             MarketplaceSource::GitHub { .. } => find_marketplace_json(&cache_base.join(name)),
+            MarketplaceSource::Git { .. } => find_marketplace_json(&cache_base.join(name)),
             MarketplaceSource::Url { .. } => {
                 let p = cache_base.join(format!("{name}.json"));
                 if p.exists() {
@@ -347,6 +403,14 @@ impl MarketplaceManager {
         match source {
             MarketplaceSource::GitHub { repo } => {
                 repo.split('/').next_back().unwrap_or(repo).to_string()
+            }
+            MarketplaceSource::Git { url } => {
+                // 从 git URL 中提取目录名（类似 GitHub 处理）
+                if let Some(last) = url.rsplit('/').next() {
+                    last.strip_suffix(".git").unwrap_or(last).to_string()
+                } else {
+                    "git-marketplace".into()
+                }
             }
             MarketplaceSource::Url { url } => url::Url::parse(url)
                 .ok()
@@ -386,7 +450,8 @@ impl MarketplaceManager {
                 .iter()
                 .any(|km| serde_json::to_string(&km.source).unwrap_or_default() == extra_json);
             if !already_exists {
-                known.push(extra.clone());
+                // 将 DeclaredMarketplace 转换为 KnownMarketplace
+                known.push(KnownMarketplace::from(extra.clone()));
             }
         }
 
@@ -400,9 +465,9 @@ impl MarketplaceManager {
                 source: MarketplaceSource::GitHub {
                     repo: "anthropics/claude-plugins-official".into(),
                 },
-                install_location: None,
+                install_location: String::new(),
                 auto_update: true,
-                last_updated: None,
+                last_updated: String::new(),
             };
             known.push(official);
             let _ = save_known_marketplaces(&known, Some(&km_path));
@@ -418,11 +483,9 @@ impl MarketplaceManager {
             } else {
                 MarketplaceStatus::NotFetched
             };
-            let last_updated = km.last_updated.as_ref().and_then(|s| {
-                chrono::DateTime::parse_from_rfc3339(s)
-                    .ok()
-                    .map(|dt| dt.with_timezone(&Utc))
-            });
+            let last_updated = chrono::DateTime::parse_from_rfc3339(&km.last_updated)
+                .ok()
+                .map(|dt| dt.with_timezone(&Utc));
             self.entries.push(MarketplaceEntry {
                 name,
                 source: km.source.clone(),
@@ -455,6 +518,9 @@ impl MarketplaceManager {
             let result = match &source {
                 MarketplaceSource::GitHub { repo } => {
                     fetch_github(&name, repo, &cache_base, auto_update).await
+                }
+                MarketplaceSource::Git { url } => {
+                    fetch_git(&name, url, &cache_base, auto_update).await
                 }
                 MarketplaceSource::Url { url } => fetch_url(&name, url, &cache_base).await,
                 MarketplaceSource::File { path } => {
@@ -568,6 +634,128 @@ impl MarketplaceManager {
             }
         }
         result
+    }
+}
+
+/// 解析用户输入的 marketplace source 字符串
+///
+/// 支持的格式：
+/// - `owner/repo` (GitHub shorthand)
+/// - `git@github.com:owner/repo.git` (SSH)
+/// - `https://example.com/marketplace.json` (URL)
+/// - `./path/to/marketplace` (本地路径)
+pub fn parse_marketplace_input(input: &str) -> Result<MarketplaceSource, String> {
+    let trimmed = input.trim();
+
+    if trimmed.is_empty() {
+        return Err("输入不能为空".to_string());
+    }
+
+    // 1. Git SSH URLs: user@host:path 或 user@host:path.git
+    if let Some(ssh_match) = trimmed.strip_prefix("git@") {
+        if let Some((host, path)) = ssh_match.split_once(':') {
+            // 移除 .git 后缀（如果存在）
+            let path = path.strip_suffix(".git").unwrap_or(path);
+            return Ok(MarketplaceSource::GitHub {
+                repo: format!("git@{}:{}", host, path),
+            });
+        }
+    }
+
+    // 2. HTTP/HTTPS URLs
+    if trimmed.starts_with("http://") || trimmed.starts_with("https://") {
+        // GitHub URL 转换
+        if trimmed.contains("github.com/") {
+            // 提取 owner/repo 部分
+            let parts: Vec<&str> = trimmed.split('/').collect();
+            if parts.len() >= 5 {
+                // https://github.com/owner/repo
+                let owner = parts[3];
+                let repo = parts[4].trim_end_matches(".git");
+                return Ok(MarketplaceSource::GitHub {
+                    repo: format!("{}/{}", owner, repo),
+                });
+            }
+        }
+        // 其他 URL 作为 marketplace.json URL
+        return Ok(MarketplaceSource::Url {
+            url: trimmed.to_string(),
+        });
+    }
+
+    // 3. 本地路径：./, ../, /, ~ 开头
+    if trimmed.starts_with("./")
+        || trimmed.starts_with("../")
+        || trimmed.starts_with('/')
+        || trimmed.starts_with('~')
+        || trimmed.starts_with(".\\")
+        || trimmed.starts_with("..\\")
+        || (trimmed.len() >= 3 && trimmed.as_bytes()[1] == b'\\')
+        // Windows 路径 C:\...
+        || (trimmed.len() >= 2
+            && trimmed.as_bytes()[0].is_ascii_alphabetic()
+            && trimmed.as_bytes()[1] == b':')
+    {
+        let path = shellexpand::tilde(trimmed).to_string();
+        // 判断是文件还是目录
+        let path_obj = Path::new(&path);
+        if path_obj.ends_with(".json") || path_obj.extension().is_some_and(|e| e == "json") {
+            return Ok(MarketplaceSource::File { path });
+        } else {
+            return Ok(MarketplaceSource::Directory { path });
+        }
+    }
+
+    // 4. GitHub shorthand: owner/repo
+    if trimmed.contains('/') && !trimmed.starts_with('@') {
+        // owner/repo 格式
+        let parts: Vec<&str> = trimmed.split('/').collect();
+        if parts.len() == 2 {
+            return Ok(MarketplaceSource::GitHub {
+                repo: trimmed.to_string(),
+            });
+        }
+    }
+
+    // 5. NPM package: @scope/name 或 name
+    if trimmed.starts_with('@') || !trimmed.contains('/') {
+        return Ok(MarketplaceSource::Npm {
+            package: trimmed.to_string(),
+        });
+    }
+
+    Err(format!("无法识别的 marketplace source: {}", trimmed))
+}
+
+/// 刷新单个 marketplace 的缓存
+///
+/// 异步获取 marketplace manifest 并缓存到本地
+pub async fn refresh_marketplace(
+    source: &MarketplaceSource,
+    name: &str,
+) -> Result<MarketplaceManifest, MarketplaceError> {
+    let cache_base = marketplaces_cache_dir();
+    let auto_update = true; // 默认启用自动更新
+
+    match source {
+        MarketplaceSource::GitHub { repo } => {
+            fetch_github(name, repo, &cache_base, auto_update).await
+        }
+        MarketplaceSource::Git { url } => fetch_git(name, url, &cache_base, auto_update).await,
+        MarketplaceSource::Url { url } => fetch_url(name, url, &cache_base).await,
+        MarketplaceSource::File { path } => {
+            let path = path.clone();
+            tokio::task::spawn_blocking(move || read_file(Path::new(&path)))
+                .await
+                .expect("spawn_blocking panicked")
+        }
+        MarketplaceSource::Directory { path } => {
+            let path = path.clone();
+            tokio::task::spawn_blocking(move || read_directory(Path::new(&path)))
+                .await
+                .expect("spawn_blocking panicked")
+        }
+        MarketplaceSource::Npm { package } => fetch_npm(name, package, &cache_base).await,
     }
 }
 
@@ -743,8 +931,7 @@ mod tests {
         // Check that official marketplace was registered
         let km_path = dir.path().join("known_marketplaces.json");
         assert!(km_path.exists());
-        let known: Vec<KnownMarketplace> =
-            serde_json::from_str(&std::fs::read_to_string(&km_path).unwrap()).unwrap();
+        let known = crate::plugin::config::load_known_marketplaces(Some(&km_path)).unwrap();
         assert!(known.iter().any(|km| match &km.source {
             MarketplaceSource::GitHub { repo } => repo == "anthropics/claude-plugins-official",
             _ => false,
@@ -789,7 +976,8 @@ mod tests {
         std::fs::write(marketplaces_dir.join("test.json"), json).unwrap();
 
         let km_path = dir.path().join("known_marketplaces.json");
-        let known = r#"[{"source":{"source":"url","url":"https://example.com/test.json"}}]"#;
+        // 使用对象格式，包含必需的 installLocation 和 lastUpdated 字段
+        let known = r#"{"test": {"source":{"source":"url","url":"https://example.com/test.json"},"installLocation":"","lastUpdated":"2025-01-01T00:00:00Z"}}"#;
         std::fs::write(&km_path, known).unwrap();
 
         let (tx, _rx) = mpsc::channel(16);

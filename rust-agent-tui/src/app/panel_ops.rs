@@ -310,15 +310,8 @@ impl App {
                 mcp_servers,
             ) = match &manifest_result {
                 Ok(m) => {
-                    let has_mcp = m.mcp_servers.as_ref().map_or(false, |s| !s.is_empty());
-                    let has_content = m.commands.as_ref().map_or(false, |c| !c.is_empty())
-                        || m.skills.as_ref().map_or(false, |s| !s.is_empty())
-                        || m.agents.as_ref().map_or(false, |a| !a.is_empty());
-                    let ptype = if has_mcp && !has_content {
-                        PluginItemType::Mcp
-                    } else {
-                        PluginItemType::Plugin
-                    };
+                    // 统一显示为 Plugin 类型
+                    let ptype = PluginItemType::Plugin;
                     let desc = m.description.clone();
                     let auth = m.author.as_ref().map(|a| a.name.clone());
                     let cmds = m
@@ -408,7 +401,10 @@ impl App {
                 .iter()
                 .any(|km| serde_json::to_string(&km.source).unwrap_or_default() == extra_json);
             if !already_exists {
-                all_known.push(extra.clone());
+                // 将 DeclaredMarketplace 转换为 KnownMarketplace
+                all_known.push(rust_agent_middlewares::plugin::KnownMarketplace::from(
+                    extra.clone(),
+                ));
             }
         }
 
@@ -423,15 +419,26 @@ impl App {
                 source: MarketplaceSource::GitHub {
                     repo: "anthropics/claude-plugins-official".into(),
                 },
-                install_location: None,
+                install_location: String::new(), // 占位符，实际安装时会更新
                 auto_update: true,
-                last_updated: None,
+                last_updated: String::new(), // 占位符，实际安装时会更新
             });
         }
 
         for km in &all_known {
             let name = MarketplaceManager::extract_name_wrapper(&km.source);
-            let cached_manifest = mgr.try_load_cache_wrapper(&km.source, &name);
+
+            // 优先从 install_location 加载，如果不存在则使用默认路径
+            let cached_manifest = if !km.install_location.is_empty() {
+                // 使用 install_location 作为缓存目录
+                use rust_agent_middlewares::plugin::marketplace::find_marketplace_json;
+                let cache_path = std::path::Path::new(&km.install_location);
+                find_marketplace_json(cache_path).and_then(|p| {
+                    rust_agent_middlewares::plugin::marketplace::read_manifest_from_path(&p).ok()
+                })
+            } else {
+                mgr.try_load_cache_wrapper(&km.source, &name)
+            };
 
             let (status, plugin_count) = if let Some(ref manifest) = cached_manifest {
                 let count = manifest.plugins.len();
@@ -460,6 +467,7 @@ impl App {
             // source label
             let source_label = match &km.source {
                 MarketplaceSource::GitHub { repo } => format!("github:{}", repo),
+                MarketplaceSource::Git { url } => format!("git:{}", url),
                 MarketplaceSource::Url { url } => format!("url:{}", url),
                 MarketplaceSource::File { path } => format!("file:{}", path),
                 MarketplaceSource::Directory { path } => format!("dir:{}", path),
@@ -474,11 +482,16 @@ impl App {
 
             marketplace_view_entries.push(MarketplaceViewEntry {
                 name: name.clone(),
+                source: km.source.clone(),
                 source_label,
                 plugin_count,
                 installed_count,
                 status,
-                last_updated: km.last_updated.clone(),
+                last_updated: if km.last_updated.is_empty() {
+                    None
+                } else {
+                    Some(km.last_updated.clone())
+                },
                 auto_update: km.auto_update,
             });
         }
@@ -505,6 +518,153 @@ impl App {
 
     pub fn close_plugin_panel(&mut self) {
         self.plugin_panel = None;
+    }
+
+    /// 添加并保存 marketplace
+    pub fn marketplace_add_and_save(&mut self, input: &str) -> anyhow::Result<()> {
+        use rust_agent_middlewares::plugin::{
+            load_known_marketplaces, parse_marketplace_input, save_known_marketplaces,
+            KnownMarketplace,
+        };
+
+        // 解析输入
+        let source =
+            parse_marketplace_input(input).map_err(|e| anyhow::anyhow!("解析失败: {}", e))?;
+
+        // 加载现有的 marketplaces
+        let mut marketplaces = load_known_marketplaces(None).unwrap_or_default();
+
+        // 检查是否已存在
+        for existing in &marketplaces {
+            if existing.source == source {
+                anyhow::bail!("Marketplace 已存在");
+            }
+        }
+
+        // 创建新条目
+        let name = match &source {
+            rust_agent_middlewares::plugin::MarketplaceSource::GitHub { repo } => {
+                repo.split('/').last().unwrap_or(repo).to_string()
+            }
+            rust_agent_middlewares::plugin::MarketplaceSource::Git { url } => url
+                .split('/')
+                .last()
+                .and_then(|s| s.strip_suffix(".git"))
+                .unwrap_or("marketplace")
+                .to_string(),
+            rust_agent_middlewares::plugin::MarketplaceSource::Url { url } => url
+                .split('/')
+                .last()
+                .and_then(|s| s.strip_suffix(".json"))
+                .unwrap_or("marketplace")
+                .to_string(),
+            rust_agent_middlewares::plugin::MarketplaceSource::File { path } => {
+                std::path::Path::new(path)
+                    .file_name()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or("marketplace")
+                    .to_string()
+            }
+            rust_agent_middlewares::plugin::MarketplaceSource::Directory { path } => {
+                std::path::Path::new(path)
+                    .file_name()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or("marketplace")
+                    .to_string()
+            }
+            rust_agent_middlewares::plugin::MarketplaceSource::Npm { package } => {
+                package.split('@').next().unwrap_or(package).to_string()
+            }
+        };
+
+        let new_entry = KnownMarketplace {
+            source,
+            install_location: String::new(), // 占位符，实际获取时会更新
+            auto_update: false,
+            last_updated: String::new(), // 占位符，实际获取时会更新
+        };
+
+        marketplaces.push(new_entry);
+
+        // 保存
+        save_known_marketplaces(&marketplaces, None)?;
+
+        // 显示成功消息
+        self.sessions[self.active]
+            .core
+            .view_messages
+            .push(crate::app::MessageViewModel::system(format!(
+                "Marketplace 已添加: {}",
+                name
+            )));
+
+        // 刷新面板
+        self.open_plugin_panel();
+
+        Ok(())
+    }
+
+    /// 删除并保存 marketplace
+    pub fn marketplace_delete_and_save(&mut self, name: &str) -> anyhow::Result<()> {
+        use rust_agent_middlewares::plugin::{
+            load_known_marketplaces, save_known_marketplaces, MarketplaceSource,
+        };
+
+        // 加载现有的 marketplaces
+        let marketplaces = load_known_marketplaces(None).unwrap_or_default();
+
+        // 过滤掉要删除的 marketplace（通过名称匹配）
+        let filtered: Vec<_> = marketplaces
+            .into_iter()
+            .filter(|km| {
+                let km_name = match &km.source {
+                    MarketplaceSource::GitHub { repo } => {
+                        repo.split('/').last().unwrap_or(repo).to_string()
+                    }
+                    MarketplaceSource::Git { url } => url
+                        .split('/')
+                        .last()
+                        .and_then(|s| s.strip_suffix(".git"))
+                        .unwrap_or("marketplace")
+                        .to_string(),
+                    MarketplaceSource::Url { url } => {
+                        let last = url.split('/').last().unwrap_or("marketplace");
+                        last.strip_suffix(".json").unwrap_or(last).to_string()
+                    }
+                    MarketplaceSource::File { path } => std::path::Path::new(path)
+                        .file_name()
+                        .and_then(|s| s.to_str())
+                        .unwrap_or("marketplace")
+                        .to_string(),
+                    MarketplaceSource::Directory { path } => std::path::Path::new(path)
+                        .file_name()
+                        .and_then(|s| s.to_str())
+                        .unwrap_or("marketplace")
+                        .to_string(),
+                    MarketplaceSource::Npm { package } => {
+                        package.split('@').next().unwrap_or(package).to_string()
+                    }
+                };
+                km_name != name
+            })
+            .collect();
+
+        // 保存
+        save_known_marketplaces(&filtered, None)?;
+
+        // 显示成功消息
+        self.sessions[self.active]
+            .core
+            .view_messages
+            .push(crate::app::MessageViewModel::system(format!(
+                "Marketplace 已移除: {}",
+                name
+            )));
+
+        // 刷新面板
+        self.open_plugin_panel();
+
+        Ok(())
     }
 
     /// 打开外部编辑器编辑选中的 memory 文件

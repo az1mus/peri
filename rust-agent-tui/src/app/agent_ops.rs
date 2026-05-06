@@ -540,6 +540,7 @@ impl App {
                 if let Some(ref mut panel) = self.plugin_panel {
                     panel.installing.remove(&plugin_id);
                     panel.uninstalling.remove(&plugin_id);
+                    panel.marketplace_updating.remove(&plugin_id);
 
                     // 更新 discover 列表中的 installed 标记
                     match (action.as_str(), success) {
@@ -571,6 +572,22 @@ impl App {
                             if panel.cursor >= panel.current_list_len() {
                                 panel.cursor = panel.current_list_len().saturating_sub(1);
                             }
+                        }
+                        ("refresh", true) => {
+                            // Marketplace 刷新成功，重新加载面板
+                            // 通过发送特殊消息来触发面板刷新
+                            let vm = MessageViewModel::system(format!(
+                                "Marketplace '{}' 已更新，请重新打开面板查看",
+                                plugin_id
+                            ));
+                            self.sessions[self.active]
+                                .core
+                                .view_messages
+                                .push(vm.clone());
+                            let _ = self.sessions[self.active]
+                                .core
+                                .render_tx
+                                .send(RenderEvent::AddMessage(vm));
                         }
                         _ => {}
                     }

@@ -18,7 +18,12 @@ pub fn init_tracing(service_name: &str) -> TracingGuard {
     // 检查是否配置了日志文件
     let log_file = std::env::var("RUST_LOG_FILE").ok();
 
-    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
+    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| {
+        // 默认 info 级别，但 MCP 和插件模块设为 warn（避免连接日志干扰）
+        EnvFilter::new(
+            "info,rust_agent_middlewares::mcp=warn,rust_agent_middlewares::plugin=warn,rmcp=warn",
+        )
+    });
 
     match log_file {
         Some(path) => {

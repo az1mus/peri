@@ -189,8 +189,8 @@ pub fn load_plugins(installed: &InstalledPlugins) -> Result<Vec<LoadedPlugin>, L
     for plugin in &installed.plugins {
         let manifest = match load_manifest(&plugin.install_path) {
             Ok(m) => m,
-            Err(e) => {
-                warn!(plugin = %plugin.name, error = %e, "插件清单加载失败，跳过");
+            Err(_) => {
+                // 静默跳过无法加载的插件（文件被删除或移动）
                 continue;
             }
         };
@@ -264,7 +264,8 @@ pub fn merge_plugin_mcp_servers(plugins: &[LoadedPlugin]) -> HashMap<String, Mcp
     let mut result = HashMap::new();
     for plugin in plugins {
         for (name, config) in &plugin.mcp_servers {
-            let namespaced = format!("{}__{}", plugin.name, name);
+            // 与 Claude Code 一致：使用 plugin:{插件名}:{服务器名} 前缀
+            let namespaced = format!("plugin:{}:{}", plugin.name, name);
             result.insert(namespaced, config.clone());
         }
     }
@@ -285,8 +286,8 @@ pub struct PluginLoadResult {
 pub fn load_enabled_plugins_aggregated(claude_dir: &Path) -> PluginLoadResult {
     let plugins = match load_enabled_plugins(claude_dir) {
         Ok(p) => p,
-        Err(e) => {
-            warn!(error = %e, "加载已启用插件失败，返回空结果");
+        Err(_) => {
+            // 静默失败，避免在 TUI 上打印错误日志
             return PluginLoadResult {
                 plugins: vec![],
                 all_skill_dirs: vec![],
@@ -656,8 +657,8 @@ pub(crate) mod tests {
 
         let merged = merge_plugin_mcp_servers(&[p1, p2]);
         assert_eq!(merged.len(), 2);
-        assert!(merged.contains_key("plugin-a__db"));
-        assert!(merged.contains_key("plugin-b__db"));
+        assert!(merged.contains_key("plugin:plugin-a:db"));
+        assert!(merged.contains_key("plugin:plugin-b:db"));
     }
 
     #[test]
