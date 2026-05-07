@@ -358,7 +358,25 @@ impl App {
             if let Some(entry_idx) = panel.visible_indices().get(panel.cursor).copied() {
                 if let Some(entry) = panel.entries.get_mut(entry_idx) {
                     entry.enabled = !entry.enabled;
+                    self.persist_plugin_enabled_state();
                 }
+            }
+        }
+    }
+
+    /// 将当前面板中所有插件的启用状态持久化到 ~/.claude/settings.json
+    fn persist_plugin_enabled_state(&self) {
+        if let Some(panel) = &self.plugin_panel {
+            let states: Vec<(String, bool)> = panel
+                .entries
+                .iter()
+                .map(|e| (e.id.clone(), e.enabled))
+                .collect();
+            if let Err(e) = rust_agent_middlewares::plugin::save_claude_settings_enabled_plugins(
+                &states,
+                self.claude_settings_override.as_deref(),
+            ) {
+                tracing::warn!(error = %e, "保存 enabledPlugins 失败");
             }
         }
     }
@@ -412,6 +430,20 @@ impl App {
                     if let Some(idx) = entry_idx {
                         if let Some(entry) = panel.entries.get_mut(idx) {
                             entry.enabled = !entry.enabled;
+                        }
+                        // 面板引用已释放，调用保存
+                        let states: Vec<(String, bool)> = panel
+                            .entries
+                            .iter()
+                            .map(|e| (e.id.clone(), e.enabled))
+                            .collect();
+                        if let Err(e) =
+                            rust_agent_middlewares::plugin::save_claude_settings_enabled_plugins(
+                                &states,
+                                self.claude_settings_override.as_deref(),
+                            )
+                        {
+                            tracing::warn!(error = %e, "保存 enabledPlugins 失败");
                         }
                     }
                 }

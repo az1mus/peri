@@ -411,6 +411,44 @@ pub fn save_known_marketplaces(
     atomic_write_json(&path, &serde_json::Value::Object(obj))
 }
 
+/// 仅更新 `~/.claude/settings.json` 中的 `enabledPlugins` 字段，保留文件中其他字段不变。
+pub fn save_claude_settings_enabled_plugins(
+    plugin_states: &[(String, bool)],
+    override_path: Option<&Path>,
+) -> Result<(), PluginConfigError> {
+    let path = override_path
+        .map(|p| p.to_path_buf())
+        .unwrap_or_else(claude_settings_path);
+
+    // 读取现有文件内容以保留 unknown fields
+    let mut value: serde_json::Value = if path.exists() {
+        let content = std::fs::read_to_string(&path).map_err(|e| PluginConfigError::ReadError {
+            path: path.display().to_string(),
+            source: e,
+        })?;
+        serde_json::from_str(&content).map_err(|e| PluginConfigError::ParseError {
+            path: path.display().to_string(),
+            source: e,
+        })?
+    } else {
+        serde_json::Value::Object(serde_json::Map::new())
+    };
+
+    // 更新 enabledPlugins 字段（Claude Code 要求对象格式: {"plugin-id": true/false, ...}）
+    let mut enabled_obj = serde_json::Map::new();
+    for (id, enabled) in plugin_states {
+        enabled_obj.insert(id.clone(), serde_json::Value::Bool(*enabled));
+    }
+    if let Some(obj) = value.as_object_mut() {
+        obj.insert(
+            "enabledPlugins".to_string(),
+            serde_json::Value::Object(enabled_obj),
+        );
+    }
+
+    atomic_write_json(&path, &value)
+}
+
 pub fn load_claude_settings(
     override_path: Option<&Path>,
 ) -> Result<ClaudeSettings, PluginConfigError> {
@@ -643,6 +681,64 @@ mod tests {
         let manifest = load_plugin_manifest(dir.path()).unwrap();
         assert_eq!(manifest.name, "test");
         assert!(manifest.version.is_empty());
+    }
+
+    #[test]
+    fn test_save_claude_settings_enabled_plugins_preserves_other_fields() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("settings.json");
+        // 写入包含 enabledPlugins 和其他字段的 JSON
+        let json = r#"{
+            "env": {"KEY": "value"},
+            "model": "opus",
+            "enabledPlugins": ["a@m", "b@m"]
+        }"#;
+        std::fs::write(&path, json).unwrap();
+
+        save_claude_settings_enabled_plugins(
+            &[("a@m".into(), true), ("c@m".into(), false)],
+            Some(&path),
+        )
+        .unwrap();
+
+        let content = std::fs::read_to_string(&path).unwrap();
+        let value: serde_json::Value = serde_json::from_str(&content).unwrap();
+        // 其他字段保留
+        assert_eq!(value["env"]["KEY"], "value");
+        assert_eq!(value["model"], "opus");
+        // enabledPlugins 已更新（对象格式: {"a@m": true, "c@m": false}）
+        let obj = value["enabledPlugins"].as_object().unwrap();
+        assert_eq!(obj.len(), 2);
+        assert_eq!(obj["a@m"], true);
+        assert_eq!(obj["c@m"], false);
+    }
+
+    #[test]
+    fn test_save_claude_settings_enabled_plugins_new_file() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("settings.json");
+
+        save_claude_settings_enabled_plugins(&[("x@m".into(), false)], Some(&path)).unwrap();
+
+        let content = std::fs::read_to_string(&path).unwrap();
+        let value: serde_json::Value = serde_json::from_str(&content).unwrap();
+        let obj = value["enabledPlugins"].as_object().unwrap();
+        assert_eq!(obj.len(), 1);
+        assert_eq!(obj["x@m"], false);
+    }
+
+    #[test]
+    fn test_save_claude_settings_enabled_plugins_empty_list() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("settings.json");
+        let json = r#"{"enabledPlugins": {"a@m": true}}"#;
+        std::fs::write(&path, json).unwrap();
+
+        save_claude_settings_enabled_plugins(&[], Some(&path)).unwrap();
+
+        let content = std::fs::read_to_string(&path).unwrap();
+        let value: serde_json::Value = serde_json::from_str(&content).unwrap();
+        assert!(value["enabledPlugins"].as_object().unwrap().is_empty());
     }
 
     #[test]

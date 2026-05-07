@@ -963,6 +963,10 @@ impl App {
             mode_highlight_until: None,
             model_highlight_until: None,
             config_path_override: Some(test_config_path),
+            claude_settings_override: Some(std::env::temp_dir().join(format!(
+                "claude-settings-test-{}.json",
+                uuid::Uuid::now_v7()
+            ))),
             mcp_pool: None,
             mcp_init_rx: None,
             mcp_panel: None,

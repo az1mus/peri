@@ -1,4 +1,4 @@
-use crate::mcp::config::load_from_path;
+use crate::mcp::config::McpConfigFile;
 use crate::mcp::McpServerConfig;
 use crate::plugin::config::{load_claude_settings, load_installed_plugins, load_plugin_manifest};
 use crate::plugin::types::{InstalledPlugins, McpServerEntry, PluginManifest};
@@ -180,49 +180,95 @@ pub(crate) fn extract_agents_paths(manifest: &PluginManifest, base_dir: &Path) -
     result
 }
 
+/// Load MCP servers from a .mcp.json file, supporting both formats:
+/// - Standard: `{"mcpServers": {...}}`
+/// - Flat: `{"serverName": {...}}` (no mcpServers wrapper, used by context7/gitlab)
+fn load_mcp_json_file(path: &Path) -> Option<HashMap<String, McpServerConfig>> {
+    let content = std::fs::read_to_string(path).ok()?;
+    let v: serde_json::Value = serde_json::from_str(&content).ok()?;
+
+    // Try standard format first: {"mcpServers": {...}}
+    if let Some(_servers) = v.get("mcpServers") {
+        if let Ok(file_config) = serde_json::from_value::<McpConfigFile>(v.clone()) {
+            if !file_config.mcp_servers.is_empty() {
+                return Some(file_config.mcp_servers);
+            }
+        }
+    }
+
+    // Fallback: flat format — each key is a server name, value is a McpServerConfig
+    if let Some(obj) = v.as_object() {
+        let mut result = HashMap::new();
+        for (key, val) in obj {
+            // Skip known non-server keys
+            if key == "mcpServers" {
+                continue;
+            }
+            if let Ok(cfg) = serde_json::from_value::<McpServerConfig>(val.clone()) {
+                result.insert(key.clone(), cfg);
+            }
+        }
+        if !result.is_empty() {
+            return Some(result);
+        }
+    }
+
+    None
+}
+
 /// Extract MCP servers from plugin manifest.
 /// Supports inline config objects and .mcp.json file path references.
+/// Falls back to install_path/.mcp.json when manifest has no mcpServers.
 pub(crate) fn extract_mcp_servers(
     manifest: &PluginManifest,
     install_path: &Path,
 ) -> HashMap<String, McpServerConfig> {
-    let entries = match &manifest.mcp_servers {
-        Some(servers) => servers,
-        None => return HashMap::new(),
-    };
-
     let mut result = HashMap::new();
-    for (name, entry) in entries {
-        match entry {
-            McpServerEntry::Config(cfg) => {
-                result.insert(name.clone(), (**cfg).clone());
-            }
-            McpServerEntry::FilePath(path) => {
-                let resolved = install_path.join(path);
-                match load_from_path(&resolved) {
-                    Ok(file_config) => {
-                        for (srv_name, srv_cfg) in file_config.mcp_servers {
-                            // 文件路径引用中的服务器名保留，外层会再加命名空间
-                            let final_name = if srv_name == *name {
-                                // 如果只有一个服务器且与 key 同名，直接使用
-                                name.clone()
-                            } else {
-                                format!("{}.{}", name, srv_name)
-                            };
-                            result.insert(final_name, srv_cfg);
+
+    if let Some(entries) = &manifest.mcp_servers {
+        for (name, entry) in entries {
+            match entry {
+                McpServerEntry::Config(cfg) => {
+                    result.insert(name.clone(), (**cfg).clone());
+                }
+                McpServerEntry::FilePath(path) => {
+                    let resolved = install_path.join(path);
+                    match load_mcp_json_file(&resolved) {
+                        Some(mcp_servers) => {
+                            for (srv_name, srv_cfg) in mcp_servers {
+                                // 文件路径引用中的服务器名保留，外层会再加命名空间
+                                let final_name = if srv_name == *name {
+                                    // 如果只有一个服务器且与 key 同名，直接使用
+                                    name.clone()
+                                } else {
+                                    format!("{}.{}", name, srv_name)
+                                };
+                                result.insert(final_name, srv_cfg);
+                            }
                         }
-                    }
-                    Err(e) => {
-                        warn!(
-                            path = %resolved.display(),
-                            error = %e,
-                            "插件 MCP 配置文件加载失败，跳过"
-                        );
+                        None => {
+                            warn!(
+                                path = %resolved.display(),
+                                "插件 MCP 配置文件加载失败，跳过"
+                            );
+                        }
                     }
                 }
             }
         }
     }
+
+    // Fallback: if manifest has no mcpServers, try install_path/.mcp.json
+    if result.is_empty() {
+        let mcp_json = install_path.join(".mcp.json");
+        if mcp_json.exists() {
+            debug!(path = %mcp_json.display(), "加载插件根目录 .mcp.json 作为 MCP 配置回退");
+            if let Some(mcp_servers) = load_mcp_json_file(&mcp_json) {
+                result = mcp_servers;
+            }
+        }
+    }
+
     result
 }
 
@@ -689,6 +735,123 @@ pub(crate) mod tests {
 
         let result = extract_mcp_servers(&manifest, dir.path());
         assert!(result.is_empty());
+    }
+
+    #[test]
+    fn test_extract_mcp_servers_fallback_mcp_json_standard_format() {
+        let dir = tempdir().unwrap();
+        // No mcpServers in manifest → should fall back to .mcp.json at plugin root
+        std::fs::write(
+            dir.path().join(".mcp.json"),
+            r#"{"mcpServers":{"srv":{"command":"npx","args":["test"]}}}"#,
+        )
+        .unwrap();
+
+        let manifest = make_manifest_with_commands(vec![]);
+        let result = extract_mcp_servers(&manifest, dir.path());
+        assert_eq!(result.len(), 1);
+        assert!(result.contains_key("srv"));
+        assert_eq!(result["srv"].command.as_deref(), Some("npx"));
+    }
+
+    #[test]
+    fn test_extract_mcp_servers_fallback_mcp_json_flat_format() {
+        let dir = tempdir().unwrap();
+        // Flat format like context7: {"serverName": {...}} without mcpServers wrapper
+        std::fs::write(
+            dir.path().join(".mcp.json"),
+            r#"{"context7":{"command":"npx","args":["-y","@upstash/context7-mcp"]}}"#,
+        )
+        .unwrap();
+
+        let manifest = make_manifest_with_commands(vec![]);
+        let result = extract_mcp_servers(&manifest, dir.path());
+        assert_eq!(result.len(), 1);
+        assert!(result.contains_key("context7"));
+        assert_eq!(result["context7"].command.as_deref(), Some("npx"));
+        assert_eq!(
+            result["context7"].args.as_ref().unwrap(),
+            &vec!["-y", "@upstash/context7-mcp"]
+        );
+    }
+
+    #[test]
+    fn test_extract_mcp_servers_manifest_has_priority_over_fallback() {
+        let dir = tempdir().unwrap();
+        // manifest has mcpServers → fallback should NOT be used
+        std::fs::write(
+            dir.path().join(".mcp.json"),
+            r#"{"fallbackSrv":{"command":"fallback-cmd"}}"#,
+        )
+        .unwrap();
+
+        let mut manifest = make_manifest_with_commands(vec![]);
+        let mut servers = HashMap::new();
+        servers.insert(
+            "inline".into(),
+            McpServerEntry::Config(Box::new(McpServerConfig {
+                command: Some("inline-cmd".into()),
+                args: None,
+                env: None,
+                url: None,
+                headers: None,
+                oauth: None,
+                disabled: None,
+                source: None,
+            })),
+        );
+        manifest.mcp_servers = Some(servers);
+
+        let result = extract_mcp_servers(&manifest, dir.path());
+        assert_eq!(result.len(), 1);
+        assert!(result.contains_key("inline"));
+        assert_eq!(result["inline"].command.as_deref(), Some("inline-cmd"));
+    }
+
+    #[test]
+    fn test_load_mcp_json_file_flat_format_multiple_servers() {
+        let dir = tempdir().unwrap();
+        let mcp_json_path = dir.path().join("test.mcp.json");
+        std::fs::write(
+            &mcp_json_path,
+            r#"{"srv1":{"command":"cmd1"},"srv2":{"url":"https://example.com"}}"#,
+        )
+        .unwrap();
+
+        let result = super::load_mcp_json_file(&mcp_json_path).unwrap();
+        assert_eq!(result.len(), 2);
+        assert!(result.contains_key("srv1"));
+        assert!(result.contains_key("srv2"));
+    }
+
+    #[test]
+    fn test_load_mcp_json_file_standard_format() {
+        let dir = tempdir().unwrap();
+        let mcp_json_path = dir.path().join("test.mcp.json");
+        std::fs::write(
+            &mcp_json_path,
+            r#"{"mcpServers":{"srv":{"command":"echo","args":["hi"]}}}"#,
+        )
+        .unwrap();
+
+        let result = super::load_mcp_json_file(&mcp_json_path).unwrap();
+        assert_eq!(result.len(), 1);
+        assert!(result.contains_key("srv"));
+    }
+
+    #[test]
+    fn test_load_mcp_json_file_nonexistent() {
+        let result = super::load_mcp_json_file(Path::new("/nonexistent/mcp.json"));
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_load_mcp_json_file_invalid_json() {
+        let dir = tempdir().unwrap();
+        let mcp_json_path = dir.path().join("bad.mcp.json");
+        std::fs::write(&mcp_json_path, b"not json").unwrap();
+        let result = super::load_mcp_json_file(&mcp_json_path);
+        assert!(result.is_none());
     }
 
     #[test]

@@ -104,6 +104,8 @@ pub struct App {
     pub model_highlight_until: Option<std::time::Instant>,
     /// 测试时覆盖配置文件路径，防止污染全局 ~/.zen-code/settings.json
     pub config_path_override: Option<PathBuf>,
+    /// 测试时覆盖 ~/.claude/settings.json 路径，防止污染全局配置
+    pub claude_settings_override: Option<PathBuf>,
     /// MCP 连接池：首次 agent 启动时惰性初始化，App 退出时 shutdown
     pub mcp_pool: Option<Arc<rust_agent_middlewares::mcp::McpClientPool>>,
     /// MCP 后台初始化状态接收端
@@ -208,6 +210,7 @@ impl App {
             mode_highlight_until: None,
             model_highlight_until: None,
             config_path_override: None,
+            claude_settings_override: None,
             mcp_pool: None,
             mcp_init_rx: None,
             mcp_panel: None,
