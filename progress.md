@@ -1,5 +1,9 @@
 # Design Review Progress
 
+## 2026-05-07 第44轮：ContentBlock 构造方法测试补充 + compact/invariant 可见性收紧
+
+为 messages/content.rs 补充 11 个测试：image_url/image_base64 构造与 serde roundtrip、reasoning/reasoning_with_signature 访问器与签名保留、as_reasoning 对非推理变体返回 None、Document 变体 roundtrip、tool_result 错误标记、MessageContent From/default/Raw 变体。将 compact/invariant 中 MessageRound 结构体及其字段、group_messages_by_round、adjust_index_to_preserve_invariants 从 pub 收紧为 pub(crate)。测试总数从 264 增至 275。
+
 ## 2026-05-07 第43轮：langfuse-client re-export 收紧 + acpx-g 重复代码消除
 
 langfuse-client：ingestion_events_to_otel 改为 pub(crate)，移除 lib.rs 中 11 个未使用 OTLP 类型 re-export（OtelAttribute/Span/Status 等）。acpx-g：消除 executor.rs 和 loader.rs 中重复定义的 node_id/node_depends 函数（共 3 处重复），统一复用 runner/mod.rs 的 pub 版本。净减 46 行，编译零警告，161 测试全通过。
