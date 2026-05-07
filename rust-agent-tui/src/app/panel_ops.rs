@@ -681,8 +681,16 @@ impl App {
                 name
             )));
 
-        // 刷新面板
+        // 刷新面板并恢复到 Marketplaces 视图
         self.open_plugin_panel();
+        if let Some(ref mut p) = self.plugin_panel {
+            p.view = crate::app::plugin_panel::PluginPanelView::Marketplaces;
+            // 确保 cursor 不越界
+            let max = p.marketplace_entries.len();
+            if p.marketplace_cursor > max {
+                p.marketplace_cursor = max;
+            }
+        }
 
         Ok(())
     }

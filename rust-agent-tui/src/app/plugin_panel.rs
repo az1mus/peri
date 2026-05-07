@@ -237,7 +237,6 @@ impl PluginPanel {
     pub fn is_detail(&self) -> bool {
         self.detail_index.is_some()
             || self.discover_detail_index.is_some()
-            || self.marketplace_confirm_delete.is_some()
             || self.add_marketplace_active
     }
 
