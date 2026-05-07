@@ -38,10 +38,27 @@ pub struct McpToolBridge {
 
 const TOOL_CALL_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(120);
 
+/// Sanitize name components to match API tool name pattern: ^[a-zA-Z0-9_-]+$
+fn sanitize_name_component(name: &str) -> String {
+    name.chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '_' || c == '-' {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect()
+}
+
 impl McpToolBridge {
     pub fn new(server_name: &str, tool: &Tool, client: Arc<McpClientHandle>) -> Self {
         let tool_name = tool.name.to_string();
-        let full_name = format!("mcp__{}__{}", server_name, tool_name);
+        let full_name = format!(
+            "mcp__{}__{}",
+            sanitize_name_component(server_name),
+            sanitize_name_component(&tool_name)
+        );
         let description = format!(
             "[MCP:{}] {}",
             server_name,
@@ -207,6 +224,27 @@ mod tests {
         let handle = make_disconnected_handle("fs");
         let bridge = McpToolBridge::new("fs", &tool, handle);
         assert_eq!(bridge.name(), "mcp__fs__read_file");
+    }
+
+    #[test]
+    fn test_new_sanitizes_dots_in_names() {
+        let tool = make_tool("web.reader", Some("Fetch URL"));
+        let handle = make_disconnected_handle("plugin.ctx");
+        let bridge = McpToolBridge::new("plugin.ctx", &tool, handle);
+        // full_name 净化了非法字符
+        assert_eq!(bridge.name(), "mcp__plugin_ctx__web_reader");
+        // 但内部 tool_name 保留原始值用于 MCP 协议调用
+        assert_eq!(bridge.tool_name, "web.reader");
+        assert_eq!(bridge.server_name, "plugin.ctx");
+    }
+
+    #[test]
+    fn test_new_sanitizes_colons_in_names() {
+        let tool = make_tool("query-docs", Some("Query docs"));
+        let handle = make_disconnected_handle("context7");
+        let bridge = McpToolBridge::new("plugin:context7:context7", &tool, handle);
+        assert_eq!(bridge.name(), "mcp__plugin_context7_context7__query-docs");
+        assert_eq!(bridge.tool_name, "query-docs");
     }
 
     #[test]

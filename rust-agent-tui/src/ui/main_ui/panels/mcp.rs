@@ -545,4 +545,49 @@ mod tests {
         assert!(snap.contains("project-srv"), "应显示项目级服务器");
         assert!(snap.contains("global-srv"), "应显示全局服务器");
     }
+
+    #[tokio::test]
+    async fn test_plugin_mcp_panel_enter_detail() {
+        let (mut app, mut handle) = App::new_headless(120, 30).await;
+
+        let mut plugin_srv = make_server("plugin:context7:context7", ClientStatus::Connected);
+        plugin_srv.source = Some(ConfigSource::Plugin);
+        plugin_srv.plugin_source = Some("context7@alpha".to_string());
+
+        app.mcp_panel = Some(McpPanel::new(vec![plugin_srv]));
+
+        // Enter detail view
+        app.mcp_panel_enter();
+
+        // Should be in ServerDetail view
+        match &app.mcp_panel.as_ref().unwrap().view {
+            McpPanelView::ServerDetail {
+                server_name,
+                actions,
+                ..
+            } => {
+                assert_eq!(
+                    server_name, "plugin:context7:context7",
+                    "Server name should match"
+                );
+                assert!(!actions.is_empty(), "Should have actions");
+            }
+            _ => panic!("Should be in ServerDetail view"),
+        }
+
+        // Render the detail view
+        handle
+            .terminal
+            .draw(|f| crate::ui::main_ui::render(f, &mut app))
+            .unwrap();
+        let snap = handle.snapshot().join("\n");
+        assert!(
+            snap.contains("plugin:context7:context7"),
+            "Detail view should show server name"
+        );
+        assert!(
+            snap.contains("Plugin"),
+            "Detail view should show Plugin source"
+        );
+    }
 }
