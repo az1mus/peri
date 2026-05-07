@@ -510,6 +510,7 @@ mod tests {
             oauth_status: Default::default(),
             source: None,
             url: None,
+            plugin_source: None,
         }
     }
 

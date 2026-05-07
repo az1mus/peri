@@ -342,9 +342,11 @@ impl MessageViewModel {
                 let raw_content = content.text_content();
                 // Agent 工具恢复为 SubAgentGroup（完成状态，展开显示 final_result）
                 if tool_name == "Agent" {
-                    let agent_id = input["subagent_type"]
-                        .as_str()
-                        .unwrap_or("Agent")
+                    let agent_id = input
+                        .get("subagent_type")
+                        .and_then(|v| v.as_str())
+                        .filter(|s| !s.is_empty())
+                        .unwrap_or("fork")
                         .to_string();
                     let task_preview = input["prompt"]
                         .as_str()

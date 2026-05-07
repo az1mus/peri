@@ -56,6 +56,8 @@ pub struct ServerInfo {
     pub source: Option<ConfigSource>,
     /// 服务器 URL（HTTP 传输）
     pub url: Option<String>,
+    /// 插件来源标识（`"name@marketplace"`），非插件 server 为 None
+    pub plugin_source: Option<String>,
 }
 
 /// 连接池级别错误
@@ -94,6 +96,8 @@ pub struct McpClientPool {
     clients: parking_lot::RwLock<HashMap<String, Arc<McpClientHandle>>>,
     services: tokio::sync::Mutex<HashMap<String, RunningService<RoleClient, ()>>>,
     configs: parking_lot::RwLock<HashMap<String, McpServerConfig>>,
+    /// 插件来源旁路表：key 为 server name（如 `"plugin:p1:srv1"`），value 为 `"name@marketplace"`
+    plugin_sources: parking_lot::RwLock<HashMap<String, String>>,
 }
 
 const STDIO_CONNECT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
@@ -106,12 +110,19 @@ impl McpClientPool {
             clients: parking_lot::RwLock::new(HashMap::new()),
             services: tokio::sync::Mutex::new(HashMap::new()),
             configs: parking_lot::RwLock::new(HashMap::new()),
+            plugin_sources: parking_lot::RwLock::new(HashMap::new()),
         }
     }
 
     #[cfg(test)]
     pub fn new_empty() -> Self {
         Self::new_pending()
+    }
+
+    /// 查询指定 server 的插件来源标识，非插件 server 返回 None
+    /// key 格式为 `"plugin_name__server_name"`，返回 `"name@marketplace"`
+    pub fn plugin_source_of(&self, name: &str) -> Option<String> {
+        self.plugin_sources.read().get(name).cloned()
     }
 
     pub async fn run_initialize(
@@ -121,7 +132,7 @@ impl McpClientPool {
         status_tx: tokio::sync::watch::Sender<McpInitStatus>,
         oauth_event_callback: Option<Box<dyn Fn(OAuthFlowEvent) + Send + Sync>>,
     ) {
-        let config = super::load_merged_config(cwd, claude_home);
+        let (config, plugin_sources) = super::load_merged_config_full(cwd, claude_home);
         let connectable = config
             .mcp_servers
             .iter()
@@ -131,6 +142,8 @@ impl McpClientPool {
             let _ = status_tx.send(McpInitStatus::Ready { total: 0 });
             return;
         }
+
+        *pool.plugin_sources.write() = plugin_sources;
 
         let token_store = Arc::new(FileCredentialStore::new());
         let mut oauth_manager: Option<OAuthFlowManager> =
@@ -767,6 +780,7 @@ impl McpClientPool {
                 oauth_status: h.oauth_status.clone(),
                 source: h.source.clone(),
                 url: h.url.clone(),
+                plugin_source: self.plugin_source_of(&h.name),
             })
             .collect()
     }
@@ -845,8 +859,9 @@ impl McpClientPool {
         claude_home: &Path,
         oauth_event_callback: Option<Box<dyn Fn(OAuthFlowEvent) + Send + Sync>>,
     ) -> Self {
-        let config = super::load_merged_config(cwd, claude_home);
+        let (config, plugin_sources) = super::load_merged_config_full(cwd, claude_home);
         let pool = Arc::new(Self::new_pending());
+        *pool.plugin_sources.write() = plugin_sources;
         let token_store = Arc::new(FileCredentialStore::new());
         let mut oauth_manager: Option<OAuthFlowManager> =
             oauth_event_callback.map(|cb| OAuthFlowManager::new(token_store, cb));
@@ -1013,6 +1028,7 @@ impl McpClientPool {
                 clients: parking_lot::RwLock::new(p.clients.read().clone()),
                 services: tokio::sync::Mutex::new(HashMap::new()),
                 configs: parking_lot::RwLock::new(p.configs.read().clone()),
+                plugin_sources: parking_lot::RwLock::new(p.plugin_sources.read().clone()),
             }
         })
     }
@@ -1215,5 +1231,32 @@ mod tests {
         );
         assert!(pool.get_tools("s").is_empty());
         assert!(pool.get_tools("x").is_empty());
+    }
+
+    #[test]
+    fn test_plugin_source_of_empty_pool_returns_none() {
+        let pool = McpClientPool::new_pending();
+        assert!(pool.plugin_source_of("any").is_none());
+    }
+
+    #[test]
+    fn test_plugin_source_of_after_write_returns_value() {
+        let pool = McpClientPool::new_pending();
+        pool.plugin_sources
+            .write()
+            .insert("p1__srv1".to_string(), "p1@marketplace_a".to_string());
+        assert_eq!(
+            pool.plugin_source_of("p1__srv1"),
+            Some("p1@marketplace_a".to_string())
+        );
+    }
+
+    #[test]
+    fn test_plugin_source_of_nonexistent_returns_none() {
+        let pool = McpClientPool::new_pending();
+        pool.plugin_sources
+            .write()
+            .insert("p1__srv1".to_string(), "p1@alpha".to_string());
+        assert!(pool.plugin_source_of("nonexistent").is_none());
     }
 }

@@ -343,9 +343,11 @@ fn map_executor_event(event: ExecutorEvent, cwd: &str) -> Option<AgentEvent> {
         ExecutorEvent::TextChunk { chunk: text, .. } => AgentEvent::AssistantChunk(text),
         // Agent ToolStart → SubAgentStart（在通用 ToolStart 分支之前）
         ExecutorEvent::ToolStart { name, input, .. } if name == "Agent" => {
-            let agent_id = input["subagent_type"]
-                .as_str()
-                .unwrap_or("unknown")
+            let agent_id = input
+                .get("subagent_type")
+                .and_then(|v| v.as_str())
+                .filter(|s| !s.is_empty())
+                .unwrap_or("fork")
                 .to_string();
             let task_preview = input["prompt"]
                 .as_str()

@@ -138,6 +138,12 @@ Token 累积达到上下文窗口阈值（默认 85%）时自动触发：
 
 **插件 MCP 命名空间**：插件定义的 MCP 服务器使用 `{plugin_name}__{server_name}` 前缀命名空间，`ConfigSource::Plugin` 标记来源，合并后工具名为 `mcp__{plugin_name}__{server_name}__{tool_name}`。新增 MCP 配置合并逻辑时必须遵循此前缀规则。
 
+**插件 MCP Env 展开**：必须在合并之前执行（per-plugin 独立上下文），避免不同插件的同名 env var 交叉污染。`expand_server_config_with_context` 在 Step 2 立即调用，Plugin 来源的 server config 在合并到 `merged.mcp_servers` 之前已完成 env 变量替换。
+
+**ClaudeSettings 反序列化陷阱 [TRAP]**：`extraKnownMarketplaces` 字段在 Claude Code 中可能是对象格式 `{"name": {source, ...}}`。`deserialize_known_marketplaces` 自定义反序列化器需同时支持对象和数组两种格式，否则整个 `ClaudeSettings` 解析失败会导致 `load_enabled_plugins` 静默失败、插件 MCP 服务器全部丢失。同样，`enabledPlugins` 也有对象/数组两种格式（已有 `deserialize_enabled_plugins` 处理）。
+
+**Plugin Sources 旁路表**：`load_merged_config_full` 返回 `(McpConfigFile, HashMap<String, String>)`，其中 `HashMap` 的 key 格式为 `"plugin:{name}:{server}"`（与合并后 config 中的 server name 一致），value 为 `"name@marketplace"`。`LoadedPlugin` 当前没有 `marketplace` 字段，marketplace 信息只能从 `InstalledPlugin`（`installed_plugins.json`）中获取。`load_installed_plugins` 读取路径需从 `claude_home` 参数推导（`claude_home/plugins/installed_plugins.json`），不能使用 `None`（会读 `~/.claude/plugins/installed_plugins.json`）。
+
 **资源读取**：`mcp__read_resource` 工具，参数 `server_name` + `uri`，120 秒超时。
 
 **连接池**（`McpClientPool`）：

@@ -273,7 +273,13 @@ fn render_server_detail(f: &mut Frame, app: &mut App, area: Rect) {
         if let Some(source) = &info.source {
             let path_str = match source {
                 ConfigSource::Project(p) | ConfigSource::Global(p) => p.display().to_string(),
-                ConfigSource::Plugin => "Plugin".to_string(),
+                ConfigSource::Plugin => {
+                    if let Some(ps) = &info.plugin_source {
+                        format!("Plugin — {}", ps)
+                    } else {
+                        "Plugin".to_string()
+                    }
+                }
             };
             lines.push(detail_line(
                 label_width,
@@ -461,6 +467,7 @@ mod tests {
             oauth_status: Default::default(),
             source: None,
             url: None,
+            plugin_source: None,
         }
     }
 

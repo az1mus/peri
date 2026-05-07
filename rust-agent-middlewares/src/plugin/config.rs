@@ -10,7 +10,7 @@ pub struct ClaudeSettings {
     #[serde(default, deserialize_with = "deserialize_enabled_plugins")]
     #[serde(rename = "enabledPlugins")]
     pub enabled_plugins: Vec<String>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_known_marketplaces")]
     #[serde(rename = "extraKnownMarketplaces")]
     pub extra_known_marketplaces: Vec<DeclaredMarketplace>,
 }
@@ -43,6 +43,36 @@ where
                 })
                 .collect();
             Ok(ids)
+        }
+        _ => Ok(Vec::new()),
+    }
+}
+
+/// 兼容 Claude Code 两种 extraKnownMarketplaces 格式：
+/// - 数组: `[{source, installLocation, ...}]`
+/// - 对象: `{"marketplace-name": {source, installLocation, ...}}`
+fn deserialize_known_marketplaces<'de, D>(
+    deserializer: D,
+) -> Result<Vec<DeclaredMarketplace>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value = serde_json::Value::deserialize(deserializer)?;
+    match value {
+        serde_json::Value::Array(arr) => {
+            serde_json::from_value(serde_json::Value::Array(arr)).map_err(serde::de::Error::custom)
+        }
+        serde_json::Value::Object(map) => {
+            let mut result = Vec::new();
+            for (_name, entry) in map {
+                match serde_json::from_value::<DeclaredMarketplace>(entry) {
+                    Ok(mkt) => result.push(mkt),
+                    Err(e) => {
+                        tracing::warn!(error = %e, "extraKnownMarketplaces 条目解析失败，跳过");
+                    }
+                }
+            }
+            Ok(result)
         }
         _ => Ok(Vec::new()),
     }
@@ -505,6 +535,23 @@ mod tests {
         std::fs::write(&path, json).unwrap();
         let settings = load_claude_settings(Some(&path)).unwrap();
         assert_eq!(settings.enabled_plugins, vec!["plugin-a", "plugin-b"]);
+        assert_eq!(settings.extra_known_marketplaces.len(), 1);
+    }
+
+    #[test]
+    fn test_load_claude_settings_extra_marketplaces_object_format() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("settings.json");
+        let json = r#"{
+            "enabledPlugins": [],
+            "extraKnownMarketplaces": {
+                "superpowers-dev": {
+                    "source": {"source":"github","repo":"test/repo"}
+                }
+            }
+        }"#;
+        std::fs::write(&path, json).unwrap();
+        let settings = load_claude_settings(Some(&path)).unwrap();
         assert_eq!(settings.extra_known_marketplaces.len(), 1);
     }
 
