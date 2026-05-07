@@ -592,6 +592,29 @@ impl App {
                                 };
                             }
                         }
+                        ("install_counts_refresh", _) => {
+                            // 安装量数据后台刷新完成，重新加载面板以更新排序
+                            let current_view = panel.view;
+                            let current_cursor = panel.cursor;
+                            let current_discover_cursor = panel.discover_cursor;
+                            let current_marketplace_cursor = panel.marketplace_cursor;
+                            self.open_plugin_panel();
+                            if let Some(ref mut p) = self.plugin_panel {
+                                p.view = current_view;
+                                p.cursor =
+                                    current_cursor.min(p.current_list_len().saturating_sub(1));
+                                p.discover_cursor = current_discover_cursor
+                                    .min(p.discover_filtered_plugins().len().saturating_sub(1));
+                                let max = p.marketplace_entries.len();
+                                p.marketplace_cursor = if current_marketplace_cursor <= max {
+                                    current_marketplace_cursor
+                                } else {
+                                    max
+                                };
+                            }
+                            // 不显示系统消息
+                            return (false, false, false);
+                        }
                         _ => {}
                     }
                 }

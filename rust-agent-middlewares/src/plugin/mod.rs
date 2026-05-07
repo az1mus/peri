@@ -1,4 +1,5 @@
 pub mod config;
+pub mod install_counts;
 pub mod installer;
 pub mod loader;
 pub mod marketplace;
@@ -10,6 +11,9 @@ pub use config::{
     load_claude_settings, load_installed_plugins, load_known_marketplaces, load_plugin_manifest,
     marketplaces_cache_dir, plugin_cache_dir, plugins_dir, save_installed_plugins,
     save_known_marketplaces, ClaudeSettings, PluginConfigError,
+};
+pub use install_counts::{
+    fetch_install_counts, format_install_count, is_install_counts_cache_valid, load_install_counts,
 };
 pub use installer::{
     check_updates, cleanup_orphaned_plugins, install_plugin, uninstall_plugin, update_plugin,

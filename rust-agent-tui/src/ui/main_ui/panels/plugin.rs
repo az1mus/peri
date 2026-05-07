@@ -946,38 +946,52 @@ fn render_discover_list(f: &mut Frame, app: &mut App, area: Rect) {
             }
 
             // 计算安装状态标识（放在右侧）
-            let status_spans = if is_installing {
-                Some(Span::styled(
-                    "installing\u{2026}",
-                    Style::default().fg(theme::WARNING),
-                ))
-            } else if is_uninstalling {
-                Some(Span::styled(
-                    "uninstalling\u{2026}",
-                    Style::default().fg(theme::WARNING),
-                ))
-            } else if plugin.installed {
-                Some(Span::styled("✔", Style::default().fg(theme::SAGE)))
-            } else {
-                None
-            };
+            let mut right_parts: Vec<Span> = Vec::new();
 
-            // 如果有状态标识，计算填充空格使其右对齐
-            if let Some(status_span) = status_spans {
-                // 计算当前内容的显示宽度
+            // 安装量
+            if let Some(count) = plugin.install_count {
+                right_parts.push(Span::styled(
+                    format!(
+                        " {} {} installs",
+                        rust_agent_middlewares::plugin::format_install_count(count),
+                        "\u{00B7}"
+                    ),
+                    Style::default().fg(theme::MUTED),
+                ));
+            }
+
+            if is_installing {
+                right_parts.push(Span::styled(
+                    " installing\u{2026}",
+                    Style::default().fg(theme::WARNING),
+                ));
+            } else if is_uninstalling {
+                right_parts.push(Span::styled(
+                    " uninstalling\u{2026}",
+                    Style::default().fg(theme::WARNING),
+                ));
+            } else if plugin.installed {
+                right_parts.push(Span::styled(" \u{2714}", Style::default().fg(theme::SAGE)));
+            }
+
+            // 右对齐填充
+            if !right_parts.is_empty() {
                 let content_width: usize = spans
                     .iter()
                     .map(|s| unicode_width::UnicodeWidthStr::width(&*s.content))
                     .sum();
-                let status_width = unicode_width::UnicodeWidthStr::width(&*status_span.content);
-                let available_width = list_area.width.saturating_sub(2) as usize; // 减去光标占用的空间
-                let padding = if content_width + status_width < available_width {
-                    " ".repeat(available_width.saturating_sub(content_width + status_width))
+                let right_width: usize = right_parts
+                    .iter()
+                    .map(|s| unicode_width::UnicodeWidthStr::width(&*s.content))
+                    .sum();
+                let available_width = list_area.width.saturating_sub(2) as usize;
+                let padding = if content_width + right_width < available_width {
+                    " ".repeat(available_width.saturating_sub(content_width + right_width))
                 } else {
-                    " ".repeat(2) // 最小间隔
+                    " ".repeat(2)
                 };
                 spans.push(Span::styled(padding, Style::default()));
-                spans.push(status_span);
+                spans.extend(right_parts);
             }
 
             lines.push(Line::from(spans));

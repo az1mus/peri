@@ -468,6 +468,7 @@ impl App {
                         author: p.author.as_ref().map(|a| a.name.clone()),
                         installed: is_installed,
                         plugin_id,
+                        install_count: None,
                     });
                 }
             }
@@ -504,8 +505,23 @@ impl App {
             });
         }
 
-        // discover 按名称排序
-        discover_plugins.sort_by(|a, b| a.name.cmp(&b.name));
+        // 注入安装量数据并排序
+        let install_counts = rust_agent_middlewares::plugin::load_install_counts();
+        if let Some(ref counts) = install_counts {
+            for dp in &mut discover_plugins {
+                // 远程数据 key 格式为 "plugin-name@marketplace-name"，与 plugin_id 一致
+                dp.install_count = counts.get(&dp.plugin_id).copied();
+            }
+            // 安装量降序 → 同安装量按字母序
+            discover_plugins.sort_by(|a, b| {
+                let ca = a.install_count.unwrap_or(0);
+                let cb = b.install_count.unwrap_or(0);
+                cb.cmp(&ca).then_with(|| a.name.cmp(&b.name))
+            });
+        } else {
+            // 无安装量数据，按字母排序
+            discover_plugins.sort_by(|a, b| a.name.cmp(&b.name));
+        }
 
         let mut panel = crate::app::plugin_panel::PluginPanel::new(entries);
         panel.discover_plugins = discover_plugins;
@@ -522,6 +538,24 @@ impl App {
 
         let _ = cache_base;
         let _ = claude_dir;
+
+        // 缓存不存在或过期时，后台刷新安装量数据
+        if !rust_agent_middlewares::plugin::is_install_counts_cache_valid() {
+            let tx = self.bg_event_tx.clone();
+            tokio::spawn(async move {
+                let result = rust_agent_middlewares::plugin::fetch_install_counts().await;
+                if result.is_some() {
+                    let _ = tx
+                        .send(crate::app::AgentEvent::PluginActionCompleted {
+                            plugin_id: "__install_counts__".to_string(),
+                            action: "install_counts_refresh".to_string(),
+                            success: true,
+                            message: String::new(),
+                        })
+                        .await;
+                }
+            });
+        }
     }
 
     pub fn close_plugin_panel(&mut self) {

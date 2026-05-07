@@ -12,6 +12,7 @@ pub struct DiscoverPlugin {
     pub author: Option<String>,
     pub installed: bool,
     pub plugin_id: String,
+    pub install_count: Option<u64>,
 }
 
 /// Discover 详情页操作菜单
