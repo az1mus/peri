@@ -10,6 +10,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 use tokio::sync::mpsc;
+use tracing::warn;
 use uuid::Uuid;
 
 /// 定时任务最大数量限制
@@ -99,10 +100,19 @@ impl CronScheduler {
             }
             if let Some(next) = task.next_fire {
                 if now >= next {
-                    let _ = self.trigger_tx.send(CronTrigger {
-                        task_id: task.id.clone(),
-                        prompt: task.prompt.clone(),
-                    });
+                    if self
+                        .trigger_tx
+                        .send(CronTrigger {
+                            task_id: task.id.clone(),
+                            prompt: task.prompt.clone(),
+                        })
+                        .is_err()
+                    {
+                        warn!(
+                            task_id = %task.id,
+                            "cron tick: failed to send trigger (channel closed)"
+                        );
+                    }
                     // 计算下次触发时间
                     task.next_fire = Self::calculate_next_fire(&task.expression, now);
                 }
