@@ -42,7 +42,7 @@ pub fn parse_http_hook_response(body: &str) -> HookAction {
         tracing::warn!(
             "HTTP hook must return JSON, got non-JSON body: {}",
             if trimmed.len() > 200 {
-                format!("{}...", &trimmed[..200])
+                format!("{}...", &trimmed[..trimmed.floor_char_boundary(200)])
             } else {
                 trimmed.to_string()
             }

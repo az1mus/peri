@@ -303,7 +303,7 @@ pub async fn execute_http_hook(hook: &HookType, input: &HookInput) -> HookAction
                     "HTTP hook returned non-success status {}: {}",
                     status,
                     if body.len() > 200 {
-                        format!("{}...", &body[..body.len().min(200)])
+                        format!("{}...", &body[..body.floor_char_boundary(200)])
                     } else {
                         body
                     }
