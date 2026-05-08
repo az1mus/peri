@@ -111,31 +111,31 @@
 
 ### 场景 4：UiState 提取（Task 3）
 
-#### - [ ] 4.1 UiState 包含 18 个字段
+#### - [x] 4.1 UiState 包含 18 个字段
 - **来源:** spec-plan-1.md Task 3 检查步骤
 - **目的:** 确认 UiState 结构体定义完整
 - **操作步骤:**
   1. [A] `grep -c "pub " rust-agent-tui/src/app/ui_state.rs` → 期望包含: `19`（≥ 19 即 18 字段 + new 方法）
 
-#### - [ ] 4.2 AppCore 不再包含 UiState 字段
+#### - [x] 4.2 AppCore 不再包含 UiState 字段
 - **来源:** spec-plan-1.md Task 3 检查步骤
 - **目的:** 确认 18 个 UI 字段已从 AppCore 移除
 - **操作步骤:**
   1. [A] `grep -E "pub (textarea|loading|scroll_offset|scroll_follow|show_tool_messages|hint_cursor|input_history|history_index|draft_input|text_selection|messages_area|textarea_area|copy_message_until|copy_char_count|panel_selection|panel_area|panel_plain_lines|panel_scroll_offset)" rust-agent-tui/src/app/core.rs` → 期望精确: ``（空输出）
 
-#### - [ ] 4.3 全项目无 UiState 字段通过 core 访问
+#### - [x] 4.3 全项目无 UiState 字段通过 core 访问
 - **来源:** spec-plan-1.md Task 3 检查步骤
 - **目的:** 确认所有 UI 字段已迁移到 .ui. 路径
 - **操作步骤:**
   1. [A] `grep -rn "core\.\(textarea\|loading\|scroll_offset\|scroll_follow\|show_tool_messages\|hint_cursor\|input_history\|history_index\|draft_input\|text_selection\|messages_area\|textarea_area\|copy_message_until\|copy_char_count\|panel_selection\|panel_area\|panel_plain_lines\|panel_scroll_offset\)" rust-agent-tui/src/ | grep -v "spec-plan"` → 期望精确: ``（空输出）
 
-#### - [ ] 4.4 UiState 单元测试通过
+#### - [x] 4.4 UiState 单元测试通过
 - **来源:** spec-plan-1.md Task 3 检查步骤
 - **目的:** 确认 UiState 默认值和初始状态正确
 - **操作步骤:**
   1. [A] `cargo test -p rust-agent-tui --lib -- ui_state::tests 2>&1 | tail -10` → 期望包含: `test result: ok`
 
-#### - [ ] 4.5 Headless 测试通过
+#### - [x] 4.5 Headless 测试通过
 - **来源:** spec-plan-1.md Task 3 检查步骤
 - **目的:** 确认 UiState 迁移无回归
 - **操作步骤:**
@@ -145,43 +145,43 @@
 
 ### 场景 5：MessageState 提取（Task 4）
 
-#### - [ ] 5.1 MessageState 包含 9 个字段
+#### - [x] 5.1 MessageState 包含 9 个字段
 - **来源:** spec-plan-1.md Task 4 检查步骤
 - **目的:** 确认 MessageState 结构体定义完整
 - **操作步骤:**
   1. [A] `grep -c "pub " rust-agent-tui/src/app/message_state.rs` → 期望包含: `10`（≥ 10 即 9 字段 + new 方法）
 
-#### - [ ] 5.2 AppCore 不再包含 MessageState 字段
+#### - [x] 5.2 AppCore 不再包含 MessageState 字段
 - **来源:** spec-plan-1.md Task 4 检查步骤
 - **目的:** 确认 9 个消息字段已从 AppCore 移除
 - **操作步骤:**
   1. [A] `grep -E "pub (view_messages|round_start_vm_idx|pipeline|render_tx|render_cache|render_notify|last_render_version|pending_messages|last_submitted_text)" rust-agent-tui/src/app/core.rs` → 期望精确: ``（空输出）
 
-#### - [ ] 5.3 AppCore::new() 不再接受 render 参数
+#### - [x] 5.3 AppCore::new() 不再接受 render 参数
 - **来源:** spec-plan-1.md Task 4 检查步骤
 - **目的:** 确认 render 相关参数已移至 MessageState
 - **操作步骤:**
   1. [A] `grep -E "render_tx|render_cache|render_notify" rust-agent-tui/src/app/core.rs` → 期望精确: ``（空输出）
 
-#### - [ ] 5.4 全项目无 MessageState 字段通过 core 访问
+#### - [x] 5.4 全项目无 MessageState 字段通过 core 访问
 - **来源:** spec-plan-1.md Task 4 检查步骤
 - **目的:** 确认所有消息字段已迁移到 .messages. 路径
 - **操作步骤:**
   1. [A] `grep -rn "core\.\(view_messages\|round_start_vm_idx\|pipeline\|render_tx\|render_cache\|render_notify\|last_render_version\|pending_messages\|last_submitted_text\)" rust-agent-tui/src/ | grep -v "spec-plan"` → 期望精确: ``（空输出）
 
-#### - [ ] 5.5 MessageState 单元测试通过
+#### - [x] 5.5 MessageState 单元测试通过
 - **来源:** spec-plan-1.md Task 4 检查步骤
 - **目的:** 确认 MessageState 默认值和 pipeline 初始化正确
 - **操作步骤:**
   1. [A] `cargo test -p rust-agent-tui --lib -- message_state::tests 2>&1 | tail -10` → 期望包含: `test result: ok`
 
-#### - [ ] 5.6 AppCore 现有测试仍通过
+#### - [x] 5.6 AppCore 现有测试仍通过
 - **来源:** spec-plan-1.md Task 4 检查步骤
 - **目的:** 确认 AppCore 残余逻辑测试无回归
 - **操作步骤:**
   1. [A] `cargo test -p rust-agent-tui --lib -- core::tests 2>&1 | tail -10` → 期望包含: `test result: ok`
 
-#### - [ ] 5.7 Headless 测试通过
+#### - [x] 5.7 Headless 测试通过
 - **来源:** spec-plan-1.md Task 4 检查步骤
 - **目的:** 确认 MessageState 迁移无回归
 - **操作步骤:**
@@ -191,49 +191,49 @@
 
 ### 场景 6：CommandSystem + SessionMetadata 提取（Task 5）
 
-#### - [ ] 6.1 AppCore 不再包含 CommandSystem 字段
+#### - [x] 6.1 AppCore 不再包含 CommandSystem 字段
 - **来源:** spec-plan-2.md Task 5 检查步骤
 - **目的:** 确认命令相关字段已从 AppCore 移除
 - **操作步骤:**
   1. [A] `grep -E "pub (command_registry|command_help_list|skills)" rust-agent-tui/src/app/core.rs` → 期望精确: ``（空输出）
 
-#### - [ ] 6.2 AppCore 不再包含 SessionMetadata 字段
+#### - [x] 6.2 AppCore 不再包含 SessionMetadata 字段
 - **来源:** spec-plan-2.md Task 5 检查步骤
 - **目的:** 确认会话元数据字段已从 AppCore 移除
 - **操作步骤:**
   1. [A] `grep -E "pub (pending_attachments|last_human_message|pre_submit_state_len)" rust-agent-tui/src/app/core.rs` → 期望精确: ``（空输出）
 
-#### - [ ] 6.3 event.rs 中 std::mem::take(command_registry) 已消除
+#### - [x] 6.3 event.rs 中 std::mem::take(command_registry) 已消除
 - **来源:** spec-plan-2.md Task 5 检查步骤
 - **目的:** 确认核心 workaround 已消除
 - **操作步骤:**
   1. [A] `grep -n "std::mem::take.*command_registry" rust-agent-tui/src/event.rs` → 期望精确: ``（空输出）
 
-#### - [ ] 6.4 headless.rs 中 std::mem::take(command_registry) 已消除
+#### - [x] 6.4 headless.rs 中 std::mem::take(command_registry) 已消除
 - **来源:** spec-plan-2.md Task 5 检查步骤
 - **目的:** 确认测试镜像 workaround 同步消除
 - **操作步骤:**
   1. [A] `grep -n "std::mem::take.*command_registry" rust-agent-tui/src/ui/headless.rs` → 期望精确: ``（空输出）
 
-#### - [ ] 6.5 无残留 .core. 前缀的 CommandSystem 字段
+#### - [x] 6.5 无残留 .core. 前缀的 CommandSystem 字段
 - **来源:** spec-plan-2.md Task 5 检查步骤
 - **目的:** 确认命令字段已迁移到 .commands. 路径
 - **操作步骤:**
   1. [A] `grep -rn "core\.\(command_registry\|command_help_list\|skills\)" rust-agent-tui/src/ | grep -v "spec-plan"` → 期望精确: ``（空输出）
 
-#### - [ ] 6.6 无残留 .core. 前缀的 SessionMetadata 字段
+#### - [x] 6.6 无残留 .core. 前缀的 SessionMetadata 字段
 - **来源:** spec-plan-2.md Task 5 检查步骤
 - **目的:** 确认元数据字段已迁移到 .metadata. 路径
 - **操作步骤:**
   1. [A] `grep -rn "core\.\(pending_attachments\|last_human_message\|pre_submit_state_len\)" rust-agent-tui/src/ | grep -v "spec-plan"` → 期望精确: ``（空输出）
 
-#### - [ ] 6.7 CommandSystem + SessionMetadata 单元测试通过
+#### - [x] 6.7 CommandSystem + SessionMetadata 单元测试通过
 - **来源:** spec-plan-2.md Task 5 检查步骤
 - **目的:** 确认新结构体有基本测试覆盖
 - **操作步骤:**
   1. [A] `cargo test -p rust-agent-tui --lib -- "command_system\|session_metadata" 2>&1 | tail -10` → 期望包含: `test result: ok`
 
-#### - [ ] 6.8 Headless 测试通过
+#### - [x] 6.8 Headless 测试通过
 - **来源:** spec-plan-2.md Task 5 检查步骤
 - **目的:** 确认 Task 5 迁移无回归
 - **操作步骤:**
@@ -243,37 +243,37 @@
 
 ### 场景 7：AppCore 消除（Task 6）
 
-#### - [ ] 7.1 AppCore 结构体已删除
+#### - [x] 7.1 AppCore 结构体已删除
 - **来源:** spec-plan-2.md Task 6 检查步骤
 - **目的:** 确认 AppCore 不再存在
 - **操作步骤:**
   1. [A] `grep -rn "pub struct AppCore" rust-agent-tui/src/` → 期望精确: ``（空输出）
 
-#### - [ ] 7.2 core.rs 文件已删除
+#### - [x] 7.2 core.rs 文件已删除
 - **来源:** spec-plan-2.md Task 6 检查步骤
 - **目的:** 确认 AppCore 定义文件已移除
 - **操作步骤:**
   1. [A] `ls rust-agent-tui/src/app/core.rs 2>&1` → 期望包含: `No such file or directory`
 
-#### - [ ] 7.3 无残留 .core. 路径（不含注释和 spec-plan）
+#### - [x] 7.3 无残留 .core. 路径（不含注释和 spec-plan）
 - **来源:** spec-plan-2.md Task 6 检查步骤
 - **目的:** 确认所有 .core. 中间路径已消除
 - **操作步骤:**
   1. [A] `grep -rn '\.core\.' rust-agent-tui/src/ | grep -v 'spec-plan' | grep -v '//.*\.core\.' | grep -v 'AppCore' | wc -l` → 期望精确: `0`
 
-#### - [ ] 7.4 ChatSession 包含 session_panels 直接字段
+#### - [x] 7.4 ChatSession 包含 session_panels 直接字段
 - **来源:** spec-plan-2.md Task 6 检查步骤
 - **目的:** 确认 session_panels 已提升为 ChatSession 一级字段
 - **操作步骤:**
   1. [A] `grep "pub session_panels:" rust-agent-tui/src/app/chat_session.rs` → 期望包含: `pub session_panels:`
 
-#### - [ ] 7.5 Headless 测试通过
+#### - [x] 7.5 Headless 测试通过
 - **来源:** spec-plan-2.md Task 6 检查步骤
 - **目的:** 确认 AppCore 消除无回归
 - **操作步骤:**
   1. [A] `cargo test -p rust-agent-tui --lib -- ui::headless::tests 2>&1 | tail -20` → 期望包含: `test result: ok`
 
-#### - [ ] 7.6 Clippy 无新增警告
+#### - [x] 7.6 Clippy 无新增警告
 - **来源:** spec-plan-2.md Task 6 检查步骤
 - **目的:** 确认代码质量达标
 - **操作步骤:**
@@ -289,7 +289,7 @@
 - **操作步骤:**
   1. [A] `grep -A 10 "pub struct App" rust-agent-tui/src/app/mod.rs | grep "pub " | wc -l` → 期望精确: `3`
 
-#### - [ ] 8.2 event.rs 中无 std::mem::take workaround
+#### - [!] 8.2 event.rs 中无 std::mem::take workaround
 - **来源:** spec-plan-2.md Task 7 检查步骤 / spec-design.md §验收标准
 - **目的:** 确认所有 God Object workaround 已消除
 - **操作步骤:**
@@ -423,7 +423,7 @@
 | 场景 7 | 7.5 | Headless 测试通过 | 1 | 0 | ⬜ |
 | 场景 7 | 7.6 | Clippy 无新增警告 | 1 | 0 | ⬜ |
 | 场景 8 | 8.1 | App 结构体仅 3 字段 | 1 | 0 | ⬜ |
-| 场景 8 | 8.2 | event.rs 无 std::mem::take workaround | 1 | 0 | ⬜ |
+| 场景 8 | 8.2 | event.rs 无 std::mem::take workaround | 1 | 0 | ❌ |
 | 场景 8 | 8.3 | PanelContext 仅 2 字段 | 1 | 0 | ⬜ |
 | 场景 8 | 8.4 | 无残留 app.sessions/active 直接访问 | 1 | 0 | ⬜ |
 | 场景 8 | 8.5 | Headless 测试通过 | 1 | 0 | ⬜ |
