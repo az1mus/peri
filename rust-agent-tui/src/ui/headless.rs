@@ -1171,8 +1171,8 @@ mod tests {
 
     mod setup_wizard_e2e {
         use crate::app::setup_wizard::{
-            handle_setup_wizard_key, needs_setup, save_setup_to, ProviderType, SetupStep,
-            SetupWizardAction, SetupWizardPanel, Step1Field,
+            handle_setup_wizard_key, needs_setup, save_setup_to, FormField, FormMode,
+            MigratedProvider, ProviderType, SetupStep, SetupWizardAction, SetupWizardPanel,
         };
         use crate::app::App;
         use tui_textarea::{Input, Key};
@@ -1199,341 +1199,197 @@ mod tests {
             }
         }
 
+        fn advance_to_form(wizard: &mut SetupWizardPanel) {
+            let _ = handle_setup_wizard_key(wizard, make_key(Key::Enter));
+            assert_eq!(wizard.step, SetupStep::Form);
+            assert_eq!(wizard.form_mode, FormMode::Browse);
+        }
+
+        /// 进入 Edit 模式，填写 API Key，Confirm 回到 Browse，然后 Submit
+        fn fill_and_submit(wizard: &mut SetupWizardPanel, api_key: &str) {
+            // 确保在第一个 provider 位置
+            wizard.browse_cursor = 0;
+            // Browse → Edit（Enter on first provider）
+            let _ = handle_setup_wizard_key(wizard, make_key(Key::Enter));
+            assert_eq!(wizard.form_mode, FormMode::Edit);
+
+            // 填写 API Key
+            wizard.form_focus = FormField::ApiKey;
+            type_text(wizard, api_key);
+
+            // Confirm 回到 Browse
+            wizard.form_focus = FormField::Confirm;
+            let _ = handle_setup_wizard_key(wizard, make_key(Key::Enter));
+            assert_eq!(wizard.form_mode, FormMode::Browse);
+
+            // 移到 Submit 并提交
+            wizard.browse_cursor = wizard.providers.len();
+            let _ = handle_setup_wizard_key(wizard, make_key(Key::Enter));
+        }
+
         #[tokio::test]
         async fn test_needs_setup_triggers_for_empty_config() {
             let (app, _handle) = App::new_headless(120, 30).await;
-            assert!(
-                app.zen_config.is_none(),
-                "headless App default has no config"
-            );
+            assert!(app.zen_config.is_none());
             let empty_cfg = crate::config::types::ZenConfig::default();
-            assert!(
-                needs_setup(&empty_cfg.config),
-                "empty providers should need setup"
-            );
+            assert!(needs_setup(&empty_cfg.config));
         }
 
         #[tokio::test]
         async fn test_setup_wizard_full_flow_anthropic() {
-            let (mut app, mut handle) = App::new_headless(120, 30).await;
-            app.setup_wizard = Some(SetupWizardPanel::new());
+            let mut wizard = SetupWizardPanel::new();
+            advance_to_form(&mut wizard);
+            assert_eq!(wizard.providers.len(), 1);
+            assert_eq!(wizard.providers[0].provider_type, ProviderType::Anthropic);
 
-            // Render Step 1
-            {
-                let wizard = app.setup_wizard.as_ref().unwrap();
-                assert_eq!(wizard.step, SetupStep::Provider);
-                assert_eq!(wizard.provider_type, ProviderType::Anthropic);
-            }
-            handle
-                .terminal
-                .draw(|f| crate::ui::main_ui::render(f, &mut app))
-                .unwrap();
-            assert!(handle.contains("Step 1/2"));
-
-            // Step 1: type API key then Enter → ModelAlias
-            let wizard = app.setup_wizard.as_mut().unwrap();
-            wizard.step1_focus = Step1Field::ApiKey;
-            type_text(wizard, "sk-ant-test-key-12345");
-            let action = handle_setup_wizard_key(wizard, make_key(Key::Enter));
-            assert!(matches!(action, Some(SetupWizardAction::Redraw)));
-            assert_eq!(wizard.step, SetupStep::ModelAlias);
-
-            // Step 2: Enter → Done
-            handle
-                .terminal
-                .draw(|f| crate::ui::main_ui::render(f, &mut app))
-                .unwrap();
-            assert!(handle.contains("Step 2/2"));
-            let wizard = app.setup_wizard.as_ref().unwrap();
-            assert!(wizard.aliases[0].model_id.contains("claude-opus"));
-            let wizard = app.setup_wizard.as_mut().unwrap();
-            let _action = handle_setup_wizard_key(wizard, make_key(Key::Enter));
+            fill_and_submit(&mut wizard, "sk-ant-test-key-12345");
             assert_eq!(wizard.step, SetupStep::Done);
 
-            // Done → Enter → SaveAndClose
-            handle
-                .terminal
-                .draw(|f| crate::ui::main_ui::render(f, &mut app))
-                .unwrap();
-            assert!(handle.contains("Complete"));
-            let wizard = app.setup_wizard.as_mut().unwrap();
-            let action = handle_setup_wizard_key(wizard, make_key(Key::Enter));
+            let action = handle_setup_wizard_key(&mut wizard, make_key(Key::Enter));
             assert!(matches!(action, Some(SetupWizardAction::SaveAndClose)));
 
-            // Verify save_setup_to
-            let wizard = app.setup_wizard.as_ref().unwrap();
             let temp_dir =
                 std::env::temp_dir().join(format!("zen-setup-test-{}", uuid::Uuid::now_v7()));
             let config_path = temp_dir.join("settings.json");
-            let cfg = save_setup_to(wizard, &config_path).expect("save_setup_to should succeed");
-
+            let cfg = save_setup_to(&wizard, &config_path).expect("save should succeed");
             assert_eq!(cfg.config.providers.len(), 1);
             assert_eq!(cfg.config.providers[0].provider_type, "anthropic");
             assert_eq!(cfg.config.providers[0].api_key, "sk-ant-test-key-12345");
-            assert_eq!(cfg.config.active_alias, "opus");
-            assert_eq!(cfg.config.active_provider_id, "anthropic");
-            assert!(cfg.config.providers[0].models.opus.contains("claude-opus"));
-
-            let content = std::fs::read_to_string(&config_path).expect("config file should exist");
-            assert!(content.contains("anthropic"));
-
-            assert!(
-                !needs_setup(&cfg.config),
-                "after setup, should not need setup"
-            );
-
+            assert!(!needs_setup(&cfg.config));
             let _ = std::fs::remove_dir_all(&temp_dir);
         }
 
         #[tokio::test]
         async fn test_setup_wizard_full_flow_openai() {
-            let (mut app, mut handle) = App::new_headless(120, 30).await;
             let mut wizard = SetupWizardPanel::new();
+            advance_to_form(&mut wizard);
 
-            // Switch to OpenAI Compatible
-            assert_eq!(wizard.step1_focus, Step1Field::ProviderType);
-            let _ = handle_setup_wizard_key(&mut wizard, make_key(Key::Down));
-            assert_eq!(wizard.provider_type, ProviderType::OpenAiCompatible);
-            assert_eq!(wizard.provider_id, "openai");
+            // Enter Edit mode, change type to OpenAI
+            let _ = handle_setup_wizard_key(&mut wizard, make_key(Key::Enter));
+            assert_eq!(wizard.form_mode, FormMode::Edit);
+            wizard.form_focus = FormField::ProviderType;
+            let _ = handle_setup_wizard_key(&mut wizard, make_key(Key::Right));
+            assert_eq!(
+                wizard.providers[0].provider_type,
+                ProviderType::OpenAiCompatible
+            );
 
-            // Render and verify
-            app.setup_wizard = Some(wizard);
-            handle
-                .terminal
-                .draw(|f| crate::ui::main_ui::render(f, &mut app))
-                .unwrap();
-            assert!(handle.contains("OpenAI Compatible"));
+            // Fill key
+            wizard.form_focus = FormField::ApiKey;
+            type_text(&mut wizard, "sk-openai-test-key");
 
-            // Step 1: set api_key, Enter → ModelAlias
-            let wizard = app.setup_wizard.as_mut().unwrap();
-            wizard.step1_focus = Step1Field::ApiKey;
-            type_text(wizard, "sk-openai-test-key");
-            let _ = handle_setup_wizard_key(wizard, make_key(Key::Enter));
-            assert_eq!(wizard.step, SetupStep::ModelAlias);
+            // Confirm back to Browse
+            wizard.form_focus = FormField::Confirm;
+            let _ = handle_setup_wizard_key(&mut wizard, make_key(Key::Enter));
+            assert_eq!(wizard.form_mode, FormMode::Browse);
 
-            // Verify OpenAI defaults
-            assert_eq!(wizard.aliases[0].model_id, "o3");
-            assert_eq!(wizard.aliases[1].model_id, "gpt-4o");
-            assert_eq!(wizard.aliases[2].model_id, "gpt-4o-mini");
-
-            // Step 3 → Done → SaveAndClose
-            let _ = handle_setup_wizard_key(wizard, make_key(Key::Enter));
+            // Submit
+            wizard.browse_cursor = wizard.providers.len();
+            let _ = handle_setup_wizard_key(&mut wizard, make_key(Key::Enter));
             assert_eq!(wizard.step, SetupStep::Done);
-            let action = handle_setup_wizard_key(wizard, make_key(Key::Enter));
+
+            let action = handle_setup_wizard_key(&mut wizard, make_key(Key::Enter));
             assert!(matches!(action, Some(SetupWizardAction::SaveAndClose)));
 
-            // Verify config
             let temp_dir = std::env::temp_dir()
                 .join(format!("zen-setup-test-openai-{}", uuid::Uuid::now_v7()));
             let config_path = temp_dir.join("settings.json");
-            let cfg = save_setup_to(wizard, &config_path).expect("save_setup_to should succeed");
+            let cfg = save_setup_to(&wizard, &config_path).expect("save should succeed");
             assert_eq!(cfg.config.providers[0].provider_type, "openai");
             assert_eq!(cfg.config.providers[0].api_key, "sk-openai-test-key");
-            assert_eq!(cfg.config.providers[0].models.opus, "o3");
-
             let _ = std::fs::remove_dir_all(&temp_dir);
         }
 
         #[tokio::test]
-        async fn test_setup_wizard_skip_with_confirm() {
+        async fn test_setup_wizard_skip_on_choose() {
             let (mut app, _handle) = App::new_headless(120, 30).await;
             app.setup_wizard = Some(SetupWizardPanel::new());
-
-            // Esc → confirm skip
             let wizard = app.setup_wizard.as_mut().unwrap();
             let action = handle_setup_wizard_key(wizard, make_key(Key::Esc));
-            assert!(matches!(action, Some(SetupWizardAction::Redraw)));
-            assert!(wizard.confirm_skip);
-
-            // Esc cancel
-            let action = handle_setup_wizard_key(wizard, make_key(Key::Esc));
-            assert!(matches!(action, Some(SetupWizardAction::Redraw)));
-            assert!(!wizard.confirm_skip);
-
-            // Esc again → confirm
-            let _action = handle_setup_wizard_key(wizard, make_key(Key::Esc));
-            assert!(wizard.confirm_skip);
-
-            // Enter → Skip
-            let action = handle_setup_wizard_key(wizard, make_key(Key::Enter));
             assert!(matches!(action, Some(SetupWizardAction::Skip)));
         }
 
         #[tokio::test]
         async fn test_setup_wizard_esc_navigation() {
             let mut wizard = SetupWizardPanel::new();
+            advance_to_form(&mut wizard);
 
-            // Step 1: empty api_key → Enter blocked (stays on Provider)
-            assert_eq!(wizard.step, SetupStep::Provider);
+            // Browse → Submit → Enter (empty key, should stay)
+            wizard.browse_cursor = wizard.providers.len();
             let _ = handle_setup_wizard_key(&mut wizard, make_key(Key::Enter));
-            assert_eq!(wizard.step, SetupStep::Provider);
+            assert_eq!(wizard.step, SetupStep::Form);
 
-            // Step 1: fill api_key → Enter → ModelAlias
-            wizard.step1_focus = Step1Field::ApiKey;
-            type_text(&mut wizard, "test-key");
-            let _ = handle_setup_wizard_key(&mut wizard, make_key(Key::Enter));
-            assert_eq!(wizard.step, SetupStep::ModelAlias);
+            fill_and_submit(&mut wizard, "test-key");
+            assert_eq!(wizard.step, SetupStep::Done);
 
-            // ModelAlias → Esc → Provider (api_key preserved)
+            // Done → Esc → Form
             let _ = handle_setup_wizard_key(&mut wizard, make_key(Key::Esc));
-            assert_eq!(wizard.step, SetupStep::Provider);
-            assert_eq!(wizard.api_key, "test-key");
+            assert_eq!(wizard.step, SetupStep::Form);
 
-            // Provider → ModelAlias → Done → Esc → ModelAlias
-            let _ = handle_setup_wizard_key(&mut wizard, make_key(Key::Enter));
-            assert_eq!(wizard.step, SetupStep::ModelAlias);
+            // Form → Esc → Choose
+            let _ = handle_setup_wizard_key(&mut wizard, make_key(Key::Esc));
+            assert_eq!(wizard.step, SetupStep::Choose);
+        }
+
+        #[tokio::test]
+        async fn test_setup_wizard_toggle_select() {
+            let mut wizard = SetupWizardPanel::new();
+            advance_to_form(&mut wizard);
+            // Browse mode: Space toggles
+            assert!(wizard.providers[0].selected);
+            let _ = handle_setup_wizard_key(&mut wizard, make_char(' '));
+            assert!(!wizard.providers[0].selected);
+            let _ = handle_setup_wizard_key(&mut wizard, make_char(' '));
+            assert!(wizard.providers[0].selected);
+        }
+
+        #[tokio::test]
+        async fn test_setup_wizard_multi_provider() {
+            let mut wizard = SetupWizardPanel::new();
+            advance_to_form(&mut wizard);
+            wizard
+                .providers
+                .push(MigratedProvider::new(ProviderType::OpenAiCompatible));
+            wizard.providers[1].api_key = "sk-openai".to_string();
+            wizard.providers[0].api_key = "sk-ant".to_string();
+
+            // Browse: Submit
+            wizard.browse_cursor = wizard.providers.len();
             let _ = handle_setup_wizard_key(&mut wizard, make_key(Key::Enter));
             assert_eq!(wizard.step, SetupStep::Done);
-            let _ = handle_setup_wizard_key(&mut wizard, make_key(Key::Esc));
-            assert_eq!(wizard.step, SetupStep::ModelAlias);
-        }
 
-        #[tokio::test]
-        async fn test_setup_wizard_validation_blocks_empty_fields() {
-            let mut wizard = SetupWizardPanel::new();
-
-            // Empty provider_id → Enter blocked
-            wizard.provider_id.clear();
-            let action = handle_setup_wizard_key(&mut wizard, make_key(Key::Enter));
-            assert!(matches!(action, Some(SetupWizardAction::Redraw)));
-            assert_eq!(wizard.step, SetupStep::Provider);
-
-            // Empty api_key → Enter still blocked (both must be non-empty)
-            wizard.provider_id = "anthropic".to_string();
-            let action = handle_setup_wizard_key(&mut wizard, make_key(Key::Enter));
-            assert!(matches!(action, Some(SetupWizardAction::Redraw)));
-            assert_eq!(wizard.step, SetupStep::Provider);
-
-            // Type key → Enter → ModelAlias
-            wizard.step1_focus = Step1Field::ApiKey;
-            type_text(&mut wizard, "test-key");
-            let _ = handle_setup_wizard_key(&mut wizard, make_key(Key::Enter));
-            assert_eq!(wizard.step, SetupStep::ModelAlias);
-
-            // Empty model_id → Enter blocked
-            wizard.aliases[0].model_id.clear();
-            let _action = handle_setup_wizard_key(&mut wizard, make_key(Key::Enter));
-            assert_eq!(wizard.step, SetupStep::ModelAlias);
-        }
-
-        #[tokio::test]
-        async fn test_setup_wizard_step1_tab_navigation() {
-            let mut wizard = SetupWizardPanel::new();
-            assert_eq!(wizard.step1_focus, Step1Field::ProviderType);
-
-            let _ = handle_setup_wizard_key(&mut wizard, make_key(Key::Tab));
-            assert_eq!(wizard.step1_focus, Step1Field::ProviderId);
-
-            let _ = handle_setup_wizard_key(&mut wizard, make_key(Key::Tab));
-            assert_eq!(wizard.step1_focus, Step1Field::BaseUrl);
-
-            let _ = handle_setup_wizard_key(&mut wizard, make_key(Key::Tab));
-            assert_eq!(wizard.step1_focus, Step1Field::ApiKey);
-
-            let _ = handle_setup_wizard_key(&mut wizard, make_key(Key::Tab));
-            assert_eq!(wizard.step1_focus, Step1Field::ProviderType);
-
-            // Shift+Tab reverse
-            let _ = handle_setup_wizard_key(
-                &mut wizard,
-                Input {
-                    key: Key::Tab,
-                    ctrl: false,
-                    alt: false,
-                    shift: true,
-                },
-            );
-            assert_eq!(wizard.step1_focus, Step1Field::ApiKey);
-        }
-
-        #[tokio::test]
-        async fn test_setup_wizard_step3_tab_navigation() {
-            let mut wizard = SetupWizardPanel::new();
-            wizard.step = SetupStep::ModelAlias;
-            assert_eq!(wizard.step3_focus, 0);
-
-            let _ = handle_setup_wizard_key(&mut wizard, make_key(Key::Tab));
-            assert_eq!(wizard.step3_focus, 1);
-
-            let _ = handle_setup_wizard_key(&mut wizard, make_key(Key::Tab));
-            assert_eq!(wizard.step3_focus, 2);
-
-            let _ = handle_setup_wizard_key(&mut wizard, make_key(Key::Tab));
-            assert_eq!(wizard.step3_focus, 0);
-        }
-
-        #[tokio::test]
-        async fn test_setup_wizard_backspace_editing() {
-            let mut wizard = SetupWizardPanel::new();
-
-            // Step 1 ApiKey field: type + backspace
-            wizard.step1_focus = Step1Field::ApiKey;
-            type_text(&mut wizard, "abc");
-            assert_eq!(wizard.api_key, "abc");
-            let _ = handle_setup_wizard_key(&mut wizard, make_key(Key::Backspace));
-            assert_eq!(wizard.api_key, "ab");
-
-            // Step 1 ProviderId: backspace
-            wizard.step1_focus = Step1Field::ProviderId;
-            wizard.provider_id = "myprovider".to_string();
-            wizard.cur_provider_id = wizard.provider_id.chars().count();
-            let _ = handle_setup_wizard_key(&mut wizard, make_key(Key::Backspace));
-            assert_eq!(wizard.provider_id, "myprovide");
-
-            // Step 1 BaseUrl (Anthropic): editable
-            wizard.step1_focus = Step1Field::BaseUrl;
-            wizard.base_url = "https://api.anthropic.com".to_string();
-            wizard.cur_base_url = wizard.base_url.chars().count();
-            let _ = handle_setup_wizard_key(&mut wizard, make_key(Key::Backspace));
-            assert_eq!(wizard.base_url, "https://api.anthropic.co");
-
-            // Step 1 BaseUrl (OpenAI): editable
-            wizard.provider_type = ProviderType::OpenAiCompatible;
-            wizard.base_url = "https://api.openai.com/v1".to_string();
-            wizard.cur_base_url = wizard.base_url.chars().count();
-            let _ = handle_setup_wizard_key(&mut wizard, make_key(Key::Backspace));
-            assert_eq!(wizard.base_url, "https://api.openai.com/v");
+            let temp_dir =
+                std::env::temp_dir().join(format!("zen-setup-multi-{}", uuid::Uuid::now_v7()));
+            let config_path = temp_dir.join("settings.json");
+            let cfg = save_setup_to(&wizard, &config_path).expect("save should succeed");
+            assert_eq!(cfg.config.providers.len(), 2);
+            let _ = std::fs::remove_dir_all(&temp_dir);
         }
 
         #[tokio::test]
         async fn test_setup_wizard_saves_and_clears() {
-            let (mut app, mut handle) = App::new_headless(120, 30).await;
-            app.setup_wizard = Some(SetupWizardPanel::new());
-            assert!(app.setup_wizard.is_some());
+            let (mut app, _handle) = App::new_headless(120, 30).await;
+            let mut wizard = SetupWizardPanel::new();
+            advance_to_form(&mut wizard);
+            fill_and_submit(&mut wizard, "sk-final-test");
+            assert_eq!(wizard.step, SetupStep::Done);
 
-            // Render
-            handle
-                .terminal
-                .draw(|f| crate::ui::main_ui::render(f, &mut app))
-                .unwrap();
-            assert!(handle.contains("Step 1/2"));
-
-            // Quick complete: set api_key, then Enter through all steps
+            app.setup_wizard = Some(wizard);
             let wizard = app.setup_wizard.as_mut().unwrap();
-            wizard.step1_focus = Step1Field::ApiKey;
-            type_text(wizard, "sk-final-test");
-            let _ = handle_setup_wizard_key(wizard, make_key(Key::Enter)); // Step 1 → ModelAlias
-            let _ = handle_setup_wizard_key(wizard, make_key(Key::Enter)); // ModelAlias → Done
-
-            // Done → SaveAndClose
             let action = handle_setup_wizard_key(wizard, make_key(Key::Enter));
             assert!(matches!(action, Some(SetupWizardAction::SaveAndClose)));
 
-            // Simulate SaveAndClose
             let wizard = app.setup_wizard.take().unwrap();
             let temp_dir =
                 std::env::temp_dir().join(format!("zen-setup-final-{}", uuid::Uuid::now_v7()));
             let config_path = temp_dir.join("settings.json");
             let cfg = save_setup_to(&wizard, &config_path).expect("save should succeed");
             assert!(!needs_setup(&cfg.config));
-
             app.zen_config = Some(cfg);
             assert!(app.setup_wizard.is_none());
-
             let _ = std::fs::remove_dir_all(&temp_dir);
         }
     }
-
     // ─── Permission Mode Tests ──────────────────────────────────────────────
 
     #[tokio::test]

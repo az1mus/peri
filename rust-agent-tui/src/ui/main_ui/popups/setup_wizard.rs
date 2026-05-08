@@ -8,42 +8,24 @@ use ratatui::{
 
 use perihelion_widgets::BorderedPanel;
 
-use crate::app::setup_wizard::{ProviderType, SetupStep, SetupWizardPanel, Step1Field};
+use crate::app::setup_wizard::{FormField, FormMode, SetupSource, SetupStep, SetupWizardPanel};
 use crate::ui::theme;
 
 /// Setup 向导全屏渲染入口
 pub(crate) fn render_setup_wizard(f: &mut Frame, app: &crate::app::App) {
     let area = f.area();
-
     let wizard = app.setup_wizard.as_ref().unwrap();
 
-    // 居中内容区：宽度 60%，高度按内容自适应（最少 16 行）
-    let content_width = (area.width * 3 / 5).max(50);
-    let content_height = match wizard.step {
-        SetupStep::Provider => 20,
-        SetupStep::ModelAlias => 16,
-        SetupStep::Done => 14,
-    }
-    .min(area.height.saturating_sub(2));
-    let centered = centered_rect(area, content_width, content_height);
-
     match wizard.step {
-        SetupStep::Provider => render_step_provider(f, wizard, centered),
-        SetupStep::ModelAlias => render_step_model_alias(f, wizard, centered),
-        SetupStep::Done => render_step_done(f, wizard, centered),
+        SetupStep::Choose => render_step_choose(f, wizard, area),
+        SetupStep::Form => render_step_form(f, wizard, area),
+        SetupStep::Done => render_step_done(f, wizard, area),
     }
 }
 
-/// 计算居中矩形区域
-fn centered_rect(area: Rect, width: u16, height: u16) -> Rect {
-    let x = area.x + (area.width.saturating_sub(width)) / 2;
-    let y = area.y + (area.height.saturating_sub(height)) / 2;
-    Rect::new(x, y, width.min(area.width), height.min(area.height))
-}
-
-fn render_step_provider(f: &mut Frame, wizard: &SetupWizardPanel, area: Rect) {
+fn render_step_choose(f: &mut Frame, wizard: &SetupWizardPanel, area: Rect) {
     let inner = BorderedPanel::new(Span::styled(
-        " ── Perihelion Setup ── Step 1/2: Provider & API Key ",
+        " ── Perihelion Setup ── Welcome ",
         Style::default()
             .fg(theme::ACCENT)
             .add_modifier(Modifier::BOLD),
@@ -51,154 +33,63 @@ fn render_step_provider(f: &mut Frame, wizard: &SetupWizardPanel, area: Rect) {
     .border_style(Style::default().fg(theme::ACCENT))
     .render(f, area);
 
-    // 焦点样式辅助
-    let focused = |is_active: bool| -> (Style, Style) {
-        if is_active {
-            (
-                Style::default()
-                    .fg(theme::THINKING)
-                    .add_modifier(Modifier::BOLD),
-                Style::default().fg(theme::THINKING),
-            )
-        } else {
-            (
-                Style::default().fg(theme::MUTED),
-                Style::default().fg(theme::TEXT),
-            )
-        }
-    };
-
-    // 行 0: Provider Type 选择器
-    let pt_active = wizard.step1_focus == Step1Field::ProviderType;
-    let (pt_label, pt_val) = focused(pt_active);
-    let provider_types = [ProviderType::Anthropic, ProviderType::OpenAiCompatible];
-    let pt_display: String = provider_types
-        .iter()
-        .map(|pt| {
-            if *pt == wizard.provider_type {
-                format!("[{}]", pt.label())
-            } else {
-                pt.label().to_string()
-            }
-        })
-        .collect::<Vec<_>>()
-        .join("  ");
-    let line_pt = Line::from(vec![
-        Span::styled(" Type     ", pt_label),
-        Span::styled(format!(" {}", pt_display), pt_val),
-    ]);
-
-    // 行 1: Provider ID 输入
-    let pid_active = wizard.step1_focus == Step1Field::ProviderId;
-    let (pid_label, pid_val) = focused(pid_active);
-    let pid_display = if pid_active {
-        let (before, after) =
-            crate::app::edit_display_parts(&wizard.provider_id, wizard.cur_provider_id);
-        format!("{}▏{}", before, after)
-    } else {
-        wizard.provider_id.clone()
-    };
-    let line_pid = Line::from(vec![
-        Span::styled(" ID       ", pid_label),
-        Span::styled(format!(" {}", pid_display), pid_val),
-    ]);
-
-    // 行 2: Base URL 输入
-    let url_active = wizard.step1_focus == Step1Field::BaseUrl;
-    let (url_label, url_val) = focused(url_active);
-    let url_display = if url_active {
-        let (before, after) = crate::app::edit_display_parts(&wizard.base_url, wizard.cur_base_url);
-        format!("{}▏{}", before, after)
-    } else {
-        wizard.base_url.clone()
-    };
-    let line_url = Line::from(vec![
-        Span::styled(" Base URL ", url_label),
-        Span::styled(format!(" {}", url_display), url_val),
-    ]);
-
-    // 行 3: API Key 输入（掩码）
-    let key_active = wizard.step1_focus == Step1Field::ApiKey;
-    let (key_label, key_val) = focused(key_active);
-    let masked: String = if wizard.api_key.is_empty() {
-        String::new()
-    } else {
-        "•".repeat(wizard.api_key.len())
-    };
-    let key_display = masked;
-    let line_key = Line::from(vec![
-        Span::styled(" API Key  ", key_label),
-        Span::styled(format!(" {}", key_display), key_val),
-    ]);
-
-    // 底部提示
-    let hint = Line::from(vec![
-        Span::styled(
-            " Enter",
-            Style::default()
-                .fg(theme::WARNING)
-                .add_modifier(Modifier::BOLD),
-        ),
-        Span::styled(":下一步  ", Style::default().fg(theme::MUTED)),
-        Span::styled(
-            "Esc",
-            Style::default()
-                .fg(theme::ERROR)
-                .add_modifier(Modifier::BOLD),
-        ),
-        Span::styled(":跳过setup  ", Style::default().fg(theme::MUTED)),
-        Span::styled(
-            "Tab",
-            Style::default()
-                .fg(theme::WARNING)
-                .add_modifier(Modifier::BOLD),
-        ),
-        Span::styled(":切换字段", Style::default().fg(theme::MUTED)),
-    ]);
-
-    let mut lines = vec![
+    let mut lines: Vec<Line> = vec![
         Line::from(""),
-        line_pt,
-        line_pid,
-        line_url,
-        line_key,
+        Line::from(Span::styled(
+            " Choose how to configure your provider:",
+            Style::default().fg(theme::MUTED),
+        )),
         Line::from(""),
-        hint,
     ];
 
-    // 跳过确认覆盖层
-    if wizard.confirm_skip {
-        lines.push(Line::from(""));
-        lines.push(Line::from(vec![Span::styled(
-            " ⚠ 跳过 setup 将无法使用 AI 功能，",
-            Style::default().fg(theme::ERROR),
-        )]));
+    for (i, src) in SetupSource::ALL.iter().enumerate() {
+        let is_cursor = i == wizard.choose_cursor;
+        let cursor_char = if is_cursor { "❯" } else { " " };
+        let cursor_style = Style::default().fg(theme::THINKING);
+        let label_style = if is_cursor {
+            Style::default()
+                .fg(theme::THINKING)
+                .add_modifier(Modifier::BOLD)
+        } else {
+            Style::default()
+                .fg(theme::TEXT)
+                .add_modifier(Modifier::BOLD)
+        };
+        let desc_style = if is_cursor {
+            Style::default().fg(theme::THINKING)
+        } else {
+            Style::default().fg(theme::MUTED)
+        };
         lines.push(Line::from(vec![
-            Span::styled("   按 ", Style::default().fg(theme::TEXT)),
-            Span::styled(
-                "Enter",
-                Style::default()
-                    .fg(theme::ERROR)
-                    .add_modifier(Modifier::BOLD),
-            ),
-            Span::styled(" 确认跳过，", Style::default().fg(theme::TEXT)),
-            Span::styled(
-                "Esc",
-                Style::default()
-                    .fg(theme::SAGE)
-                    .add_modifier(Modifier::BOLD),
-            ),
-            Span::styled(" 取消", Style::default().fg(theme::TEXT)),
+            Span::styled(format!("{} ", cursor_char), cursor_style),
+            Span::styled(format!("{} ", src.label()), label_style),
         ]));
+        lines.push(Line::from(vec![
+            Span::styled("  ", Style::default()),
+            Span::styled(src.description(), desc_style),
+        ]));
+        lines.push(Line::from(""));
     }
 
-    lines.truncate(inner.height as usize);
+    lines.push(make_hint_line(&[
+        ("Enter", "确认"),
+        ("↑/↓", "选择"),
+        ("Esc", "退出"),
+    ]));
     f.render_widget(Paragraph::new(Text::from(lines)), inner);
 }
 
-fn render_step_model_alias(f: &mut Frame, wizard: &SetupWizardPanel, area: Rect) {
+fn render_step_form(f: &mut Frame, wizard: &SetupWizardPanel, area: Rect) {
+    match wizard.form_mode {
+        FormMode::Browse => render_form_browse(f, wizard, area),
+        FormMode::Edit => render_form_edit(f, wizard, area),
+    }
+}
+
+/// Browse 模式：只读列表 + Submit
+fn render_form_browse(f: &mut Frame, wizard: &SetupWizardPanel, area: Rect) {
     let inner = BorderedPanel::new(Span::styled(
-        " ── Step 2/2: Model Aliases ",
+        " ── Perihelion Setup ── Configure Providers ",
         Style::default()
             .fg(theme::ACCENT)
             .add_modifier(Modifier::BOLD),
@@ -206,67 +97,243 @@ fn render_step_model_alias(f: &mut Frame, wizard: &SetupWizardPanel, area: Rect)
     .border_style(Style::default().fg(theme::ACCENT))
     .render(f, area);
 
-    let alias_labels = ["Opus ", "Sonnet", "Haiku "];
     let mut lines: Vec<Line> = vec![Line::from("")];
 
-    for (i, label) in alias_labels.iter().enumerate() {
-        let is_active = wizard.step3_focus == i;
-        let (lbl_style, val_style) = if is_active {
-            (
-                Style::default()
-                    .fg(theme::THINKING)
-                    .add_modifier(Modifier::BOLD),
-                Style::default().fg(theme::THINKING),
-            )
+    let submit_pos = wizard.providers.len();
+
+    for (idx, mp) in wizard.providers.iter().enumerate() {
+        let is_cursor = idx == wizard.browse_cursor;
+        let cursor = if is_cursor { "❯" } else { " " };
+        let check_char = if mp.selected { "✓" } else { " " };
+        let check_color = if mp.selected { theme::SAGE } else { theme::DIM };
+        let name_style = if is_cursor {
+            Style::default()
+                .fg(theme::THINKING)
+                .add_modifier(Modifier::BOLD)
         } else {
-            (
-                Style::default().fg(theme::MUTED),
-                Style::default().fg(theme::TEXT),
-            )
+            Style::default().fg(theme::TEXT)
         };
-        let model_display = if is_active {
-            let (before, after) = crate::app::edit_display_parts(
-                &wizard.aliases[i].model_id,
-                wizard.aliases[i].cursor,
-            );
-            format!("{}▏{}", before, after)
+        let detail_style = if is_cursor {
+            Style::default().fg(theme::THINKING)
         } else {
-            wizard.aliases[i].model_id.clone()
+            Style::default().fg(theme::MUTED)
         };
+
+        let key_summary = if mp.api_key.is_empty() {
+            "(no key)".to_string()
+        } else {
+            mask_api_key(&mp.api_key)
+        };
+
         lines.push(Line::from(vec![
-            Span::styled(format!(" {}  Model: ", label), lbl_style),
-            Span::styled(model_display.to_string(), val_style),
+            Span::styled(format!("{} ", cursor), Style::default().fg(theme::THINKING)),
+            Span::styled(
+                format!("[{}] ", check_char),
+                Style::default().fg(check_color),
+            ),
+            Span::styled(format!("{} ", mp.provider_type.label()), name_style),
+            Span::styled(
+                format!("({}) ", mp.provider_id),
+                Style::default().fg(theme::MUTED),
+            ),
+            Span::styled(key_summary, detail_style),
         ]));
+
+        // 第二行：base_url 摘要
+        if !mp.base_url.is_empty() {
+            let url_style = if is_cursor {
+                Style::default().fg(theme::DIM)
+            } else {
+                Style::default().fg(theme::DIM)
+            };
+            lines.push(Line::from(vec![
+                Span::styled("     ", Style::default()),
+                Span::styled(&mp.base_url, url_style),
+            ]));
+        }
+
+        lines.push(Line::from(""));
     }
 
-    // 底部提示
-    lines.push(Line::from(""));
+    // Submit 按钮
+    let submit_active = wizard.browse_cursor == submit_pos;
+    let submit_style = if submit_active {
+        Style::default()
+            .fg(theme::ACCENT)
+            .add_modifier(Modifier::BOLD)
+    } else {
+        Style::default().fg(theme::MUTED)
+    };
+    let submit_cursor = if submit_active { "❯ " } else { "  " };
     lines.push(Line::from(vec![
-        Span::styled(
-            " Enter",
-            Style::default()
-                .fg(theme::WARNING)
-                .add_modifier(Modifier::BOLD),
-        ),
-        Span::styled(":完成配置  ", Style::default().fg(theme::MUTED)),
-        Span::styled(
-            "Esc",
-            Style::default()
-                .fg(theme::WARNING)
-                .add_modifier(Modifier::BOLD),
-        ),
-        Span::styled(":返回上一步  ", Style::default().fg(theme::MUTED)),
-        Span::styled(
-            "Tab",
-            Style::default()
-                .fg(theme::WARNING)
-                .add_modifier(Modifier::BOLD),
-        ),
-        Span::styled(":切换字段", Style::default().fg(theme::MUTED)),
+        Span::styled(submit_cursor, Style::default().fg(theme::THINKING)),
+        Span::styled(" Submit", submit_style),
     ]));
 
-    lines.truncate(inner.height as usize);
+    lines.push(Line::from(""));
+    lines.push(make_hint_line(&[
+        ("Enter", "编辑/提交"),
+        ("Space", "勾选"),
+        ("↑/↓", "选择"),
+        ("Esc", "返回"),
+    ]));
+
     f.render_widget(Paragraph::new(Text::from(lines)), inner);
+}
+
+/// Edit 模式：编辑单个 provider 的所有字段
+fn render_form_edit(f: &mut Frame, wizard: &SetupWizardPanel, area: Rect) {
+    let mp = &wizard.providers[wizard.active_provider];
+    let header = format!(
+        " ── Setup ── Edit: {} ({}) ",
+        mp.provider_type.label(),
+        mp.provider_id
+    );
+
+    let inner = BorderedPanel::new(Span::styled(
+        header,
+        Style::default()
+            .fg(theme::ACCENT)
+            .add_modifier(Modifier::BOLD),
+    ))
+    .border_style(Style::default().fg(theme::ACCENT))
+    .render(f, area);
+
+    let mut lines: Vec<Line> = vec![Line::from("")];
+
+    lines.push(render_field_line(
+        "Type     ",
+        FormField::ProviderType,
+        format!("[{}]", mp.provider_type.label()),
+        wizard.form_focus,
+    ));
+
+    let pid_display = edit_display(
+        &mp.provider_id,
+        mp.cur_provider_id,
+        wizard.form_focus == FormField::ProviderId,
+    );
+    lines.push(render_field_line(
+        "ID       ",
+        FormField::ProviderId,
+        pid_display,
+        wizard.form_focus,
+    ));
+
+    let url_display = edit_display(
+        &mp.base_url,
+        mp.cur_base_url,
+        wizard.form_focus == FormField::BaseUrl,
+    );
+    lines.push(render_field_line(
+        "Base URL ",
+        FormField::BaseUrl,
+        url_display,
+        wizard.form_focus,
+    ));
+
+    let key_display = if wizard.form_focus == FormField::ApiKey {
+        let (before, after) = crate::app::edit_display_parts(&mp.api_key, mp.cur_api_key);
+        format!("{}▏{}", before, after)
+    } else if mp.api_key.is_empty() {
+        String::new()
+    } else {
+        "•".repeat(mp.api_key.len())
+    };
+    lines.push(render_field_line(
+        "API Key  ",
+        FormField::ApiKey,
+        key_display,
+        wizard.form_focus,
+    ));
+
+    lines.push(Line::from(Span::styled(
+        "  ─────────────────────────────────",
+        Style::default().fg(theme::DIM),
+    )));
+
+    let alias_labels = [
+        ("Opus  ", FormField::OpusModel, 0),
+        ("Sonnet", FormField::SonnetModel, 1),
+        ("Haiku ", FormField::HaikuModel, 2),
+    ];
+    for (label, field, ai) in alias_labels {
+        let model_display = edit_display(
+            &mp.aliases[ai].model_id,
+            mp.aliases[ai].cursor,
+            wizard.form_focus == field,
+        );
+        lines.push(render_field_line(
+            &format!("{} Model ", label),
+            field,
+            model_display,
+            wizard.form_focus,
+        ));
+    }
+
+    // Confirm 按钮
+    let confirm_active = wizard.form_focus == FormField::Confirm;
+    let confirm_style = if confirm_active {
+        Style::default()
+            .fg(theme::ACCENT)
+            .add_modifier(Modifier::BOLD)
+    } else {
+        Style::default().fg(theme::MUTED)
+    };
+    let confirm_cursor = if confirm_active { "❯ " } else { "  " };
+    lines.push(Line::from(""));
+    lines.push(Line::from(vec![
+        Span::styled(confirm_cursor, Style::default().fg(theme::THINKING)),
+        Span::styled(" Confirm", confirm_style),
+    ]));
+
+    lines.push(Line::from(""));
+    lines.push(make_hint_line(&[
+        ("Enter", "确认"),
+        ("←/→", "切换类型"),
+        ("Esc", "返回列表"),
+    ]));
+
+    f.render_widget(Paragraph::new(Text::from(lines)), inner);
+}
+
+/// 渲染单个字段行（带光标指示器）
+fn render_field_line(
+    label: &str,
+    field: FormField,
+    value: String,
+    focus: FormField,
+) -> Line<'static> {
+    let is_active = focus == field;
+    let cursor = if is_active { "❯ " } else { "  " };
+    let lbl = if is_active {
+        Style::default()
+            .fg(theme::THINKING)
+            .add_modifier(Modifier::BOLD)
+    } else {
+        Style::default().fg(theme::MUTED)
+    };
+    let val = if is_active {
+        Style::default().fg(theme::THINKING)
+    } else {
+        Style::default().fg(theme::TEXT)
+    };
+    let label_owned = label.to_string();
+    Line::from(vec![
+        Span::styled(cursor, Style::default().fg(theme::THINKING)),
+        Span::styled(label_owned, lbl),
+        Span::styled(format!(" {}", value), val),
+    ])
+}
+
+/// 编辑字段显示：活跃时显示光标 ▏，否则显示值
+fn edit_display(value: &str, cursor: usize, active: bool) -> String {
+    if active {
+        let (before, after) = crate::app::edit_display_parts(value, cursor);
+        format!("{}▏{}", before, after)
+    } else {
+        value.to_string()
+    }
 }
 
 fn render_step_done(f: &mut Frame, wizard: &SetupWizardPanel, area: Rect) {
@@ -279,46 +346,38 @@ fn render_step_done(f: &mut Frame, wizard: &SetupWizardPanel, area: Rect) {
     .border_style(Style::default().fg(theme::SAGE))
     .render(f, area);
 
-    let alias_labels = ["Opus", "Sonnet", "Haiku"];
+    let mut lines = vec![Line::from("")];
 
-    let mut lines = vec![
-        Line::from(""),
-        Line::from(vec![
-            Span::styled(" Provider: ", Style::default().fg(theme::MUTED)),
-            Span::styled(
-                wizard.provider_type.label(),
-                Style::default().fg(theme::TEXT),
-            ),
-        ]),
-        Line::from(vec![
-            Span::styled(" ID:       ", Style::default().fg(theme::MUTED)),
-            Span::styled(&wizard.provider_id, Style::default().fg(theme::TEXT)),
-        ]),
-        Line::from(vec![
-            Span::styled(" Key:      ", Style::default().fg(theme::MUTED)),
-            Span::styled(
-                mask_api_key(&wizard.api_key),
-                Style::default().fg(theme::TEXT),
-            ),
-        ]),
-        Line::from(""),
-    ];
-
-    // 三个别名摘要
-    for (i, label) in alias_labels.iter().enumerate() {
+    let selected: Vec<_> = wizard.providers.iter().filter(|p| p.selected).collect();
+    for mp in &selected {
         lines.push(Line::from(vec![
+            Span::styled(" ● ", Style::default().fg(theme::SAGE)),
             Span::styled(
-                format!(" {:>6}  →  ", label),
+                format!("{} ", mp.provider_type.label()),
+                Style::default().fg(theme::TEXT),
+            ),
+            Span::styled(
+                format!("({})", mp.provider_id),
                 Style::default().fg(theme::MUTED),
             ),
-            Span::styled(
-                &wizard.aliases[i].model_id,
-                Style::default().fg(theme::ACCENT),
-            ),
         ]));
+        lines.push(Line::from(vec![
+            Span::styled("   Key: ", Style::default().fg(theme::MUTED)),
+            Span::styled(mask_api_key(&mp.api_key), Style::default().fg(theme::TEXT)),
+        ]));
+        let alias_labels = ["Opus", "Sonnet", "Haiku"];
+        for (i, label) in alias_labels.iter().enumerate() {
+            lines.push(Line::from(vec![
+                Span::styled(
+                    format!("   {:>6} → ", label),
+                    Style::default().fg(theme::MUTED),
+                ),
+                Span::styled(&mp.aliases[i].model_id, Style::default().fg(theme::ACCENT)),
+            ]));
+        }
+        lines.push(Line::from(""));
     }
 
-    lines.push(Line::from(""));
     lines.push(Line::from(vec![
         Span::styled(" 按 ", Style::default().fg(theme::TEXT)),
         Span::styled(
@@ -330,11 +389,31 @@ fn render_step_done(f: &mut Frame, wizard: &SetupWizardPanel, area: Rect) {
         Span::styled(" 开始使用", Style::default().fg(theme::TEXT)),
     ]));
 
-    lines.truncate(inner.height as usize);
     f.render_widget(Paragraph::new(Text::from(lines)), inner);
 }
 
-/// API Key 脱敏：首4位 + **** + 末4位
+/// 生成底部快捷键提示行
+fn make_hint_line(items: &[(&'static str, &'static str)]) -> Line<'static> {
+    let mut spans: Vec<Span> = Vec::new();
+    for (i, (key, desc)) in items.iter().enumerate() {
+        if i > 0 {
+            spans.push(Span::styled("  ", Style::default()));
+        }
+        spans.push(Span::styled(
+            *key,
+            Style::default()
+                .fg(theme::WARNING)
+                .add_modifier(Modifier::BOLD),
+        ));
+        spans.push(Span::styled(
+            format!(":{}", desc),
+            Style::default().fg(theme::MUTED),
+        ));
+    }
+    Line::from(spans)
+}
+
+/// API Key 脱敏
 fn mask_api_key(key: &str) -> String {
     let chars: Vec<char> = key.chars().collect();
     let len = chars.len();
@@ -350,7 +429,7 @@ fn mask_api_key(key: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::app::setup_wizard::{SetupStep, SetupWizardPanel};
+    use crate::app::setup_wizard::SetupWizardPanel;
     use crate::app::App;
 
     #[test]
@@ -373,53 +452,28 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_render_step1_default() {
+    async fn test_render_step_choose() {
         let wizard = SetupWizardPanel::new();
         let (_, handle) = render_headless(wizard).await;
-        assert!(handle.contains("Perihelion Setup"), "should contain title");
-        assert!(handle.contains("Step 1/2"), "should contain step");
-        assert!(handle.contains("Anthropic"), "should contain provider");
-        assert!(handle.contains("API Key"), "should contain api key field");
+        assert!(handle.contains("Custom API"));
+        assert!(handle.contains("Claude Code"));
     }
 
     #[tokio::test]
-    async fn test_render_step1_masked_api_key() {
+    async fn test_render_step_form() {
         let mut wizard = SetupWizardPanel::new();
-        wizard.api_key = "sk-abc123xyz789".to_string();
+        wizard.step = SetupStep::Form;
         let (_, handle) = render_headless(wizard).await;
-        // API key should be masked with bullets, not visible in plain text
-        let snapshot = handle.snapshot().join("\n");
-        assert!(
-            !snapshot.contains("sk-abc123xyz789"),
-            "should not show raw key"
-        );
-    }
-
-    #[tokio::test]
-    async fn test_render_step2_aliases() {
-        let mut wizard = SetupWizardPanel::new();
-        wizard.step = SetupStep::ModelAlias;
-        let (_, handle) = render_headless(wizard).await;
-        assert!(handle.contains("Step 2/2"), "should contain step");
+        assert!(handle.contains("Configure"));
+        assert!(handle.contains("Submit"));
     }
 
     #[tokio::test]
     async fn test_render_done_page() {
         let mut wizard = SetupWizardPanel::new();
         wizard.step = SetupStep::Done;
-        wizard.api_key = "sk-ant-test1234xyz".to_string();
+        wizard.providers[0].api_key = "sk-ant-test1234xyz".to_string();
         let (_, handle) = render_headless(wizard).await;
-        assert!(handle.contains("Complete"), "should contain complete");
-    }
-
-    #[tokio::test]
-    async fn test_render_step1_confirm_skip() {
-        let mut wizard = SetupWizardPanel::new();
-        wizard.confirm_skip = true;
-        let (_, handle) = render_headless(wizard).await;
-        assert!(
-            handle.contains("Enter") || handle.contains("setup"),
-            "should show skip confirmation"
-        );
+        assert!(handle.contains("Complete"));
     }
 }

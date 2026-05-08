@@ -209,6 +209,7 @@ pub async fn next_event(app: &mut App) -> Result<Option<Action>> {
                             }
                             crate::app::setup_wizard::SetupWizardAction::Skip => {
                                 app.setup_wizard = None;
+                                return Ok(Some(Action::Quit));
                             }
                             crate::app::setup_wizard::SetupWizardAction::Redraw => {}
                         }
