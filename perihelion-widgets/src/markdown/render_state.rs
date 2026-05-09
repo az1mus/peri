@@ -437,6 +437,13 @@ impl<'a> RenderState<'a> {
         }
     }
 
+    /// 确保与上一个输出行之间有一个空行（去重：如果上一行已是空行则跳过）
+    fn ensure_blank_line(&mut self) {
+        if !self.lines.is_empty() && !self.lines.last().unwrap().spans.is_empty() {
+            self.lines.push(Line::default());
+        }
+    }
+
     pub fn push_span(&mut self, text: String, extra: Style) {
         let style = self.inline_style.patch(extra);
         self.current_spans.push(Span::styled(text, style));
@@ -451,20 +458,22 @@ impl<'a> RenderState<'a> {
                     _ => self.theme.muted(),
                 };
                 self.inline_style = Style::default().fg(color).add_modifier(Modifier::BOLD);
-                // 标题前添加空行分隔
+                // 标题前添加空行分隔（去重）
                 self.flush_line();
+                self.ensure_blank_line();
             }
             Event::End(TagEnd::Heading(_)) => {
                 self.inline_style = Style::default();
                 self.flush_line();
-                // 标题后添加空行分隔
-                self.lines.push(Line::default());
+                // 标题后添加空行分隔（去重）
+                self.ensure_blank_line();
             }
 
             // ── 段落 ─────────────────────────────────────────────────────────
             Event::Start(Tag::Paragraph) => {}
             Event::End(TagEnd::Paragraph) => {
                 self.flush_line();
+                self.ensure_blank_line();
             }
 
             // ── 代码块 ────────────────────────────────────────────────────────
@@ -498,7 +507,9 @@ impl<'a> RenderState<'a> {
                     ));
                     self.flush_line();
                 } else if end > 1 {
-                    // 多行代码块
+                    // 多行代码块：前后各加一个空行（去重）
+                    self.ensure_blank_line();
+
                     #[cfg(feature = "markdown-highlight")]
                     if let Some(highlighted) =
                         highlight_code_block(&self.code_block_lang, &lines[..end])
@@ -523,6 +534,8 @@ impl<'a> RenderState<'a> {
                         ));
                         self.flush_line();
                     }
+
+                    self.ensure_blank_line();
                 }
             }
 
@@ -533,9 +546,17 @@ impl<'a> RenderState<'a> {
                     None => ListType::Unordered,
                 };
                 self.list_stack.push(ListState { list_type });
+                // 列表整体前加空行（去重，仅最外层列表加）
+                if self.list_stack.len() == 1 {
+                    self.ensure_blank_line();
+                }
             }
             Event::End(TagEnd::List(_)) => {
                 self.list_stack.pop();
+                // 列表整体后加空行（去重，仅最外层列表加）
+                if self.list_stack.is_empty() {
+                    self.ensure_blank_line();
+                }
             }
             Event::Start(Tag::Item) => {
                 let depth = self.list_stack.len().saturating_sub(1);
@@ -564,19 +585,29 @@ impl<'a> RenderState<'a> {
             // ── 引用块 ────────────────────────────────────────────────────────
             Event::Start(Tag::BlockQuote(_)) => {
                 self.quote_depth += 1;
+                // 引用块前加空行（去重，仅最外层加）
+                if self.quote_depth == 1 {
+                    self.ensure_blank_line();
+                }
             }
             Event::End(TagEnd::BlockQuote(_)) if self.quote_depth > 0 => {
                 self.quote_depth -= 1;
+                // 引用块后加空行（去重，仅最外层加）
+                if self.quote_depth == 0 {
+                    self.ensure_blank_line();
+                }
             }
 
             // ── 水平线 ────────────────────────────────────────────────────────
             Event::Rule => {
+                self.ensure_blank_line();
                 let rule = "─".repeat(60);
                 self.current_spans.push(Span::styled(
                     rule,
                     Style::default().fg(self.theme.separator()),
                 ));
                 self.flush_line();
+                self.ensure_blank_line();
             }
 
             // ── 文本（含代码块内容） ───────────────────────────────────────────

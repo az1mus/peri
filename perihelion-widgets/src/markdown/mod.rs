@@ -81,6 +81,10 @@ pub fn parse_markdown(input: &str, theme: &dyn MarkdownTheme, max_width: usize) 
     if !state.current_spans.is_empty() {
         state.flush_line();
     }
+    // 裁剪尾部空行，避免最后一个块级元素后多余留白
+    while state.lines.last().is_some_and(|l| l.spans.is_empty()) {
+        state.lines.pop();
+    }
     Text::from(state.lines)
 }
 
