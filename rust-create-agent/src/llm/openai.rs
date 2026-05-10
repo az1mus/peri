@@ -358,6 +358,23 @@ impl BaseModel for ChatOpenAI {
 
         let mut messages = self.messages_to_json(&request.messages);
 
+        // 验证消息序列不变量：每个 tool 消息前必须有 assistant with tool_calls
+        for (i, msg) in messages.iter().enumerate() {
+            if msg["role"] == "tool"
+                && (i == 0 || {
+                    let prev = &messages[i - 1];
+                    prev["role"] != "assistant" || !prev["tool_calls"].is_array()
+                })
+            {
+                tracing::error!(
+                    position = i,
+                    total = messages.len(),
+                    prev = ?messages.get(i.saturating_sub(1)).map(|m| &m["role"]),
+                    "消息序列不变量违反：tool 消息前缺少 assistant with tool_calls"
+                );
+            }
+        }
+
         if let Some(base_system) = &request.system {
             if let Some(first) = messages.first_mut() {
                 if first["role"] == "system" {
@@ -795,5 +812,87 @@ mod tests {
     fn test_context_window_o3() {
         let llm = ChatOpenAI::new("sk-test", "o3-mini");
         assert_eq!(llm.context_window_inner(), 200_000);
+    }
+
+    /// 验证多轮 tool call 对话的消息序列：每个 tool 消息前面必须是 assistant with tool_calls
+    #[test]
+    fn test_messages_to_json_tool_sequence_valid() {
+        let llm = ChatOpenAI::new("sk-test", "deepseek-r1");
+        let msgs = vec![
+            BaseMessage::system("You are helpful"),
+            BaseMessage::human("list files"),
+            // 第一轮 tool call
+            BaseMessage::ai_from_blocks(vec![
+                ContentBlock::reasoning("need ls"),
+                ContentBlock::text("running ls"),
+                ContentBlock::tool_use("tc1", "Bash", json!({"command": "ls"})),
+            ]),
+            BaseMessage::tool_result("tc1", "file1.rs\nfile2.rs"),
+            // 第二轮 tool call
+            BaseMessage::ai_from_blocks(vec![
+                ContentBlock::reasoning("read file"),
+                ContentBlock::text("reading"),
+                ContentBlock::tool_use("tc2", "Read", json!({"path": "file1.rs"})),
+            ]),
+            BaseMessage::tool_result("tc2", "fn main() {}"),
+            // 最终回答
+            BaseMessage::ai_from_blocks(vec![
+                ContentBlock::reasoning("done"),
+                ContentBlock::text("Here is the file content"),
+            ]),
+        ];
+
+        let vals = llm.messages_to_json(&msgs);
+
+        // 验证：每个 tool 消息前面的消息必须有 tool_calls
+        for (i, msg) in vals.iter().enumerate() {
+            if msg["role"] == "tool" {
+                assert!(i > 0, "tool 消息不能是第一条: {:?}", msg);
+                let prev = &vals[i - 1];
+                assert!(
+                    prev["role"] == "assistant" && prev["tool_calls"].is_array(),
+                    "tool 消息前必须是 assistant with tool_calls，实际前一条: {:?}",
+                    prev
+                );
+            }
+        }
+
+        // 验证 system 在最前
+        assert_eq!(vals[0]["role"], "system");
+    }
+
+    /// 验证 micro compact 后的消息序列仍然合法
+    #[test]
+    fn test_messages_to_json_after_micro_compact() {
+        let llm = ChatOpenAI::new("sk-test", "deepseek-r1");
+        // micro compact 后：tool 结果被替换为 "[compacted: ...]"，但消息不删除
+        let msgs = vec![
+            BaseMessage::system("system"),
+            BaseMessage::human("list"),
+            BaseMessage::ai_from_blocks(vec![
+                ContentBlock::reasoning("need bash"),
+                ContentBlock::tool_use("tc1", "Bash", json!({"command": "ls"})),
+            ]),
+            BaseMessage::tool_result("tc1", "[compacted: 1000 chars]"),
+            BaseMessage::ai_from_blocks(vec![
+                ContentBlock::reasoning("now read"),
+                ContentBlock::tool_use("tc2", "Read", json!({"path": "f.rs"})),
+            ]),
+            BaseMessage::tool_result("tc2", "[compacted: 500 chars]"),
+            BaseMessage::ai("done"),
+        ];
+
+        let vals = llm.messages_to_json(&msgs);
+        for (i, msg) in vals.iter().enumerate() {
+            if msg["role"] == "tool" {
+                let prev = &vals[i - 1];
+                assert!(
+                    prev["role"] == "assistant" && prev["tool_calls"].is_array(),
+                    "micro compact 后 tool 序列非法，位置 {}: 前一条 {:?}",
+                    i,
+                    prev
+                );
+            }
+        }
     }
 }
