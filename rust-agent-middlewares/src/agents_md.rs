@@ -387,7 +387,7 @@ mod tests {
         std::fs::write(&imported, "imported rules").unwrap();
         std::fs::write(
             dir.path().join("CLAUDE.md"),
-            "header\n<!-- @import rules.md -->\nfooter".to_string(),
+            "header\n<!-- @import rules.md -->\nfooter",
         )
         .unwrap();
 
@@ -411,16 +411,8 @@ mod tests {
         let inner = sub_dir.join("inner.md");
         std::fs::write(&inner, "inner content").unwrap();
         let outer = dir.path().join("outer.md");
-        std::fs::write(
-            &outer,
-            "outer <!-- @import sub/inner.md --> end".to_string(),
-        )
-        .unwrap();
-        std::fs::write(
-            dir.path().join("CLAUDE.md"),
-            "<!-- @import outer.md -->".to_string(),
-        )
-        .unwrap();
+        std::fs::write(&outer, "outer <!-- @import sub/inner.md --> end").unwrap();
+        std::fs::write(dir.path().join("CLAUDE.md"), "<!-- @import outer.md -->").unwrap();
 
         let mw = AgentsMdMiddleware::new();
         let mut state = AgentState::new(dir.path().to_str().unwrap());
