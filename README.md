@@ -1,4 +1,4 @@
-# Perihelion
+# Peri
 
 > 用 Rust 打造的高性能 AI Agent 框架。把 AI 编程助手的工作流搬进你自己的应用——Agent 定义、Skills、HITL 审批，全部开箱即用。
 

@@ -25,7 +25,7 @@ pub(crate) fn render_setup_wizard(f: &mut Frame, app: &crate::app::App) {
 
 fn render_step_choose(f: &mut Frame, wizard: &SetupWizardPanel, area: Rect) {
     let inner = BorderedPanel::new(Span::styled(
-        " ── Perihelion Setup ── Welcome ",
+        " ── Peri Setup ── Welcome ",
         Style::default()
             .fg(theme::ACCENT)
             .add_modifier(Modifier::BOLD),
@@ -89,7 +89,7 @@ fn render_step_form(f: &mut Frame, wizard: &SetupWizardPanel, area: Rect) {
 /// Browse 模式：只读列表 + Submit
 fn render_form_browse(f: &mut Frame, wizard: &SetupWizardPanel, area: Rect) {
     let inner = BorderedPanel::new(Span::styled(
-        " ── Perihelion Setup ── Configure Providers ",
+        " ── Peri Setup ── Configure Providers ",
         Style::default()
             .fg(theme::ACCENT)
             .add_modifier(Modifier::BOLD),

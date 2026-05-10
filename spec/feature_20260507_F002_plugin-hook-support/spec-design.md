@@ -2,11 +2,11 @@
 
 ## 需求背景
 
-F001（plugin-marketplace-compat）完成了插件的发现、安装、加载链路，F001（plugin-mcp-injection）完成了 MCP 服务器的 per-plugin env 展开。当前 Perihelion 已兼容 Claude Code 插件的 commands、agents、skills、MCP servers 四类资产。
+F001（plugin-marketplace-compat）完成了插件的发现、安装、加载链路，F001（plugin-mcp-injection）完成了 MCP 服务器的 per-plugin env 展开。当前 Peri 已兼容 Claude Code 插件的 commands、agents、skills、MCP servers 四类资产。
 
 最后一个缺失拼图是 **hooks**。Claude Code 的 hooks 系统是纯配置驱动的（JSON，非 JS 代码），在 agent 生命周期关键节点触发外部动作。插件通过 `hooks/` 目录或 `plugin.json` 内的 `hooks` 字段声明 hook 规则。
 
-**关键事实**：Claude Code hooks 的 4 种执行类型（command/prompt/http/agent）全部是声明式配置，不需要 JS 运行时。Perihelion 已具备 shell 执行（TerminalMiddleware）、LLM 调用（BaseModelReactLLM）、HTTP 客户端（reqwest）、子 Agent（SubAgentMiddleware）四种能力，技术上完全可行。
+**关键事实**：Claude Code hooks 的 4 种执行类型（command/prompt/http/agent）全部是声明式配置，不需要 JS 运行时。Peri 已具备 shell 执行（TerminalMiddleware）、LLM 调用（BaseModelReactLLM）、HTTP 客户端（reqwest）、子 Agent（SubAgentMiddleware）四种能力，技术上完全可行。
 
 当前 `PluginManifest.hooks` 字段为 `Option<serde_json::Value>`（`types.rs:104`），仅预留未实现。`LoadedPlugin`（`loader.rs:66`）不持有 hooks 数据。
 
@@ -242,7 +242,7 @@ pub struct HookInput {
 /// Hook 执行结果——对齐 Claude Code src/types/hooks.ts syncHookResponseSchema
 ///
 /// Claude Code 的 hook 输出是扁平 JSON（非 enum），包含多个可选字段。
-/// Perihelion 解析为结构体后转换为内部 Action 枚举。
+/// Peri 解析为结构体后转换为内部 Action 枚举。
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct SyncHookResponse {
     /// 是否继续（默认 true）。false 时阻止 agent 继续执行
@@ -389,6 +389,7 @@ Claude Code 的 hook 配置有两层匹配机制，职责不同，**不可混淆
 **用途**：在进程启动前做快速过滤，避免为不匹配的事件启动 hook 进程。
 
 **语法**：
+
 - `"Write"` — 精确匹配工具名 `Write`
 - `"Write|Edit"` — 管道分隔的精确匹配列表
 - `"^Bash.*"` — 正则表达式
@@ -397,6 +398,7 @@ Claude Code 的 hook 配置有两层匹配机制，职责不同，**不可混淆
 **匹配对象**：工具名（`tool_name`）或通知类型等单一字段。
 
 **示例**：
+
 ```json
 {
   "matcher": "Bash",
@@ -415,6 +417,7 @@ Claude Code 的 hook 配置有两层匹配机制，职责不同，**不可混淆
 **匹配对象**：工具名 + 工具输入内容（需要 tool 的 `preparePermissionMatcher` 实现）。
 
 **示例**：
+
 ```json
 {
   "matcher": "Bash",
@@ -1020,6 +1023,7 @@ fn extract_structured_output(output: &AgentOutput) -> HookAction {
 ```
 
 **防递归策略**：
+
 - 子 agent **不注册 HookMiddleware**，从根本上防止递归触发
 - 子 agent **不注册 Agent 工具**，防止 hook agent 再创建子 agent
 - 通过 `SyntheticOutputTool` 返回结构化结果，而非依赖自然语言输出
@@ -1137,6 +1141,7 @@ Hook 配置中的变量替换在执行前统一处理：
 | `asyncRewake: true` | 后台执行，退出码 2 时唤醒 agent（阻塞错误），隐含 async=true |
 
 **async 实现细节**：
+
 - `async: true` 的 hook 在 `tokio::spawn` 中执行
 - async hook 的 stdout JSON 输出仍会被解析，但不阻塞 agent 主流程
 - async hook 的 `systemMessage` 通过事件通知机制异步注入
@@ -1234,7 +1239,7 @@ rust-agent-middlewares/src/
 
 ### Claude Code 兼容性对照
 
-| Claude Code 特性 | Perihelion 实现 | 兼容性 |
+| Claude Code 特性 | Peri 实现 | 兼容性 |
 |-----------------|----------------|-------|
 | hooks.json 格式 | `HooksConfig = HashMap<HookEvent, Vec<HookMatchRule>>` | ✅ 完全兼容 |
 | command hook stdin JSON | `HookInput` 写入 stdin（含 BaseHookInputSchema 全部字段） | ✅ 完全兼容 |

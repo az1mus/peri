@@ -370,7 +370,7 @@ Task 1 创建了 `SetupWizardPanel` 数据模型（`SetupStep`/`ProviderType`/`S
   fn render_step_provider(f: &mut Frame, wizard: &SetupWizardPanel, area: Rect) {
       let block = Block::default()
           .title(Span::styled(
-              " ── Perihelion Setup ── Step 1/3: Provider ",
+              " ── Peri Setup ── Step 1/3: Provider ",
               Style::default().fg(theme::ACCENT).add_modifier(Modifier::BOLD),
           ))
           .borders(Borders::ALL)
@@ -669,7 +669,7 @@ Task 1 创建了 `SetupWizardPanel` 数据模型（`SetupStep`/`ProviderType`/`S
 - [x] 为 Setup 向导渲染逻辑编写单元测试（headless 集成测试）
   - 测试位置: `rust-agent-tui/src/ui/main_ui/popups/setup_wizard.rs` 底部 `#[cfg(test)] mod tests`
   - 测试场景:
-    - `test_render_step1_default`: 创建 `SetupWizardPanel::new()`，headless 渲染 → 检查包含 `"Perihelion Setup"`、`"Step 1/3"`、`"Anthropic"`、`"Enter"`
+    - `test_render_step1_default`: 创建 `SetupWizardPanel::new()`，headless 渲染 → 检查包含 `"Peri Setup"`、`"Step 1/3"`、`"Anthropic"`、`"Enter"`
     - `test_render_step2_masked_api_key`: 设置 `wizard.step = SetupStep::ApiKey`，`wizard.api_key = "sk-abc123xyz789"` → 渲染 → 检查包含 `"Step 2/3"`，`"sk-a"`（前缀可见），`"789"`（后缀可见），且不包含完整 key
     - `test_render_step3_aliases`: 设置 `wizard.step = SetupStep::ModelAlias` → 渲染 → 检查包含 `"Step 3/3"`、`"Opus"`、`"Sonnet"`、`"Haiku"`、`"claude-"`
     - `test_render_done_page`: 设置 `wizard.step = SetupStep::Done` → 渲染 → 检查包含 `"Setup Complete"`、`"Enter"`

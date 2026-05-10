@@ -19,13 +19,13 @@
 
 - [x] 创建 `ui/welcome.rs`，实现 `render_welcome(f, app, area)` 函数
   - 构建 ASCII Art Logo（6 行，"PERIHELION"，宽度约 46 字符），ACCENT + BOLD 样式
-  - 构建副标题行 "Perihelion Agent Framework"，MUTED 色
+  - 构建副标题行 "Peri Agent Framework"，MUTED 色
   - 构建分隔线行 "────── What can I do? ──────"，DIM 色
   - 构建功能亮点行（• Ask me to code, debug, or refactor 等），TEXT 色 + ACCENT 符号
   - 构建命令提示行（/model /history /help /compact），WARNING 色快捷键
   - 构建动态内容行（Skills 数量、当前模型别名），从 `app.skills.len()` 和 `app.peri_config` 读取
   - 所有行使用 `Line::centered()` 水平居中
-  - 窄屏降级：`area.width < 50` 时跳过 ASCII Art Logo，改用单行文字标题 "Perihelion"
+  - 窄屏降级：`area.width < 50` 时跳过 ASCII Art Logo，改用单行文字标题 "Peri"
   - 垂直居中：计算 `content_height`，`vertical_offset = (area.height - content_height) / 2`
   - 使用 `Paragraph::new(Text::from(lines)).scroll((vertical_offset, 0))` 渲染
 - [x] 在 `ui/mod.rs` 添加 `pub mod welcome;`
@@ -73,12 +73,12 @@
 - [x] 新增 `test_welcome_card_renders_when_empty` 测试
   - 创建空 App（默认 view_messages 为空）
   - 直接 `terminal.draw(main_ui::render)` 渲染
-  - 断言 snapshot 包含 "Perihelion" 关键字
+  - 断言 snapshot 包含 "Peri" 关键字
   - 断言 snapshot 包含命令提示（如 "/help" 或 "/model"）
 - [x] 新增 `test_welcome_card_hidden_after_message` 测试
   - 创建空 App
   - push 一条 AssistantChunk + Done
-  - 渲染后断言 snapshot 不包含 "Perihelion"（welcome 已被消息替代）
+  - 渲染后断言 snapshot 不包含 "Peri"（welcome 已被消息替代）
   - 断言包含消息内容
 - [x] 新增 `test_welcome_card_narrow_screen` 测试
   - 创建 `App::new_headless(40, 24)`（窄屏 <50 列）
@@ -108,12 +108,12 @@
 
 1. 宽屏空消息显示 Welcome Card
    - `cargo test -p rust-agent-tui -- test_welcome_card_renders_when_empty 2>&1`
-   - Expected: 测试通过，snapshot 包含 "Perihelion"、"/help"、"/model" 等关键文本
+   - Expected: 测试通过，snapshot 包含 "Peri"、"/help"、"/model" 等关键文本
    - On failure: check Task 1 [welcome.rs 渲染逻辑] 或 Task 2 [main_ui.rs 集成]
 
 2. 发送消息后 Welcome Card 消失
    - `cargo test -p rust-agent-tui -- test_welcome_card_hidden_after_message 2>&1`
-   - Expected: 测试通过，snapshot 不包含 "Perihelion" welcome 文本，包含消息内容
+   - Expected: 测试通过，snapshot 不包含 "Peri" welcome 文本，包含消息内容
    - On failure: check Task 2 [render_messages 分支逻辑]
 
 3. 窄屏降级显示

@@ -43,7 +43,7 @@
 ### Task 1: McpConfig 配置加载与合并
 
 **背景:**
-[业务语境] — Perihelion 需要从全局 `settings.json` 和项目级 `.mcp.json` 加载 MCP 服务器配置，合并去重后供 McpClientPool 建立连接。配置中 `${VAR}` 占位符需展开为实际环境变量值。
+[业务语境] — Peri 需要从全局 `settings.json` 和项目级 `.mcp.json` 加载 MCP 服务器配置，合并去重后供 McpClientPool 建立连接。配置中 `${VAR}` 占位符需展开为实际环境变量值。
 [修改原因] — 当前代码中 `AppConfig.extra` 保留未知字段但未提供 MCP 配置解析能力，缺少 `.mcp.json` 项目级配置加载、双层合并、环境变量展开逻辑。
 [上下游影响] — 本 Task 输出 `McpServerConfig` / `McpConfigFile` / `load_merged_config()` / `expand_env_vars()`，被 Task 2（传输层构建）和 Task 3（McpClientPool 初始化）直接依赖。
 
@@ -355,7 +355,7 @@
 ### Task 2: 传输层构建工厂
 
 **背景:**
-[业务语境] — MCP 协议支持多种传输方式，Perihelion 需要根据用户配置（`command` 或 `url` 字段）自动构建对应的 rmcp Transport 实例，供 McpClientPool 建立连接。传输层是 MCP 客户端与服务器之间的通信基础设施，屏蔽底层协议差异。
+[业务语境] — MCP 协议支持多种传输方式，Peri 需要根据用户配置（`command` 或 `url` 字段）自动构建对应的 rmcp Transport 实例，供 McpClientPool 建立连接。传输层是 MCP 客户端与服务器之间的通信基础设施，屏蔽底层协议差异。
 [修改原因] — 当前代码中不存在 MCP 传输层适配能力，需要新建 `transport.rs`，将 `McpServerConfig`（Task 1 产出）转换为 rmcp 可消费的 `Transport` trait 对象，支持 stdio（子进程）和 Streamable HTTP 两种传输协议。
 [上下游影响] — 本 Task 依赖 Task 1（`McpServerConfig` 数据结构），输出 `build_transport()` 工厂函数，被 Task 3（McpClientPool 初始化）在遍历配置建立连接时调用。
 

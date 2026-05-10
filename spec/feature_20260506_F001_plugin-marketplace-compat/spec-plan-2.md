@@ -1,6 +1,6 @@
 # 插件系统兼容 Claude Code Marketplace 执行计划（二）
 
-**目标:** 将插件系统与 Perihelion 现有的 Skills/MCP/SubAgent 中间件集成，并实现 TUI 插件管理面板。
+**目标:** 将插件系统与 Peri 现有的 Skills/MCP/SubAgent 中间件集成，并实现 TUI 插件管理面板。
 
 **技术栈:** Rust, ratatui, perihelion-widgets, tokio, tracing
 
@@ -21,6 +21,7 @@
 验证 spec-plan-1.md 中的 Task 1-4 已完成且通过测试，确保本计划的集成工作有正确的基础。
 
 **执行步骤:**
+
 - [x] 验证 spec-plan-1 的构建产物可用
   - `cargo build -p rust-agent-middlewares 2>&1 | tail -3`
   - 预期: 编译成功，plugin 模块已注册
@@ -32,6 +33,7 @@
   - 预期: 所有测试通过
 
 **检查步骤:**
+
 - [x] plugin 模块已在 lib.rs 中注册
   - `grep "pub mod plugin" rust-agent-middlewares/src/lib.rs`
   - 预期: 找到模块声明
@@ -44,11 +46,12 @@
 ### Task 5: 现有系统集成
 
 **背景:**
-[业务语境] — 本 Task 将 Task 1-4 构建的插件类型、加载器、安装管理器与 Perihelion 现有的 Skills/MCP/SubAgent/TUI 命令系统对接，使已安装插件的能力自动注入到 agent 运行时
+[业务语境] — 本 Task 将 Task 1-4 构建的插件类型、加载器、安装管理器与 Peri 现有的 Skills/MCP/SubAgent/TUI 命令系统对接，使已安装插件的能力自动注入到 agent 运行时
 [修改原因] — 当前 SkillsMiddleware 只搜索 3 个固定路径（`~/.claude/skills/` → global config skillsDir → `{cwd}/.claude/skills/`），MCP 配置只合并全局+项目级，`scan_agents` 只扫描 `{cwd}/.claude/agents/`，TUI 命令系统只注册内置命令。插件安装后，其 skills/mcp/agents/commands 无法被现有系统发现
 [上下游影响] — 本 Task 依赖 Task 4（PluginLoader 提供 `PluginLoadResult`）、Task 1（PluginManifest 类型）、Task 3（installed_plugins.json）。本 Task 的输出直接影响 Task 6（TUI 面板需要 `PluginLoadResult` 数据来渲染插件列表）
 
 **涉及文件:**
+
 - 修改: `rust-agent-middlewares/src/skills/mod.rs`
 - 修改: `rust-agent-middlewares/src/mcp/config.rs`
 - 修改: `rust-agent-middlewares/src/mcp/mod.rs`
@@ -69,6 +72,7 @@
 - [x] 在 `PluginLoader` 中新增 `load_enabled_plugins` 公共函数，返回已启用插件的聚合加载结果
   - 位置: `rust-agent-middlewares/src/plugin/loader.rs`，在现有 loader 函数之后
   - 定义聚合结果结构体:
+
     ```rust
     /// 所有已启用插件的聚合加载结果
     pub struct PluginLoadResult {
@@ -86,10 +90,13 @@
         pub plugin_name: String,
     }
     ```
+
   - 函数签名:
+
     ```rust
     pub fn load_enabled_plugins(claude_dir: &Path) -> PluginLoadResult
     ```
+
   - 逻辑: 读取 `~/.claude/plugins/installed_plugins.json`，读取 `~/.claude/settings.json` 中的 `enabledPlugins` 字段，过滤已启用插件，对每个插件读取 `{install_path}/.claude-plugin/plugin.json`，聚合所有 skill_dirs/mcp_servers/agent_dirs/commands
   - skill_dirs: 对每个插件收集 `install_path/skills/`（仅在目录存在时）
   - mcp_servers: 对每个插件收集 manifest 中的 `mcp_servers` 字段
@@ -107,6 +114,7 @@
   - 在 `SkillsMiddleware` 结构体定义中（~L51-55）新增字段 `extra_dirs: Vec<PathBuf>`
   - 在 `new()` 方法中将 `extra_dirs` 初始化为空 `Vec`（~L60）
   - 在 `with_global_config` 方法之后（~L90）新增方法:
+
     ```rust
     /// 追加额外 skills 搜索目录（用于插件 skills 路径注入）
     /// 插件 skills 优先级低于项目级，同名先到先得
@@ -115,7 +123,9 @@
         self
     }
     ```
+
   - 修改 `resolve_dirs` 方法（~L93-114），在 `dirs.push(project_dir)` 之后（~L113）追加:
+
     ```rust
     for dir in &self.extra_dirs {
         if dir.is_dir() {
@@ -123,20 +133,24 @@
         }
     }
     ```
+
   - 原因: 插件 skills 路径需要在用户级 > 全局 > 项目级之后搜索，同名先到先得优先级不变。采用 builder 方法而非修改函数签名，保持向后兼容
 
 - [x] 在 `mcp/config.rs` 中新增 `Plugin` 变体到 `ConfigSource` 枚举
   - 位置: `rust-agent-middlewares/src/mcp/config.rs`，`ConfigSource` 枚举定义处（~L7-13）
   - 在 `Global(PathBuf)` 变体之后追加:
+
     ```rust
     /// 插件配置
     Plugin,
     ```
+
   - 原因: 插件 MCP 服务器需要独立的来源标记，便于 TUI 面板区分展示
 
 - [x] 在 `mcp/config.rs` 中新增 `merge_plugin_servers` 函数
   - 位置: `rust-agent-middlewares/src/mcp/config.rs`，在 `load_merged_config` 函数之后（~L256）
   - 函数签名和实现:
+
     ```rust
     /// 将插件提供的 MCP 服务器合并到已有配置中
     /// 服务器名称格式为 `{plugin_name}__{server_name}`，避免与用户配置冲突
@@ -154,6 +168,7 @@
         config
     }
     ```
+
   - 原因: 插件 MCP 服务器需要命名空间隔离（`{plugin_name}__{server_name}`），防止与用户配置的同名服务器冲突
 
 - [x] 在 `mcp/mod.rs` 中导出 `merge_plugin_servers`
@@ -167,11 +182,13 @@
   - 函数实现: 复用 `scan_agents` 的目录扫描逻辑（~L144-204 中的 `.md` 文件解析和 `agent.md` 嵌套目录解析），对每个 `extra_dirs` 中的目录执行相同的扫描
   - 追加去重逻辑: `result.dedup_by(|a, b| a.0 == b.0)`（按 agent_id 去重，项目级优先）
   - 函数签名:
+
     ```rust
     /// 扫描 agent 目录，支持额外的插件 agent 搜索路径
     /// 项目级 agent 优先，同名 agent_id 去重时保留先出现的
     pub fn scan_agents_with_extra_dirs(cwd: &str, extra_dirs: &[PathBuf]) -> Vec<(String, String, String)>
     ```
+
   - 原因: 插件 agent 路径需要在 `{cwd}/.claude/agents/` 之外追加搜索，保持原 `scan_agents` 签名不变
 
 - [x] 在 `lib.rs` 中导出 `scan_agents_with_extra_dirs`
@@ -182,10 +199,12 @@
 - [x] 在 `App` 结构体中新增 `plugin_data` 字段，存储加载的插件数据
   - 位置: `rust-agent-tui/src/app/mod.rs`，`App` 结构体定义中（~L107，`mcp_pool` 字段之后）
   - 新增字段:
+
     ```rust
     /// 已加载的插件聚合数据（Skills 路径、MCP 服务器、Agent 路径、命令列表）
     pub plugin_data: Option<PluginLoadResult>,
     ```
+
   - 在 `App::new()` 初始化列表中添加 `plugin_data: None`（~L206）
   - 在 `panel_ops.rs` 的 `new_headless()` 中添加 `plugin_data: None`（~L505）
   - 原因: 插件数据在 App 初始化后一次性加载，后续所有 agent 启动复用同一份数据
@@ -193,6 +212,7 @@
 - [x] 在 App 初始化时加载已启用插件数据
   - 位置: `rust-agent-tui/src/app/mod.rs`，`App::new()` 方法中、`spawn_mcp_init()` 调用之前
   - 新增插件加载逻辑:
+
     ```rust
     // 加载已启用插件数据
     let claude_dir = dirs_next::home_dir()
@@ -201,12 +221,14 @@
     let plugin_data = rust_agent_middlewares::plugin::load_enabled_plugins(&claude_dir);
     app.plugin_data = Some(plugin_data);
     ```
+
   - 在 `spawn_mcp_init()` 之后（或之前），调用 `merge_plugin_mcp_to_pool` 将插件 MCP 服务器注入连接池（见下一步骤）
   - 原因: 插件数据必须在 agent 启动前加载完成，MCP 服务器合并需要在连接池初始化前或后执行
 
 - [x] 在 `App` 上新增 `merge_plugin_mcp_to_pool` (SKIPPED: 非关键路径，MCP 服务器由 loader 聚合后通过 pool.configs 注入) 方法，将插件 MCP 服务器注入连接池
   - 位置: `rust-agent-tui/src/app/mod.rs`，`spawn_mcp_init` 方法之后（~L337）
   - 新增方法:
+
     ```rust
     /// 将插件 MCP 服务器配置注入到 MCP 连接池
     /// 服务器名称已通过 merge_plugin_servers 加了命名空间前缀
@@ -222,6 +244,7 @@
         }
     }
     ```
+
   - 在 `spawn_mcp_init` 方法的 `tokio::spawn` 闭包内、`McpClientPool::run_initialize` 调用之后，添加回调通知 App 合并插件服务器
   - 实际实现方案: 在 `run_app` 中监听 `mcp_init_rx` 变为 `Ready` 后调用 `merge_plugin_mcp_to_pool`
   - 原因: MCP 连接池的 `configs` 字段是 `RwLock<HashMap>`，可以在初始化完成后安全追加。追加后新服务器不会自动连接，需要后续触发重连（或由 Task 6 的面板操作触发）
@@ -229,18 +252,21 @@
 - [x] 在 `AgentRunConfig` 中新增插件路径字段
   - 位置: `rust-agent-tui/src/app/agent.rs`，`AgentRunConfig` 结构体定义中（~L34，`mcp_pool` 之后）
   - 新增字段:
+
     ```rust
     /// 插件 skills 搜索路径（追加到 SkillsMiddleware）
     pub plugin_skill_dirs: Vec<PathBuf>,
     /// 插件 agent 搜索路径（追加到 scan_agents）
     pub plugin_agent_dirs: Vec<PathBuf>,
     ```
+
   - 在 `run_universal_agent` 函数的解构中（~L38-54）追加这两个字段
   - 原因: 将插件数据从 App 层传递到 agent 层
 
 - [x] 修改 `agent_ops.rs` 中的 `submit_message` 方法，传递插件路径到 `AgentRunConfig`
   - 位置: `rust-agent-tui/src/app/agent_ops.rs`，`AgentRunConfig` 构造处（~L199-215）
   - 在 `mcp_pool` 字段之后追加:
+
     ```rust
     plugin_skill_dirs: self.plugin_data.as_ref()
         .map(|pd| pd.all_skill_dirs.clone())
@@ -249,30 +275,37 @@
         .map(|pd| pd.all_agent_dirs.clone())
         .unwrap_or_default(),
     ```
+
   - 原因: 每次 agent 启动时从 App 的 plugin_data 中提取路径传入
 
 - [x] 修改 `run_universal_agent` 中的 `SkillsMiddleware` 注册，注入插件 skills 路径
   - 位置: `rust-agent-tui/src/app/agent.rs`，中间件注册处（~L252）
   - 将:
+
     ```rust
     .add_middleware(Box::new(SkillsMiddleware::new()))
     ```
+
   - 替换为:
+
     ```rust
     .add_middleware(Box::new(SkillsMiddleware::new().with_extra_dirs(plugin_skill_dirs)))
     ```
+
   - 同步修改 `rust-agent-tui/src/acp/agent_assembler.rs`（~L145）中的 `SkillsMiddleware::new()` 调用，传入对应的插件路径参数（acp 模块从自己的 config 中获取）
   - 原因: 插件 skills 目录需要在 agent 启动时追加到搜索路径
 
 - [x] 修改 `prompt.rs` 中的 `format_available_agents` 函数，包含插件 agent
   - 位置: `rust-agent-tui/src/prompt.rs`，`format_available_agents` 函数（~L63）
   - 修改函数签名，新增 `extra_agent_dirs` 参数:
+
     ```rust
     fn format_available_agents(cwd: &str, extra_agent_dirs: &[PathBuf]) -> String {
         let agents = rust_agent_middlewares::scan_agents_with_extra_dirs(cwd, extra_agent_dirs);
         // ... 原有逻辑不变
     }
     ```
+
   - 修改 `build_system_prompt` 函数签名（~L82），新增 `extra_agent_dirs: &[PathBuf]` 参数
   - 修改 `build_system_prompt` 内部调用 `format_available_agents` 处，传入 `extra_agent_dirs`
   - 修改所有 `build_system_prompt` 调用处（`agent.rs` ~L70、`agent_assembler.rs`），传入 `plugin_agent_dirs`
@@ -281,6 +314,7 @@
 - [x] 新建 `rust-agent-tui/src/command/plugin_command.rs`，实现 `PluginCommandAdapter`
   - 位置: 新建文件 `rust-agent-tui/src/command/plugin_command.rs`
   - `PluginCommandAdapter` 结构体包装 `CommandEntry`，实现 `Command` trait:
+
     ```rust
     use super::{Command, App};
     use rust_agent_middlewares::plugin::CommandEntry;
@@ -317,6 +351,7 @@
         }
     }
     ```
+
   - `CommandSource` 枚举从 `rust_agent_middlewares::plugin` 导入（Task 4 定义）
   - 原因: Rust 不支持运行时动态 trait 实现，需要适配器结构体将 `CommandEntry` 桥接到 `Command` trait
 
@@ -324,15 +359,19 @@
   - 位置: `rust-agent-tui/src/command/mod.rs`
   - 在文件顶部模块声明区域追加: `pub mod plugin_command;`（~L16 之后）
   - 修改 `default_registry` 函数签名:
+
     ```rust
     pub fn default_registry(plugin_commands: Vec<CommandEntry>) -> CommandRegistry
     ```
+
   - 在函数末尾（`r` 返回前）追加插件命令注册:
+
     ```rust
     for entry in plugin_commands {
         r.register(Box::new(plugin_command::PluginCommandAdapter::new(entry)));
     }
     ```
+
   - 修改所有 `default_registry()` 调用处，传入插件命令列表（从 App.plugin_data 获取）
   - 原因: 插件命令需要在 TUI 命令注册时一并注册，与内置命令共享同一 dispatch 逻辑
 
@@ -390,6 +429,7 @@
   - 预期: 所有测试通过
 
 **检查步骤:**
+
 - [x] 验证 SkillsMiddleware 新增字段和方法编译通过
   - `cargo build -p rust-agent-middlewares 2>&1 | tail -5`
   - 预期: 编译成功，无 error
@@ -425,6 +465,7 @@
   - 预期: 找到导出行
 
 **认知变更:**
+
 - [x] [CLAUDE.md] 插件 MCP 服务器在连接池中以 `{plugin_name}__{server_name}` 格式命名，`ConfigSource::Plugin` 标记来源。修改 MCP 相关代码时注意此命名空间约定
 - [x] [CLAUDE.md] 插件 skills 搜索优先级低于项目级 `.claude/skills/`，同名 skill 先到先得（用户级 > 全局 > 项目级 > 插件）
 - [x] [CLAUDE.md] `SkillsMiddleware.with_extra_dirs()` 是插件集成入口，修改 SkillsMiddleware 搜索逻辑时必须保留此扩展点
@@ -440,6 +481,7 @@
 [上下游影响] — 本 Task 依赖 Task 5 产出的 `PluginManager` 实例（读取已安装/可用列表）；本 Task 产出 TUI 面板供用户交互
 
 **涉及文件:**
+
 - 新建: `rust-agent-tui/src/app/plugin_panel.rs`
 - 新建: `rust-agent-tui/src/command/plugin.rs`
 - 新建: `rust-agent-tui/src/ui/main_ui/panels/plugin.rs`
@@ -452,10 +494,12 @@
 - 修改: `rust-agent-tui/src/event.rs`
 
 **执行步骤:**
+
 - [x] 新建 PluginPanel 状态结构体和视图枚举
   - 位置: 新建文件 `rust-agent-tui/src/app/plugin_panel.rs`
   - 定义 `PluginPanelView` 枚举，三个变体: `Browse`（已安装列表）、`Marketplace`（可用插件）、`Installed`（管理视图）
   - 定义 `PluginPanel` 结构体:
+
     ```rust
     pub struct PluginPanel {
         pub cursor: usize,
@@ -466,6 +510,7 @@
         pub available: Vec<AvailablePlugin>,  // marketplace 可用列表
     }
     ```
+
   - `InstalledPlugin` 和 `AvailablePlugin` 从 `rust_agent_middlewares::plugin` 重导出
   - 实现 `PluginPanel::new(installed, available)` 构造函数，初始 view 为 `Browse`
   - 实现 `PluginPanelView` 的 `label()` 方法返回视图标签文本（"Browse" / "Marketplace" / "Installed"）
@@ -497,6 +542,7 @@
 - [x] 在 panel_ops.rs 中添加插件面板打开/关闭操作
   - 位置: `rust-agent-tui/src/app/panel_ops.rs`，在 `close_memory_panel()` 方法之后
   - 实现 `open_plugin_panel()`:
+
     ```rust
     pub fn open_plugin_panel(&mut self) {
         let installed = self.plugin_manager
@@ -516,12 +562,14 @@
         self.memory_panel = None;
     }
     ```
+
   - 实现 `close_plugin_panel()`: `self.plugin_panel = None`
   - 原因: 遵循现有面板互斥模式（open_xxx_panel 中关闭其他面板）
 
 - [x] 新建 /plugin 命令
   - 位置: 新建文件 `rust-agent-tui/src/command/plugin.rs`
   - 实现 `PluginCommand` 结构体:
+
     ```rust
     use super::Command;
     use crate::app::App;
@@ -536,15 +584,18 @@
         }
     }
     ```
+
   - 原因: 与 McpCommand、MemoryCommand 结构一致
 
 - [x] 在 default_registry() 中注册 /plugin 命令
   - 位置: `rust-agent-tui/src/command/mod.rs`
   - 在模块声明区域添加: `pub mod plugin;`
   - 在 `default_registry()` 函数中，在 `r.register(Box::new(memory::MemoryCommand));` 之后添加:
+
     ```rust
     r.register(Box::new(plugin::PluginCommand));
     ```
+
   - 原因: 遵循现有命令注册模式
 
 - [x] 新建插件面板渲染模块
@@ -567,12 +618,15 @@
 - [x] 在 main_ui.rs 中集成插件面板渲染
   - 位置: `rust-agent-tui/src/ui/main_ui.rs`
   - 在 `render_session_column()` 的底部展开区渲染块中（`if app.memory_panel.is_some()` 之后），添加:
+
     ```rust
     if app.plugin_panel.is_some() {
         panels::plugin::render_plugin_panel(f, app, panel_area);
     }
     ```
+
   - 在 `active_panel_height()` 函数中（`app.memory_panel.is_some()` 分支之后），添加:
+
     ```rust
     } else if app.plugin_panel.is_some() {
         let items = app.plugin_panel.as_ref().map(|p| match p.view {
@@ -582,11 +636,13 @@
         // Tab 行 1 + 标题 1 + 列表项 * 2 + 空行 1 + 边框 2 = items*2 + 5
         (items as u16 * 2 + 5).max(6)
     ```
+
   - 原因: 与其他面板渲染集成模式一致
 
 - [x] 在 status_bar.rs 中添加插件面板快捷键提示
   - 位置: `rust-agent-tui/src/ui/main_ui/status_bar.rs` 的 `render_second_row()` 函数中
   - 在 `app.memory_panel.is_some()` 分支之后、`thread_browser` 分支之前，添加:
+
     ```rust
     } else if app.plugin_panel.is_some() {
         let panel = app.plugin_panel.as_ref().unwrap();
@@ -596,11 +652,13 @@
             key!["↑↓" => ":移动  ", "Tab" => ":切换视图  ", "Space" => ":启禁  ", "Enter" => ":确认  ", "d" => ":卸载  ", "Esc" => ":关闭"]
         }
     ```
+
   - 原因: 遵循面板快捷键设计规范——面板内部禁止渲染快捷键提示行，统一由状态栏第二行负责
 
 - [x] 在 event.rs 中添加插件面板按键处理
   - 位置: `rust-agent-tui/src/event.rs`
   - 在 MCP 面板按键处理块 `if app.mcp_panel.is_some()` 之后，添加:
+
     ```rust
     // 插件面板优先处理
     if app.plugin_panel.is_some() {
@@ -608,6 +666,7 @@
         return Ok(Some(Action::Redraw));
     }
     ```
+
   - 在 `handle_mcp_panel()` 函数之后添加 `handle_plugin_panel()` 函数:
     - 确认删除模式: Enter → `plugin_panel_confirm_delete()`，其他键 → `plugin_panel_cancel_delete()`
     - `Key::Up` → `plugin_panel_move_up()`
@@ -633,6 +692,7 @@
   - 预期: 所有测试通过
 
 **检查步骤:**
+
 - [x] 验证 PluginPanel 编译通过
   - `cargo build -p rust-agent-tui`
   - 预期: 编译成功，无错误
@@ -660,6 +720,7 @@
 ### Task 7: 插件系统端到端 验收（全局）
 
 **前置条件:**
+
 - spec-plan-1.md 中 Task 1-4 全部完成且测试通过
 - spec-plan-2.md 中 Task 5-6 全部完成且测试通过
 - 构建环境: `cargo build` 全 workspace 成功

@@ -1,6 +1,6 @@
 # Claude Code 工具接口对齐 执行计划（上）
 
-**目标:** 将 Perihelion 现有 10 个工具的名称和参数对齐 Claude Code，实现系统提示词和 agent 定义的零迁移复用
+**目标:** 将 Peri 现有 10 个工具的名称和参数对齐 Claude Code，实现系统提示词和 agent 定义的零迁移复用
 
 **技术栈:** Rust 2021 edition, async-trait, serde_json, grep crate, ignore crate, tokio
 
@@ -22,6 +22,7 @@
 确保构建和测试工具链在当前开发环境中可用，避免后续 Task 因环境问题阻塞。本文件涵盖 `rust-agent-middlewares` 和 `rust-agent-tui` 两个 crate，需验证全量构建和中间件测试。
 
 **执行步骤:**
+
 - [ ] 验证全量构建可用
   - `cargo build`
   - 预期: 构建成功，无编译错误
@@ -30,6 +31,7 @@
   - 预期: 测试编译成功，无配置错误
 
 **检查步骤:**
+
 - [ ] 全量构建成功
   - `cargo build`
   - 预期: 构建成功，无错误
@@ -45,11 +47,13 @@
 将 `write_file`、`edit_file`、`glob_files` 三个工具的 `fn name()` 返回值分别改为 `Write`、`Edit`、`Glob`，对齐 Claude Code 工具命名规范。这三个工具的参数结构完全不变，仅需修改工具名和描述文本中引用旧名的部分。Task 2~8 的提示词更新依赖本 Task 的工具名生效；本 Task 不依赖其他 Task。
 
 **涉及文件:**
+
 - 修改: `rust-agent-middlewares/src/tools/filesystem/write.rs`
 - 修改: `rust-agent-middlewares/src/tools/filesystem/edit.rs`
 - 修改: `rust-agent-middlewares/src/tools/filesystem/glob.rs`
 
 **执行步骤:**
+
 - [ ] 修改 WriteFileTool 的工具名 — 将 `fn name()` 返回值从 `"write_file"` 改为 `"Write"`
   - 位置: `rust-agent-middlewares/src/tools/filesystem/write.rs` → `impl BaseTool for WriteFileTool` 的 `fn name()` (~L33)
   - 将 `"write_file"` 改为 `"Write"`
@@ -99,6 +103,7 @@
   - 预期: 三个测试全部通过
 
 **检查步骤:**
+
 - [ ] 验证三个工具的 `fn name()` 返回新名称
   - `cargo test -p rust-agent-middlewares --lib -- test_tool_name_is`
   - 预期: 三个测试通过（Write / Edit / Glob）
@@ -117,10 +122,12 @@
 将 `read_file` 工具重命名为 `Read`，对齐 Claude Code 工具命名。同时新增 `pages` 参数（string, optional），为 PDF 文件读取预留接口——当文件为 PDF 且提供了 `pages` 参数时，返回提示信息表示 PDF 读取尚未支持；PDF 但未提供 `pages` 时，保持现有二进制文件检测逻辑不变。描述文本中引用的旧工具名同步更新。本 Task 不依赖其他 Task；Task 5（验收）依赖本 Task 完成。
 
 **涉及文件:**
+
 - 修改: `rust-agent-middlewares/src/tools/filesystem/read.rs`
 - 修改: `rust-agent-middlewares/src/middleware/filesystem.rs`（更新 `tool_names()` 中 `"read_file"` → `"Read"`）
 
 **执行步骤:**
+
 - [ ] 修改 `fn name()` 返回值从 `"read_file"` 改为 `"Read"` — 对齐 Claude Code 工具命名
   - 位置: `rust-agent-middlewares/src/tools/filesystem/read.rs` → `impl BaseTool for ReadFileTool` 的 `fn name()` (~L83)
   - 将 `"read_file"` 改为 `"Read"`
@@ -135,12 +142,14 @@
 - [ ] 在 `fn parameters()` 的 JSON schema 中新增 `pages` 参数 — 支持 PDF 页范围读取
   - 位置: `rust-agent-middlewares/src/tools/filesystem/read.rs` → `fn parameters()` (~L91-110)
   - 在 `properties` 对象中追加:
+
     ```json
     "pages": {
         "type": "string",
         "description": "For PDF files, the page range to read, e.g. '1-5', '3', '10-20'. Only applies to PDF files"
     }
     ```
+
   - 不加入 `required` 数组（可选参数）
   - 原因: 对齐 Claude Code 的 Read 工具 pages 参数
 
@@ -152,6 +161,7 @@
 - [ ] 在 `fn invoke()` 中增加 PDF + pages 判断逻辑 — 在二进制检测之前拦截 PDF + pages 场景
   - 位置: `rust-agent-middlewares/src/tools/filesystem/read.rs` → `fn invoke()` (~L112-174)
   - 在 `let offset = ...` 之后（~L121 之后）、`let resolved = ...` 之后（~L123 之后），即二进制扩展名检测 `if let Some(ext) = resolved.extension()...` 之前，插入 PDF 检测逻辑：
+
     ```rust
     let pages = input["pages"].as_str().map(|s| s.to_string());
 
@@ -168,6 +178,7 @@
         }
     }
     ```
+
   - 原因: PDF 文件当前按二进制处理；提供 `pages` 参数时返回友好提示，未提供时保持原有二进制检测行为
 
 - [ ] 为 Read 工具新名称和 PDF 逻辑编写单元测试
@@ -180,6 +191,7 @@
   - 预期: 三个测试全部通过
 
 **检查步骤:**
+
 - [ ] 验证 `fn name()` 返回 `"Read"`
   - `cargo test -p rust-agent-middlewares --lib -- tools::filesystem::read::tests::test_tool_name_is_Read`
   - 预期: 测试通过
@@ -201,11 +213,13 @@
 将 `ask_user_question` 工具重命名为 `AskUserQuestion`，并对齐字段命名：`multi_select` → `multiSelect`（camelCase），在选项中新增 `preview` 字段。工具定义来自 `ask_user_tool_definition()` 函数（位于 `rust-agent-middlewares/src/ask_user/mod.rs`），工具实现位于 `rust-agent-middlewares/src/tools/ask_user_tool.rs`。两个文件中有重复的 `InputOption`/`InputQuestion` 反序列化结构体，需同步修改 serde rename。`rust-agent-tui/src/app/agent.rs` 中 `map_executor_event` 函数通过工具名字符串匹配 `ask_user_question`，需同步更新为 `"AskUserQuestion"`。本 Task 不依赖其他 Task；Task 5（验收）依赖本 Task 完成。
 
 **涉及文件:**
+
 - 修改: `rust-agent-middlewares/src/ask_user/mod.rs`
 - 修改: `rust-agent-middlewares/src/tools/ask_user_tool.rs`
 - 修改: `rust-agent-tui/src/app/agent.rs`
 
 **执行步骤:**
+
 - [ ] 修改 `ask_user_tool_definition()` 中的工具名 — 从 `"ask_user_question"` 改为 `"AskUserQuestion"`
   - 位置: `rust-agent-middlewares/src/ask_user/mod.rs` → `ask_user_tool_definition()` 函数 (~L63-123)
   - 将 `.name` 字段从 `"ask_user_question".to_string()` 改为 `"AskUserQuestion".to_string()` (~L65)
@@ -214,6 +228,7 @@
   - 位置: `rust-agent-middlewares/src/ask_user/mod.rs` → `ask_user_tool_definition()` 的 `parameters` JSON (~L71-121)
   - 将 JSON 中 `"multi_select"` key 改为 `"multiSelect"` (~L90)
   - 在选项 `properties` 中新增 `preview` 字段:
+
     ```json
     "preview": {
         "type": "string",
@@ -265,6 +280,7 @@
   - 预期: 三个测试全部通过
 
 **检查步骤:**
+
 - [ ] 验证工具名返回 `"AskUserQuestion"`
   - `cargo test -p rust-agent-middlewares --lib -- test_tool_name_is_AskUserQuestion`
   - 预期: 测试通过
@@ -289,9 +305,11 @@
 将 `todo_write` 工具重命名为 `TodoWrite`，移除 `TodoItem` 的 `id` 字段（全量替换语义下用数组索引标识），新增 `activeForm: Option<String>` 字段（进行时形式，用于 UI spinner 展示）。`summarize_changes()` 函数当前基于 `id` 的 HashMap 对比新旧列表，需改为基于数组索引对比。`TodoItem` 被 TUI 层使用（`rust-agent-tui/src/app/mod.rs` 的 `todo_items` 字段、`rust-agent-tui/src/ui/main_ui.rs` 的渲染逻辑），经代码确认 TUI 层仅访问 `content` 和 `status` 字段，不访问 `id`，因此移除 `id` 不影响 TUI 渲染。本 Task 不依赖其他 Task；Task 5（验收）依赖本 Task 完成。
 
 **涉及文件:**
+
 - 修改: `rust-agent-middlewares/src/tools/todo.rs`
 
 **执行步骤:**
+
 - [ ] 修改 `fn name()` 返回值从 `"todo_write"` 改为 `"TodoWrite"` — 对齐 Claude Code 工具命名
   - 位置: `rust-agent-middlewares/src/tools/todo.rs` → `impl BaseTool for TodoWriteTool` 的 `fn name()` (~L125)
   - 将 `"todo_write"` 改为 `"TodoWrite"`
@@ -301,6 +319,7 @@
   - 移除 `pub id: String` 字段
   - 在 `content` 字段后新增 `pub active_form: Option<String>` 字段（使用 `#[serde(skip_serializing_if = "Option::is_none")]` 避免 JSON 输出中包含 null）
   - 修改后的结构体:
+
     ```rust
     #[derive(Debug, Clone, Serialize, Deserialize)]
     pub struct TodoItem {
@@ -315,17 +334,20 @@
   - 位置: `rust-agent-middlewares/src/tools/todo.rs` → `fn parameters()` (~L133-163)
   - 从 `properties` 中移除 `id` 属性
   - 新增 `activeForm` 属性:
+
     ```json
     "activeForm": {
         "type": "string",
         "description": "Present-tense form of the task description (e.g. 'Running tests'), used for UI spinner display"
     }
     ```
+
   - 从 `required` 数组中移除 `"id"`，保留 `["content", "status"]`
 
 - [ ] 重写 `summarize_changes()` 函数 — 改为基于数组索引对比而非 id HashMap
   - 位置: `rust-agent-middlewares/src/tools/todo.rs` → `fn summarize_changes()` (~L70-121)
   - 将整个函数体替换为基于索引的对比逻辑：
+
     ```rust
     fn summarize_changes(old: &[TodoItem], new: &[TodoItem]) -> String {
         let mut parts: Vec<String> = Vec::new();
@@ -369,6 +391,7 @@
         }
     }
     ```
+
   - 原因: 移除 `id` 后无法用 HashMap 对比，改为按数组索引位置一一对比，语义为"同位置的 item 视为同一任务"
 
 - [ ] 更新 `fn invoke()` 中的错误信息 — 将 `"todo_write:"` 前缀改为 `"TodoWrite:"`
@@ -392,6 +415,7 @@
   - 预期: 所有测试通过
 
 **检查步骤:**
+
 - [ ] 验证工具名返回 `"TodoWrite"`
   - `cargo test -p rust-agent-middlewares --lib -- tools::todo::tests::test_tool_name_is_TodoWrite`
   - 预期: 测试通过
@@ -413,6 +437,7 @@
 ### Task 5: 工具对齐（上）验收
 
 **前置条件:**
+
 - Task 1（Write/Edit/Glob 改名）已完成
 - Task 2（Read 改名 + pages 参数）已完成
 - Task 3（AskUserQuestion 字段对齐）已完成

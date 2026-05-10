@@ -12,12 +12,14 @@ const program = new Command();
 
 program
     .name("peri")
-    .description("Perihelion Rust Agent Framework CLI")
+    .description("Peri Rust Agent Framework CLI")
     .version("0.1.0");
 
 program
     .command("install [package]")
-    .description("Install a package (e.g. 'agent', 'acpx-g', or full tag 'agent-v1.17')")
+    .description(
+        "Install a package (e.g. 'agent', 'acpx-g', or full tag 'agent-v1.17')",
+    )
     .action(install);
 
 program
@@ -28,12 +30,14 @@ program
 
 program
     .command("update [package]", { isDefault: true })
-    .description("Update a package to the latest version (e.g. 'agent', 'acpx-g')")
+    .description(
+        "Update a package to the latest version (e.g. 'agent', 'acpx-g')",
+    )
     .action(update);
 
 program
     .command("add-env")
-    .description("Add Perihelion binary to your PATH (shell config)")
+    .description("Add Peri binary to your PATH (shell config)")
     .action(addEnv);
 
 program

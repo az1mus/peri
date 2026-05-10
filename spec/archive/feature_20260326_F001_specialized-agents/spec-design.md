@@ -2,7 +2,7 @@
 
 ## 需求背景
 
-目前 Perihelion 框架的父 Agent 承担了所有任务（代码探索、网络研究、文件操作等），导致系统提示词过于通用，工具集过宽，执行效率和专注度不足。
+目前 Peri 框架的父 Agent 承担了所有任务（代码探索、网络研究、文件操作等），导致系统提示词过于通用，工具集过宽，执行效率和专注度不足。
 
 通过 SubAgentMiddleware 的 `launch_agent` 工具，父 Agent 可以将专项子任务委派给专门的子 Agent 执行。本 feature 将提供两个开箱即用的专用 Agent 定义：
 
@@ -68,6 +68,7 @@ maxTurns: 30
 5. **输出报告**：结构化输出——目录树、核心模块清单、关键接口定义、数据流描述
 
 **安全约束：**
+
 - 严格禁止写操作（write/edit/folder_operations 均在 disallowedTools）
 - bash 仅用于只读命令，LLM 系统提示词明确声明此约束
 - Explorer 不触发 HITL（只读工具无需审批；bash 在 YOLO 模式下免 HITL，非 YOLO 仍需审批）
@@ -105,9 +106,11 @@ maxTurns: 40
 
 1. **制定策略**：将任务分解为 2-3 个搜索关键词
 2. **搜索引擎查询**：使用 DuckDuckGo HTML 接口（无 API Key 要求）：
+
    ```bash
    curl "https://html.duckduckgo.com/html/?q=QUERY" -A "Mozilla/5.0" -L --max-time 30
    ```
+
    解析返回 HTML，提取标题 + URL 列表
 3. **页面内容抓取**：对相关 URL 执行 curl，用 `sed`/`grep`/`python3 -c` 提取正文
 4. **多页追踪**：识别重要链接，递归抓取（深度 ≤ 2 层，每轮 URL ≤ 5 个）
@@ -115,6 +118,7 @@ maxTurns: 40
 6. **综合输出**：整合所有来源，输出带引用链接的 Markdown 格式报告
 
 **安全约束：**
+
 - 禁止爬取需要登录的页面
 - curl 统一加 `--max-time 30`，防止挂起
 - bash 触发 HITL（非 YOLO 模式），用户可审批每次网络请求

@@ -221,7 +221,7 @@ pub struct HookInput {
 /// Hook 执行结果——对齐 Claude Code src/types/hooks.ts syncHookResponseSchema
 ///
 /// Claude Code 的 hook 输出是扁平 JSON（非 enum），包含多个可选字段。
-/// Perihelion 解析为结构体后转换为内部 Action 枚举。
+/// Peri 解析为结构体后转换为内部 Action 枚举。
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct SyncHookResponse {
     /// 是否继续（默认 true）。false 时阻止 agent 继续执行

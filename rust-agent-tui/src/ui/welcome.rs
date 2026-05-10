@@ -34,7 +34,7 @@ pub(crate) fn render_welcome(f: &mut Frame, app: &App, area: Rect) {
     if narrow {
         // 窄屏：单行文字标题
         lines.push(Line::from(Span::styled(
-            "Perihelion",
+            "Peri",
             Style::default()
                 .fg(theme::ACCENT)
                 .add_modifier(Modifier::BOLD),
@@ -55,7 +55,7 @@ pub(crate) fn render_welcome(f: &mut Frame, app: &App, area: Rect) {
     // ── 副标题 ──────────────────────────────────────────────────────────
     lines.push(Line::from(""));
     lines.push(Line::from(Span::styled(
-        "Perihelion Agent Framework",
+        "Peri Agent Framework",
         Style::default().fg(theme::MUTED),
     )));
 

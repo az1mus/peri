@@ -2,9 +2,10 @@
 
 ## 需求背景
 
-当前 Perihelion 将所有工具（12 个内置 + 3 个 Cron + 1 个 MCP Resource + N 个 MCP 工具）的完整 schema 全部序列化为 `ToolDefinition` 发送给 LLM。每个工具定义（name + description + inputSchema）平均消耗数百 token。
+当前 Peri 将所有工具（12 个内置 + 3 个 Cron + 1 个 MCP Resource + N 个 MCP 工具）的完整 schema 全部序列化为 `ToolDefinition` 发送给 LLM。每个工具定义（name + description + inputSchema）平均消耗数百 token。
 
 随着 MCP 服务器连接数增长，工具数量可能达到数十甚至上百个，产生三个问题：
+
 1. **Token 浪费** — 大量低频工具的 schema 占用上下文窗口，留给实际推理的 token 减少
 2. **模型注意力稀释** — 过多的工具定义干扰模型对核心工具的选择准确性
 3. **Prompt Cache 不稳定** — MCP 服务器连接/断开时工具列表变化，导致缓存失效（特别是 Anthropic prompt cache）
@@ -66,6 +67,7 @@ fn is_deferred_tool(tool_name: &str) -> bool {
 #### 2.1 集成方式：修改 ReActAgent 工具收集逻辑
 
 不新增中间件，而是在 `ReActAgent.execute()` 的工具收集阶段增加过滤逻辑。原因：
+
 - ToolSearch 是核心引擎行为，不属于横切关注点（中间件模式）
 - 需要在 `all_tools` 构建后才能过滤，而中间件的 `collect_tools` 是构建 `all_tools` 的输入
 - 需要将 deferred tools 存入共享索引供 `ExecuteExtraTool` 查找，这个索引需要在执行器层面持有
@@ -238,6 +240,7 @@ pub struct ToolSearchIndex {
 ```
 
 **执行流程**：
+
 1. 从 `ToolSearchIndex` 查找目标工具
 2. 调用目标工具的 `invoke(params)` 方法
 3. 返回结果（与直接调用完全等价）

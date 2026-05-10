@@ -2,7 +2,7 @@
 
 ## 领域综述
 
-MCP（Model Context Protocol）领域负责 Perihelion 与外部 MCP 服务器的集成能力。作为 MCP Client，支持 stdio 和 Streamable HTTP 两种传输协议，将外部服务器的工具和资源动态注入到 ReAct 循环中。
+MCP（Model Context Protocol）领域负责 Peri 与外部 MCP 服务器的集成能力。作为 MCP Client，支持 stdio 和 Streamable HTTP 两种传输协议，将外部服务器的工具和资源动态注入到 ReAct 循环中。
 
 核心职责：
 

@@ -2,7 +2,7 @@
 
 ## 需求背景
 
-Perihelion TUI 当前有 10 个内置命令（`/help`、`/model`、`/login`、`/clear`、`/compact`、`/history`、`/agents`、`/loop`、`/cron`、`/mcp`），而 Claude Code 有 70+ 命令。用户期望对齐 Claude Code 的核心高频命令集，优先覆盖配置/设置类和会话/状态查询类。
+Peri TUI 当前有 10 个内置命令（`/help`、`/model`、`/login`、`/clear`、`/compact`、`/history`、`/agents`、`/loop`、`/cron`、`/mcp`），而 Claude Code 有 70+ 命令。用户期望对齐 Claude Code 的核心高频命令集，优先覆盖配置/设置类和会话/状态查询类。
 
 ## 目标
 
@@ -51,6 +51,7 @@ pub trait Command: Send + Sync {
 当前：精确匹配 `name` → 前缀唯一匹配
 
 扩展为：
+
 1. 精确匹配 `name`
 2. 精确匹配 `aliases` 中任一项
 3. 前缀唯一匹配（同时对 `name` 和所有 `aliases`）
@@ -73,6 +74,7 @@ pub trait Command: Send + Sync {
 | Proactiveness | RadioGroup（low/medium/high） | medium | 主动性级别 |
 
 **数据流：**
+
 - 面板打开时从 `AppConfig` 读取当前值
 - 保存时调用 `App::save_config()` 写入 `settings.json`（使用 `config_path_override` 保证测试隔离）
 - 语言设置影响 TUI 状态栏/提示语的语言选择
@@ -116,11 +118,13 @@ pub trait Command: Send + Sync {
 | 用户全局 | `~/.claude/CLAUDE.md` | 用户级全局配置 |
 
 **操作模式：**
+
 - Browse 模式 ↑↓ 选择文件，Enter 用系统编辑器（`$EDITOR` 或 `vi`）打开文件
 - 底部提示：文件不存在时显示「按 Enter 创建」
 - Esc 关闭面板
 
 **实现要点：**
+
 - 调用 `std::process::Command` 打开外部编辑器，TUI 暂时挂起（恢复 alternate screen）
 - 编辑完成后 TUI 恢复，不需要重新加载（memory 文件在下次 agent 调用时自动读取）
 

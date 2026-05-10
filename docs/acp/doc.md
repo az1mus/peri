@@ -1,7 +1,7 @@
 # Agent Client Protocol (ACP) 技术文档
 
-> SDK 文档：https://agentclientprotocol.com/libraries/rust
-> 协议规范：https://agentclientprotocol.com
+> SDK 文档：<https://agentclientprotocol.com/libraries/rust>
+> 协议规范：<https://agentclientprotocol.com>
 
 ## 1. 概述
 
@@ -477,11 +477,11 @@ agent-client-protocol = { version = "0.11", features = ["unstable"] }
 
 ---
 
-## 10. 与 Perihelion 的映射分析
+## 10. 与 Peri 的映射分析
 
 ### 概念对照
 
-| ACP 概念 | Perihelion 对应 |
+| ACP 概念 | Peri 对应 |
 |----------|----------------|
 | `Client` | `rust-agent-tui`（TUI 应用） |
 | `Agent` | `rust-create-agent`（ReAct Agent） |
@@ -495,7 +495,7 @@ agent-client-protocol = { version = "0.11", features = ["unstable"] }
 
 ### 事件映射
 
-| ACP SessionUpdate | Perihelion AgentEvent |
+| ACP SessionUpdate | Peri AgentEvent |
 |------|------|
 | `agent_message_chunk` | `TextChunk` |
 | `tool_call` / `tool_call_update` | `ToolStart` / `ToolEnd` |
@@ -522,10 +522,10 @@ agent-client-protocol = { version = "0.11", features = ["unstable"] }
 
 ## 参考链接
 
-- SDK 文档：https://agentclientprotocol.com/libraries/rust
-- 协议规范：https://agentclientprotocol.com
-- 完整规范文本：https://agentclientprotocol.com/llms-full.txt
-- Rust SDK 源码：https://github.com/agentclientprotocol/rust-sdk
-- crates.io：https://crates.io/crates/agent-client-protocol
-- JSON Schema：https://github.com/agentclientprotocol/agent-client-protocol/blob/main/schema/schema.json
-- ACP Registry：https://github.com/agentclientprotocol/registry
+- SDK 文档：<https://agentclientprotocol.com/libraries/rust>
+- 协议规范：<https://agentclientprotocol.com>
+- 完整规范文本：<https://agentclientprotocol.com/llms-full.txt>
+- Rust SDK 源码：<https://github.com/agentclientprotocol/rust-sdk>
+- crates.io：<https://crates.io/crates/agent-client-protocol>
+- JSON Schema：<https://github.com/agentclientprotocol/agent-client-protocol/blob/main/schema/schema.json>
+- ACP Registry：<https://github.com/agentclientprotocol/registry>

@@ -227,6 +227,7 @@ fn micro_compact(messages: &mut Vec<BaseMessage>, keep_recent: usize) {
 ```
 
 Micro-compact 特点：
+
 - **不需要 LLM 调用**，纯本地操作
 - 保留最近 N 条消息的工具结果完整内容
 - 仅清除旧的长工具结果（>500 字符）
@@ -325,6 +326,7 @@ pub trait ReactLLM: Send + Sync {
 ### 4.1 为什么 auto-compact 放在 TUI 层而非核心层？
 
 **理由**：
+
 - `ReActAgent::execute()` 是一个同步循环（虽然有 async），在其中途插入"暂停当前执行、调用另一个 LLM、替换消息列表"会显著复杂化控制流
 - TUI 层天然拥有"事件循环"模式——在 `LlmCallEnd` 和下一轮用户输入之间检查阈值是最佳时机
 - CC 的做法也是在 query loop（应用层）触发，而非在底层 LLM 调用中
@@ -333,6 +335,7 @@ pub trait ReactLLM: Send + Sync {
 ### 4.2 为什么使用 API 返回的 usage 而不是自行估算？
 
 **理由**：
+
 - API 返回的 `input_tokens` 精确反映了发送给模型的完整 prompt 大小（含 system、cache、工具定义等）
 - 自行估算需要复制模型的 tokenizer 逻辑，容易产生偏差
 - CC 同样优先使用 API usage，仅在不可用时 fallback 到估算
@@ -342,6 +345,7 @@ pub trait ReactLLM: Send + Sync {
 **考虑**：`TokenTracker` 确实可以独立于 `AgentState` 存在（比如放在 TUI App 中）。
 
 **最终选择放在 AgentState 中**的理由：
+
 - SubAgent 继承 `AgentState`，子 agent 的 token 追踪自然聚合到父级
 - 持久化（ThreadStore）时 token 信息随 thread 一起保存，恢复历史对话时能还原 token 状态
 - 核心层的 `execute()` 可以直接更新，不需要额外的事件回调
@@ -349,6 +353,7 @@ pub trait ReactLLM: Send + Sync {
 ### 4.4 Micro-Compact 的定位
 
 Micro-compact 是 full compact 的轻量级前置防线。它的设计原则：
+
 - **零 API 调用**：纯字符串操作，不消耗 token
 - **可逆**：不删除消息，只替换内容（用户如果需要可以通过 thread 历史恢复）
 - **保守**：仅清除工具结果中的长文本，不触碰 Human/Ai 消息
@@ -371,7 +376,7 @@ Micro-compact 是 full compact 的轻量级前置防线。它的设计原则：
 
 ## 六、与 Claude Code 的差异
 
-| 方面 | Claude Code | Perihelion（本方案） |
+| 方面 | Claude Code | Peri（本方案） |
 |------|------------|---------------------|
 | Token 追踪位置 | 全局 state（TS 单例） | `AgentState.token_tracker`（Rust struct） |
 | Auto-compact 触发 | query loop 中检查 | TUI 事件循环中检查 |

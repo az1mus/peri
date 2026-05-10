@@ -1,4 +1,4 @@
-# Perihelion 项目技术评估报告
+# Peri 项目技术评估报告
 
 **日期**：2025-05-08（2026-05-08 重审更新）
 **评估范围**：全 workspace 6 个 crate
@@ -165,21 +165,21 @@
 
 ### Phase 2 — 重构 ✅ 核心完成
 
-4. ✅ 拆分 event.rs → 独立 handler 模块 + PanelManager 统一路由（1026 行，-59%）
-5. ✅ 提取 PanelManager 统一面板生命周期和互斥（PanelComponent trait + MutexGroup）
-6. ✅ 消除 App God Object → 6 个专职子结构（App 3 字段）
-7. ⚠️ 统一库 crate 错误处理 — AgentError::Other 仍存在但使用受限
-8. ✅ 超长函数从 29 个降至 ~5-8 个
+1. ✅ 拆分 event.rs → 独立 handler 模块 + PanelManager 统一路由（1026 行，-59%）
+2. ✅ 提取 PanelManager 统一面板生命周期和互斥（PanelComponent trait + MutexGroup）
+3. ✅ 消除 App God Object → 6 个专职子结构（App 3 字段）
+4. ⚠️ 统一库 crate 错误处理 — AgentError::Other 仍存在但使用受限
+5. ✅ 超长函数从 29 个降至 ~5-8 个
 
 ### Phase 3 — 优化（下一步）
 
-9. 拆分 AgentEvent 为分类子枚举
-10. 创建核心框架 Facade 层，限制 pub 范围
-11. SubAgent 中间件链参数化（提取 `build_subagent_middlewares()` 消除 3 处重复）
-12. 统一 channel 容量常量管理
-13. Frontmatter 解析提取通用 `parse_frontmatter<T>()`
-14. 系统审查生产代码中 ~80 处 unwrap/expect
-15. 拆分 `next_event()` 为 `handle_key_event()`/`handle_paste_event()`/`handle_mouse_event()`
+1. 拆分 AgentEvent 为分类子枚举
+2. 创建核心框架 Facade 层，限制 pub 范围
+3. SubAgent 中间件链参数化（提取 `build_subagent_middlewares()` 消除 3 处重复）
+4. 统一 channel 容量常量管理
+5. Frontmatter 解析提取通用 `parse_frontmatter<T>()`
+6. 系统审查生产代码中 ~80 处 unwrap/expect
+7. 拆分 `next_event()` 为 `handle_key_event()`/`handle_paste_event()`/`handle_mouse_event()`
 
 ---
 

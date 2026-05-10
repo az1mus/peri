@@ -2,9 +2,9 @@
 
 ## 需求背景
 
-Claude Code 已经建立了完整的插件生态——通过 `.claude-plugin/plugin.json` 清单格式描述插件能力（命令、技能、Agent、MCP 服务器等），通过 marketplace（GitHub 仓库或 URL）分发和发现插件。Perihelion 作为兼容 Claude Code 配置的 Rust Agent 框架，需要能直接读取 `~/.claude/` 下的插件配置和缓存，安装和运行 Claude Code 生态的插件。
+Claude Code 已经建立了完整的插件生态——通过 `.claude-plugin/plugin.json` 清单格式描述插件能力（命令、技能、Agent、MCP 服务器等），通过 marketplace（GitHub 仓库或 URL）分发和发现插件。Peri 作为兼容 Claude Code 配置的 Rust Agent 框架，需要能直接读取 `~/.claude/` 下的插件配置和缓存，安装和运行 Claude Code 生态的插件。
 
-当前差距：Perihelion 已有 Skills、MCP、SubAgent、TUI 命令等能力，但缺少统一的插件发现、安装和加载机制。插件系统将这些能力串联起来，形成"从 marketplace 发现 → 安装到本地 → 加载到 agent"的完整链路。
+当前差距：Peri 已有 Skills、MCP、SubAgent、TUI 命令等能力，但缺少统一的插件发现、安装和加载机制。插件系统将这些能力串联起来，形成"从 marketplace 发现 → 安装到本地 → 加载到 agent"的完整链路。
 
 ## 目标
 

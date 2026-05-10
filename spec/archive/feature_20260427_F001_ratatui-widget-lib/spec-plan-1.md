@@ -20,6 +20,7 @@
 确保构建和测试工具链在当前开发环境中可用，避免后续 Task 因环境问题阻塞。
 
 **执行步骤:**
+
 - [x] 验证全量构建可用
   - `cargo build` 在 workspace 根目录
   - 预期: 所有 5 个 crate 编译成功
@@ -28,6 +29,7 @@
   - 预期: 测试框架正常（允许 1 个已知的多线程运行时失败：`command::loop_cmd::tests::test_loop_cmd_valid_args_submits_message`）
 
 **检查步骤:**
+
 - [x] 构建命令执行成功
   - `cargo build 2>&1 | tail -5`
   - 预期: 输出包含 "Compiling" 和 "Finished"，无 error
@@ -43,6 +45,7 @@
 创建 `perihelion-widgets` crate 的基础结构。本 Task 是整个组件库的地基——后续所有 Task（2-10）都依赖本 Task 创建的 crate 骨架和 Theme trait。Theme trait 仅包含纯 UI 颜色方法，不含业务语义（如工具分级色）。现有 `rust-agent-tui/src/ui/theme.rs` 有 15 个颜色常量，经分析 13 个是纯 UI 概念、2 个是业务别名（TOOL_NAME=SAGE, SUB_AGENT=SAGE）、1 个是业务专用（MODEL_INFO），这些业务常量保留在 TUI 层不迁移。
 
 **涉及文件:**
+
 - 新建: `perihelion-widgets/Cargo.toml`
 - 新建: `perihelion-widgets/src/lib.rs`
 - 新建: `perihelion-widgets/src/theme/mod.rs`
@@ -50,15 +53,17 @@
 - 修改: `Cargo.toml`（~L2，在 members 数组中添加 `perihelion-widgets`）
 
 **执行步骤:**
+
 - [x] 创建 `perihelion-widgets/Cargo.toml`
   - 位置: workspace 根目录下新建
   - 内容:
+
     ```toml
     [package]
     name = "perihelion-widgets"
     version = "0.1.0"
     edition = "2021"
-    description = "Reusable ratatui widget library for Perihelion"
+    description = "Reusable ratatui widget library for Peri"
 
     [dependencies]
     ratatui = { version = ">=0.30", features = ["unstable-rendered-line-info"] }
@@ -69,6 +74,7 @@
     default = []
     markdown = ["pulldown-cmark"]
     ```
+
   - 原因: pulldown-cmark 仅被 MarkdownRenderer 使用，通过 feature gate 按需启用。unicode-width 是 InputState 必需依赖（Task 4 光标定位），不设为 optional
 
 - [x] 在 workspace Cargo.toml 中注册新 crate
@@ -78,6 +84,7 @@
 - [x] 创建 `perihelion-widgets/src/lib.rs`
   - 位置: crate 根模块
   - 内容:
+
     ```rust
     pub mod theme;
 
@@ -88,6 +95,7 @@
 - [x] 创建 `perihelion-widgets/src/theme/mod.rs`
   - 位置: theme 子模块入口
   - 内容:
+
     ```rust
     mod presets;
 
@@ -139,11 +147,13 @@
         fn loading(&self) -> Color;
     }
     ```
+
   - 原因: 13 个方法对应现有 theme.rs 中全部 13 个纯 UI 颜色常量。不含 TOOL_NAME、SUB_AGENT、MODEL_INFO 等业务别名/专用常量
 
 - [x] 创建 `perihelion-widgets/src/theme/presets.rs`
   - 位置: 预设主题实现
   - 内容:
+
     ```rust
     use ratatui::style::Color;
     use super::Theme;
@@ -172,6 +182,7 @@
         fn loading(&self) -> Color { Color::Rgb(34, 211, 238) }     // LOADING #22D3EE
     }
     ```
+
   - 原因: DarkTheme 是零大小类型（ZST），所有色值编译期内联，无运行时开销
 
 - [x] 验证 crate 独立编译
@@ -188,6 +199,7 @@
   - 预期: 所有测试通过
 
 **检查步骤:**
+
 - [x] workspace Cargo.toml 包含新 crate
   - `grep "perihelion-widgets" /Users/konghayao/code/ai/perihelion/Cargo.toml`
   - 预期: 输出包含 `"perihelion-widgets"`
@@ -206,14 +218,17 @@
 实现两个最基础的容器组件。BorderedPanel 封装 TUI 中 8+ 处重复的 `Clear + Block + borders` 模式（popups/hitl.rs、popups/ask_user.rs、popups/hints.rs、popups/setup_wizard.rs、panels/model.rs、panels/agent.rs、panels/relay.rs、panels/thread_browser.rs、panels/cron.rs）。ScrollableArea 封装 6+ 处重复的 `Paragraph + scroll offset + Scrollbar` 模式。ScrollState 内含 ensure_visible 方法，从 `app/mod.rs:ensure_cursor_visible()` 迁移。Task 3 的 ListState<T> 内嵌 ScrollState，依赖本 Task 的 ScrollState 定义。
 
 **涉及文件:**
+
 - 新建: `perihelion-widgets/src/bordered_panel.rs`
 - 新建: `perihelion-widgets/src/scrollable.rs`
 - 修改: `perihelion-widgets/src/lib.rs`（添加 mod 声明和重导出）
 
 **执行步骤:**
+
 - [x] 创建 `perihelion-widgets/src/bordered_panel.rs`
   - 位置: crate 根目录
   - 内容:
+
     ```rust
     use ratatui::{
         layout::Rect,
@@ -257,11 +272,13 @@
         }
     }
     ```
+
   - 原因: 将 `f.render_widget(Clear, area)` + `Block::default().title(...).borders(Borders::ALL).border_style(...)` + `block.inner(area)` 三步封装为一步调用
 
 - [x] 创建 `perihelion-widgets/src/scrollable.rs`
   - 位置: crate 根目录
   - 内容:
+
     ```rust
     use ratatui::{
         layout::Rect,
@@ -380,11 +397,13 @@
         }
     }
     ```
+
   - 原因: ScrollState 的 ensure_visible 方法合并了 TUI 层 `ensure_cursor_visible()` 的逻辑；ScrollableArea 封装了 Paragraph + Scrollbar + offset clamp 的完整渲染逻辑
 
 - [x] 更新 `perihelion-widgets/src/lib.rs` 添加 mod 声明和重导出
   - 位置: `perihelion-widgets/src/lib.rs`
   - 将现有内容替换为:
+
     ```rust
     pub mod bordered_panel;
     pub mod scrollable;
@@ -395,6 +414,7 @@
     pub use scrollable::{ScrollState, ScrollableArea};
     pub use theme::{DarkTheme, Theme};
     ```
+
   - 原因: 添加 bordered_panel 和 scrollable 模块声明及重导出
 
 - [x] 为 BorderedPanel 编写单元测试
@@ -418,6 +438,7 @@
   - 预期: 所有测试通过
 
 **检查步骤:**
+
 - [x] bordered_panel.rs 和 scrollable.rs 存在且可编译
   - `cargo build -p perihelion-widgets 2>&1 | tail -3`
   - 预期: 输出包含 "Finished"，无 error
@@ -436,13 +457,16 @@
 实现泛型列表选择组件，封装 TUI 中 5+ 处重复的光标管理 + 滚动联动 + 列表渲染模式。ListState<T> 内嵌 Task 2 创建的 ScrollState，统一管理 items、cursor、scroll_offset。SelectableList 通过闭包自定义每项渲染（支持"特殊首项"模式——cursor 0 是 "New Thread"/"No Agent" 等特殊选项）。本 Task 是 plan-2 中 Task 8（TUI 集成替换 agent_panel、thread_browser、cron_panel 列表）的前置依赖。
 
 **涉及文件:**
+
 - 新建: `perihelion-widgets/src/list.rs`
 - 修改: `perihelion-widgets/src/lib.rs`（添加 `pub mod list;` 和 `pub use list::{ListState, SelectableList};`）
 
 **执行步骤:**
+
 - [x] 创建 `perihelion-widgets/src/list.rs`
   - 位置: crate 根目录
   - 内容:
+
     ```rust
     use ratatui::{
         layout::Rect,
@@ -577,6 +601,7 @@
         }
     }
     ```
+
   - 原因: ListState<T> 内嵌 Task 2 的 ScrollState，统一 cursor + scroll 管理。SelectableList 通过闭包实现渲染灵活性。StatefulWidget 直接操作 Buffer，cursor_marker 自动在行首插入。
 
 - [x] 更新 `perihelion-widgets/src/lib.rs` 添加 list 模块
@@ -597,6 +622,7 @@
   - 预期: 所有测试通过
 
 **检查步骤:**
+
 - [x] list.rs 存在且可编译
   - `cargo build -p perihelion-widgets 2>&1 | tail -3`
   - 预期: 输出包含 "Finished"，无 error
@@ -608,4 +634,3 @@
   - 预期: 所有测试通过
 
 ---
-

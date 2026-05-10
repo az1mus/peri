@@ -1,6 +1,6 @@
 # peri-cli
 
-CLI tool for installing and managing the Perihelion Rust Agent Framework.
+CLI tool for installing and managing the Peri Rust Agent Framework.
 
 ## Quick Start
 

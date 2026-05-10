@@ -827,8 +827,8 @@ mod tests {
         let snap = handle.snapshot();
         let snap_text = snap.join("\n");
         assert!(
-            snap_text.contains("Perihelion"),
-            "Welcome Card 应包含 'Perihelion'，实际:\n{}",
+            snap_text.contains("Peri"),
+            "Welcome Card 应包含 'Peri'，实际:\n{}",
             snap_text
         );
         assert!(
@@ -890,8 +890,8 @@ mod tests {
         );
         // 但仍应包含文字版标题
         assert!(
-            snap_text.contains("Perihelion"),
-            "窄屏应显示文字版标题 'Perihelion'，实际:\n{}",
+            snap_text.contains("Peri"),
+            "窄屏应显示文字版标题 'Peri'，实际:\n{}",
             snap_text
         );
     }

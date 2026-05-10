@@ -5,6 +5,7 @@
 Agent 领域是整个框架的核心，负责 ReAct 推理循环的执行、消息系统管理、工具抽象与执行、LLM 适配以及线程会话的持久化。
 
 核心职责包括：
+
 - ReAct 执行器：管理推理循环、工具分发、事件发射
 - 消息类型系统：`BaseMessage`（Human/Ai/System/Tool，每条含 UUID v7 MessageId）、`ContentBlock` 完整变体、`MessageContent`
 - LLM 适配层：OpenAI / Anthropic 双适配，`MessageAdapter` trait 支持双向格式转换，序列化时跳过 id 字段；LLM Factory 签名 `Fn(Option<&str>)` 支持子 Agent 独立模型
@@ -87,8 +88,10 @@ launch_agent 工具调用
 ## Feature 附录
 
 ### 20260321_F001_subagents-execution
+
 **摘要:** launch_agent 工具支持子 Agent 委派，防递归，工具过滤
 **关键决策:**
+
 - 工具过滤: tools 空→继承全部（除自身）；tools 有值→白名单；disallowedTools→黑名单
 - 防递归: launch_agent 始终从子 agent 工具集中排除
 - LLM 工厂: `Arc<dyn Fn() -> Box<dyn ReactLLM>>`，每次创建独立实例
@@ -97,8 +100,10 @@ launch_agent 工具调用
 **归档日期:** 2026-03-24
 
 ### 20260322_F001_agent-storage-refactor
+
 **摘要:** SQLite WAL 持久化替代 JSONL，MessageAdapter 双向转换
 **关键决策:**
+
 - SQLite WAL 模式: journal_mode=WAL, synchronous=NORMAL，并发读写安全
 - 串行写: `parking_lot::Mutex<Connection>` 持锁执行所有写操作
 - 幂等追加: INSERT OR IGNORE，基于 seq 唯一约束，重复不报错
@@ -107,8 +112,10 @@ launch_agent 工具调用
 **归档日期:** 2026-03-24
 
 ### feature_20260325_F001_subagent-middleware-injection
+
 **摘要:** 子 Agent 补全三个缺失中间件使上下文与父 Agent 一致
 **关键决策:**
+
 - 注入顺序：AgentsMdMiddleware → SkillsMiddleware → TodoMiddleware → PrependSystemMiddleware
 - TodoMiddleware 的 todo_rx 立即丢弃，send 失败静默忽略（子 Agent 不通知 TUI）
 - 有意省略：HitlMiddleware（子 Agent 自动执行）、SubAgentMiddleware（防递归）、AskUserTool
@@ -116,8 +123,10 @@ launch_agent 工具调用
 **归档日期:** 2026-03-27
 
 ### feature_20260326_F001_specialized-agents
+
 **摘要:** 预置 Explorer 和 WebResearcher 两个声明式专用 Agent
 **关键决策:**
+
 - 纯配置文件实现，无 Rust 代码改动
 - explorer：只读工具（read_file/glob_files/search_files_rg/bash），disallowedTools 覆盖所有写操作
 - web-researcher：bash + write_file + read_file，中间结果落盘 /tmp/research_*.md
@@ -126,8 +135,10 @@ launch_agent 工具调用
 **归档日期:** 2026-03-27
 
 ### feature_20260326_F005_subagent-skill-preload
+
 **摘要:** Agent 定义 frontmatter 声明 skills，子 Agent 启动时自动全文预加载
 **关键决策:**
+
 - AgentFrontmatter.skills: Vec<String>，默认空
 - SkillPreloadMiddleware：before_agent 注入 fake read_file ToolUse + ToolResult 消息对
 - fake ID 格式：skill_preload_{index}，不依赖 UUID
@@ -136,8 +147,10 @@ launch_agent 工具调用
 **归档日期:** 2026-03-27
 
 ### feature_20260326_F006_message-uuid-v7
+
 **摘要:** BaseMessage 四变体增加 UUID v7 全局唯一 ID
 **关键决策:**
+
 - MessageId(uuid::Uuid)，Default::default() 自动生成新 ID
 - 所有构造器（human/ai/system/tool_result 等）自动填充 id
 - Provider 适配层序列化时跳过 id 字段（LLM 不需要）
@@ -146,8 +159,10 @@ launch_agent 工具调用
 **归档日期:** 2026-03-27
 
 ### feature_20260328_F001_ask-user-question-align
+
 **摘要:** ask_user 工具全面对齐 Claude AskUserQuestion 接口规范
 **关键决策:**
+
 - 工具名: ask_user → ask_user_question
 - 顶层结构改为 questions 数组（1-4 个）；新增 header 字段（≤12字短标签）
 - QuestionOption 新增 description 字段；移除 allow_custom_input/placeholder，始终允许自定义输入
@@ -156,8 +171,10 @@ launch_agent 工具调用
 **归档日期:** 2026-03-28
 
 ### feature_20260327_M3_system-prompt
+
 **摘要:** with_system_prompt() 方法消除 PrependSystemMiddleware 的注册顺序约束
 **关键决策:**
+
 - ReActAgent 新增 system_prompt: Option<String> 字段和 with_system_prompt() builder
 - execute() 在 run_before_agent() 之后固定 prepend，不受中间件注册顺序影响
 - 主 Agent 调用方改用 with_system_prompt()；PrependSystemMiddleware 保留（子 agent 动态场景仍可用）
@@ -165,8 +182,10 @@ launch_agent 工具调用
 **归档日期:** 2026-03-28
 
 ### feature_20260327_H3_interaction-unify
+
 **摘要:** 提取 UserInteractionBroker trait 统一 HITL 和 AskUser 交互机制
 **关键决策:**
+
 - 新建 rust-create-agent/src/interaction/mod.rs：UserInteractionBroker trait + InteractionContext（Approval/Questions）
 - HITL 和 AskUser 中间件均通过 broker.request() 等待响应，单 channel 替代两套
 - TUI TuiInteractionBroker 实现；relay 协议从 4 条消息合并为 2 条（InteractionRequest/InteractionResponse）
@@ -175,8 +194,10 @@ launch_agent 工具调用
 **归档日期:** 2026-03-28
 
 ### feature_20260326_F009_relay-message-id-propagation
+
 **摘要:** TextChunk/ToolStart/ToolEnd 事件携带 message_id 支持 Web 前端 update-in-place
 **关键决策:**
+
 - ExecutorEvent::TextChunk 改为结构体变体 { message_id, chunk }
 - ExecutorEvent::ToolStart/ToolEnd 新增 message_id 字段
 - TUI agent.rs 用 `..` 解构忽略 message_id，TUI AgentEvent 枚举不变
@@ -185,8 +206,10 @@ launch_agent 工具调用
 **归档日期:** 2026-03-27
 
 ### feature_20260330_F003_cron-loop-command
+
 **摘要:** /loop /cron 定时任务系统，cron 表达式注册管理
 **关键决策:**
+
 - CronMiddleware 提供 cron_register/cron_list/cron_remove 三个工具供 AI 使用
 - croner 2 crate 解析 cron 表达式并计算下次触发时间
 - 内存任务表上限 20 条，TUI 重启后清空
@@ -196,8 +219,10 @@ launch_agent 工具调用
 **归档日期:** 2026-04-27
 
 ### feature_20260329_F005_legacy-cleanup
+
 **摘要:** Agent trait 层级清理与废弃 API 移除
 **关键决策:**
+
 - ReactLLM trait 移除废弃方法（generate_reasoning），统一为 generate() 接口
 - 废弃 trait 和方法标记 #[deprecated]，保留编译兼容
 - 清理未使用的泛型参数和冗余类型别名
@@ -206,8 +231,10 @@ launch_agent 工具调用
 **归档日期:** 2026-04-27
 
 ### feature_20260329_F002_subagent-model-switch
+
 **摘要:** 子 Agent 支持独立模型配置，LLM Factory 签名升级
 **关键决策:**
+
 - LLM Factory 签名升级为 `Fn(Option<&str>)`，参数传递子 Agent 模型标识
 - agent.md frontmatter 新增 model 字段（sonnet/opus/haiku/inherit）
 - inherit（默认）继承父 Agent 模型，其他值使用指定别名
@@ -217,8 +244,10 @@ launch_agent 工具调用
 **归档日期:** 2026-04-27
 
 ### feature_20260503_F003_background-agent
+
 **摘要:** Agent 工具支持后台执行，主 agent 不阻塞，完成后通知注入
 **关键决策:**
+
 - run_in_background 参数触发 invoke_background()，不 await 子 agent
 - BackgroundTaskRegistry 管理最多 3 并发后台任务
 - mpsc::unbounded_channel 通知，ReAct 循环末尾 try_recv 消费
@@ -230,8 +259,10 @@ launch_agent 工具调用
 **归档日期:** 2026-05-04
 
 ### feature_20260503_F002_multi-agent-design
+
 **摘要:** Fork 路径继承父 agent 上下文 + Agent prompt 指导扩写
 **关键决策:**
+
 - fork: true 触发 Fork 路径，子 agent 继承父 agent 完整消息历史 + system prompt + 工具集
 - Fork 不读 agent 定义文件（subagent_type 参数被忽略）
 - 继承实现：parent_messages.read().clone() 传递给子 agent state
@@ -241,12 +272,14 @@ launch_agent 工具调用
 **归档日期:** 2026-05-04
 
 ### feature_20260430_F001_align-claude-code-tools
+
 **摘要:** 10 个工具名称和参数结构完全对齐 Claude Code
 **关键决策:**
+
 - 工具名完全对齐：read_file→Read、write_file→Write、edit_file→Edit、glob_files→Glob、search_files_rg→Grep、launch_agent→Agent
 - Grep 重大重构：args 数组→结构化字段（pattern/path/glob/type/output_mode/-i/-C/-n 等）
 - Agent 对齐：prompt/description 模式，subagent_type/fork/run_in_background 参数
-- folder_operations 保留为 Perihelion 扩展工具
+- folder_operations 保留为 Peri 扩展工具
 - Read 新增 pages 参数（PDF 页范围）
 **归档:** [链接](../../archive/feature_20260430_F001_align-claude-code-tools/)
 **归档日期:** 2026-05-04
@@ -254,6 +287,7 @@ launch_agent 工具调用
 ---
 
 ## 相关 Feature
+
 - → [relay-server.md#feature_20260326_F009_relay-message-id-propagation](./relay-server.md) — message_id 透传到 Web 前端
 - → [langfuse.md#feature_20260325_F003_langfuse-observation-types](./langfuse.md#feature_20260325_F003_langfuse-observation-types) — Langfuse 观测依赖 AgentEvent LlmCallStart/End 钩子
 - → [tui.md#feature_20260328_F003_test-coverage-improvement](./tui.md#feature_20260328_F003_test-coverage-improvement) — ask_user_tool 10 个单元测试（MockBroker 参数解析和返回格式）

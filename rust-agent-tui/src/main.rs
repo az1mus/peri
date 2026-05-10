@@ -19,7 +19,7 @@ use rust_agent_tui::ui;
 // ─── CLI 定义 ──────────────────────────────────────────────────────────────
 
 #[derive(Parser)]
-#[command(name = "peri", version, about = "Perihelion AI Agent")]
+#[command(name = "peri", version, about = "Peri AI Agent")]
 struct Cli {
     /// 向后兼容，无操作（YOLO 已是默认行为）
     #[arg(short = 'y', long = "yolo")]

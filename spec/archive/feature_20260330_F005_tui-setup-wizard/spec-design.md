@@ -2,7 +2,7 @@
 
 ## 需求背景
 
-用户首次安装 Perihelion 后，需要手动编辑 `~/.peri/settings.json` 或设置环境变量来配置 Provider、API Key 和模型别名，门槛较高。缺少引导流程导致新用户启动 TUI 后无法立即使用。
+用户首次安装 Peri 后，需要手动编辑 `~/.peri/settings.json` 或设置环境变量来配置 Provider、API Key 和模型别名，门槛较高。缺少引导流程导致新用户启动 TUI 后无法立即使用。
 
 ## 目标
 
@@ -60,7 +60,7 @@ Step 3: 模型别名配置（opus / sonnet / haiku）
 
 **UI 元素**：
 
-- 标题：`── Perihelion Setup ── Step 1/3: Provider`
+- 标题：`── Peri Setup ── Step 1/3: Provider`
 - Provider 类型下拉：`Anthropic` / `OpenAI Compatible`（↑↓ 选择，默认 Anthropic）
 - Provider ID 输入框（默认 `anthropic` / `openai`，可自定义）
 - Base URL 输入框：

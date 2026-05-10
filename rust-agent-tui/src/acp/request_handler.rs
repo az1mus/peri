@@ -16,7 +16,7 @@ pub async fn handle_initialize(
     caps.session_capabilities.resume = Some(Default::default());
 
     let agent_info =
-        Implementation::new("perihelion", env!("CARGO_PKG_VERSION")).title("Perihelion Agent");
+        Implementation::new("perihelion", env!("CARGO_PKG_VERSION")).title("Peri Agent");
 
     let response = InitializeResponse::new(req.protocol_version)
         .agent_capabilities(caps)

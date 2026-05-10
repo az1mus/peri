@@ -58,7 +58,7 @@
 |------|------|------|
 | DIFF_ADD | `#6EB56A` | 绿色：`+` 添加行 |
 | DIFF_REMOVE | `#CC463E` | 红色：`-` 删除行 |
-| DIFF_HUNK | `Cyan` | 青色：`@@ ` 上下文标记行 |
+| DIFF_HUNK | `Cyan` | 青色：`@@` 上下文标记行 |
 
 ## Markdown 渲染
 
@@ -78,7 +78,7 @@
 | 加粗 | BOLD 修饰 | |
 | 斜体 | ITALIC 修饰 | |
 
-当 AI 回复内容被检测为 diff 格式时（前 5 行含 `@@ ` 或 `+++`），自动切换 diff 着色覆盖 markdown 渲染。
+当 AI 回复内容被检测为 diff 格式时（前 5 行含 `@@` 或 `+++`），自动切换 diff 着色覆盖 markdown 渲染。
 
 ## 消息流
 
@@ -89,7 +89,7 @@
 | 类型 | 前缀 | 前缀色 | 说明 |
 |------|------|--------|------|
 | 用户消息 | `❯` | ACCENT + BOLD | USER_BG 底色，所有行带底色 |
-| AI 回复 | `●` | TEXT (纯白) | 首行文本合并到 `● ` 后，支持 markdown 渲染 |
+| AI 回复 | `●` | TEXT (纯白) | 首行文本合并到 `●` 后，支持 markdown 渲染 |
 | 思考 (Reasoning) | — | — | 不在消息流中渲染，完全隐藏 |
 | 工具调用 | `⏺` | SAGE (绿) | 工具名 TEXT + BOLD，参数 DIM `(...)` |
 | 工具聚合组 | `⏺` | SAGE (绿) 前缀 + MUTED 汇总文字 | 仅一行汇总文本，不可展开 |
@@ -114,7 +114,7 @@
 | Completed | `⏺` | SAGE | TEXT + BOLD |
 | Failed | `✗` | ERROR | TEXT + BOLD |
 
-工具结果行格式：`  ⎿ ` 前缀（DIM 色）+ 内容（MUTED 色或 ERROR 色）。错误折叠时显示 error_summary（最多 400 Unicode 字符，DIM `⎿` 前缀）。
+工具结果行格式：` ⎿ ` 前缀（DIM 色）+ 内容（MUTED 色或 ERROR 色）。错误折叠时显示 error_summary（最多 400 Unicode 字符，DIM `⎿` 前缀）。
 
 ### AskUserQuestion 渲染
 
@@ -127,7 +127,7 @@
 ```
 
 - 标题行：`⏺` (SAGE) + 标题文字 (TEXT)
-- 结果行：`⎿ ` (DIM) + `· ` (DIM) + `header → answer` (MUTED)
+- 结果行：`⎿` (DIM) + `·` (DIM) + `header → answer` (MUTED)
 - 解析工具输出 `[问: H]\n回答: V` 格式，重新格式化为 `H → V`
 - 错误态：指示器和标题使用 ERROR 色
 
@@ -149,8 +149,8 @@ read_file、search_files_rg、glob_files 等只读工具自动聚合：
 
 ## SubAgent 渲染
 
-- 折叠：`● agent_id`（SAGE + BOLD）+ `  task_preview…`（MUTED，截断 50 字符）
-- 展开：名称 + 任务描述 + 缩进 2 空格的嵌套消息 + `── 执行结果 ──`（DIM）+ 结果行 `  │ `（MUTED，最多 20 行，超长截断 80 字符 + `…`）
+- 折叠：`● agent_id`（SAGE + BOLD）+ `task_preview…`（MUTED，截断 50 字符）
+- 展开：名称 + 任务描述 + 缩进 2 空格的嵌套消息 + `── 执行结果 ──`（DIM）+ 结果行 ` │ `（MUTED，最多 20 行，超长截断 80 字符 + `…`）
 - 错误态：前缀和名称使用 ERROR 色，显示 error_summary
 
 ## Welcome Card
@@ -160,15 +160,15 @@ read_file、search_files_rg、glob_files 等只读工具自动聚合：
 | 区域 | 样式 |
 |------|------|
 | ASCII Art Logo (>=50 cols) | ACCENT + BOLD，6 行 `███╗` 风格 |
-| 窄屏标题 (<50 cols) | ACCENT + BOLD `Perihelion` |
-| 副标题 | MUTED `Perihelion Agent Framework` |
+| 窄屏标题 (<50 cols) | ACCENT + BOLD `Peri` |
+| 副标题 | MUTED `Peri Agent Framework` |
 | 分隔线 | DIM `────── What can I do? ──────` |
 | 功能亮点 | ACCENT ` • ` + TEXT 内容 |
 | 命令提示 | WARNING `/model` 等 + MUTED 间距 |
 | 首次引导（无 Provider 时） | WARNING ` ▶ ` + BOLD + TEXT `/login` |
 | 快捷键提示 | DIM 统一显示 |
 | Provider/模型信息 | ACCENT ` ⚡ ` + TEXT |
-| Skills 计数 | WARNING ` #` + TEXT |
+| Skills 计数 | WARNING `#` + TEXT |
 
 ## Spinner
 
@@ -181,7 +181,7 @@ read_file、search_files_rg、glob_files 等只读工具自动聚合：
 
 动画帧：16 个 Unicode 符号循环（`✳✴✵✶✷✸✹✺✻✼❃❊…`），每 200ms 推进一帧。
 Verb 列表：128 个中文烹饪/动作动词随机选择。
-Spinner 下方附加 Tip 行：`  ⎿  Tip: ...`（MUTED 色）。
+Spinner 下方附加 Tip 行：`⎿  Tip: ...`（MUTED 色）。
 
 ## Todo 列表
 
@@ -239,10 +239,10 @@ Spinner 下方附加 Tip 行：`  ⎿  Tip: ...`（MUTED 色）。
 | ` │ ` 分隔符 | MUTED | 始终 |
 | `📁 cwd` | MUTED | 始终 |
 | 模型名 | MODEL_INFO，切换后 3 秒 BOLD + SLOW_BLINK | 始终 |
-| ` │ ctx: X% (XK/XK)` | SAGE(<70%) / WARNING(70-85%) / ERROR(>=85%) | 有上下文数据时 |
-| ` │ ⟳ 重试 N/M (Xs)` | WARNING | 重试中 |
-| ` │ MCP (N/M)...` | MUTED(初始化中) / SAGE(ready, 3秒) / ERROR(failed) | MCP 有配置时 |
-| ` │ ⏱ Xm Xs` | MUTED | 仅 loading 时 |
+| `│ ctx: X% (XK/XK)` | SAGE(<70%) / WARNING(70-85%) / ERROR(>=85%) | 有上下文数据时 |
+| `│ ⟳ 重试 N/M (Xs)` | WARNING | 重试中 |
+| `│ MCP (N/M)...` | MUTED(初始化中) / SAGE(ready, 3秒) / ERROR(failed) | MCP 有配置时 |
+| `│ ⏱ Xm Xs` | MUTED | 仅 loading 时 |
 
 ### 第二行
 
@@ -345,6 +345,7 @@ Spinner 下方附加 Tip 行：`  ⎿  Tip: ...`（MUTED 色）。
 ### /memory 面板
 
 每行格式：`❯ [✓] label    ...path`
+
 - 存在：`✓` SAGE；不存在：`✗` MUTED
 - 不存在 + 光标行：额外提示 `按 Enter 创建并编辑`（MUTED）
 
@@ -406,7 +407,7 @@ Spinner 下方附加 Tip 行：`  ⎿  Tip: ...`（MUTED 色）。
 |--------|---------|
 | BorderedPanel | TOP+BOTTOM 边框，标题居中 |
 | ScrollableArea | 右侧滚动条 MUTED 色 |
-| SelectableList | `▶ ` 光标标记，2 空格缩进 |
+| SelectableList | `▶` 光标标记，2 空格缩进 |
 | InputField | `Label  Value█` 模式，2 空格缩进 |
 | CheckboxGroup | `✓` 选中 / `✗` 未选中 |
 | RadioGroup | `●` 选中 / `○` 未选中 |
