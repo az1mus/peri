@@ -1016,6 +1016,19 @@ impl App {
             .push(event);
     }
 
+    /// 强制从 pipeline 规范状态重建 view_messages 并发送 RenderEvent。
+    /// 用于 headless 测试：确保流式缓冲区内容（throttle 未触发的 chunk）也被渲染。
+    pub fn flush_rebuild(&mut self) {
+        let prefix_len = self.session_mgr.sessions[self.session_mgr.active]
+            .messages
+            .round_start_vm_idx;
+        let action = self.session_mgr.sessions[self.session_mgr.active]
+            .messages
+            .pipeline
+            .build_rebuild_all(prefix_len);
+        self.apply_pipeline_action(action);
+    }
+
     /// 批量处理队列中所有待处理事件，复用 handle_agent_event 逻辑
     pub fn process_pending_events(&mut self) {
         let events: Vec<AgentEvent> = std::mem::take(

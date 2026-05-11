@@ -4,14 +4,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 项目概述
 
-Rust Agent 框架，包含 **6 个 Workspace Crate**：
+Rust Agent 框架，包含 **7 个 Workspace Crate** 和 **1 个独立的 Node.js CLI**：
 
 - **`rust-create-agent`**：核心框架——ReAct 循环执行器、Middleware trait、LLM 适配器、工具系统、线程持久化（SQLite）、遥测（OTel）
-- **`rust-agent-middlewares`**：中间件实现（文件系统、终端、HITL、SubAgent、Skills、Todo、Cron、MCP 等）
+- **`rust-agent-middlewares`**：中间件实现（文件系统、终端、HITL、SubAgent、Skills、Todo、Cron、MCP、Hooks、Plugin、LSP 等）
 - **`perihelion-widgets`**：独立 widget crate（BorderedPanel/ScrollableArea/SelectableList 等 11 组件），零内部依赖，仅依赖 ratatui + pulldown-cmark
 - **`rust-agent-tui`**：交互式 TUI 应用，基于 ratatui
 - **`langfuse-client`**：Langfuse 遥测客户端
 - **`acpx-g`**：DAG workflow engine——YAML 定义工作流、Web API、SQLite 持久化
+- **`perihelion-lsp`**：LSP 客户端库，被 `rust-agent-middlewares` 的 LSP 中间件使用
+- **`peri-cli`**（Node.js）：`peri install/list/update/uninstall/clean` 包管理 CLI
 
 核心价值：高兼容（复用 `.claude/` 配置零迁移）、可插拔（中间件模式按需组合）、生产可用（异步+OTel 追踪）。
 
@@ -35,7 +37,7 @@ lefthook run pre-commit              # 手动运行 pre-commit（fmt/check/clipp
 ```
 rust-create-agent (核心框架，零内部依赖)
     ↑
-rust-agent-middlewares (中间件实现)
+rust-agent-middlewares (中间件实现，依赖 rust-create-agent + perihelion-lsp)
     ↑
 perihelion-widgets (零内部依赖，仅依赖 ratatui + pulldown-cmark)
     ↑
@@ -43,6 +45,9 @@ rust-agent-tui (TUI 应用，依赖 widgets + middlewares)
 
 langfuse-client (遥测客户端，独立)
 acpx-g (DAG workflow engine，独立)
+perihelion-lsp (LSP 客户端库，独立，被 middlewares 使用)
+
+peri-cli (Node.js 包管理 CLI，独立)
 ```
 
 ## 数据流
@@ -70,15 +75,15 @@ acpx-g (DAG workflow engine，独立)
 
 **[TRAP]** DeepSeek 错误 `unknown variant 'thinking', expected 'text'`：把 `Reasoning` block 序列化为 content 数组中的 `{"type":"thinking"}` 发给了不支持的 provider。**[TRAP]** DeepSeek 错误 `reasoning_content must be passed back`：从 content 中过滤了 `Reasoning` 但没作为顶层字段回传。两个陷阱互相关联，不能只修一个。
 
-## 消息流式渲染管线
+## 消息渲染管线
 
-### 全局架构：三层状态 + 双路径转换
+### 全局架构：统一 RebuildAll
 
 ```
-┌──────────────┐    AgentEvent     ┌──────────────────┐   PipelineAction   ┌─────────────┐   RenderEvent   ┌──────────────┐
-│  ReAct Loop   │ ───────────────→ │  MessagePipeline  │ ─────────────────→ │  agent_ops   │ ─────────────→ │ RenderThread │
-│ (rust-create- │   mpsc(256)      │  (消息状态管理)   │                    │ (桥接层)      │   unbounded     │ (独立渲染线程)│
-│   agent)      │                  │  message_pipeline │                    │               │                  │ render_thread│
+┌──────────────┐    AgentEvent     ┌──────────────────┐                    ┌─────────────┐   RenderEvent   ┌──────────────┐
+│  ReAct Loop   │ ───────────────→ │  MessagePipeline  │  handle_event()   │  agent_ops   │ ─────────────→ │ RenderThread │
+│ (rust-create- │   mpsc(256)      │  (规范状态管理)   │ ──── returns ───→ │ (桥接层)      │   unbounded     │ (独立渲染线程)│
+│   agent)      │                  │  message_pipeline │    None           │               │                  │ render_thread│
 └──────────────┘                  └──────────────────┘                    └─────────────┘                  └──────┬───────┘
                                                                                                                │
                                                                                                     RenderCache(RwLock)
@@ -86,35 +91,30 @@ acpx-g (DAG workflow engine，独立)
                                                                                                     terminal.draw()
 ```
 
-**两条路径共享同一转换函数**：
+**核心原则**：所有消息更新（流式文本、工具事件、SubAgent、Done/Interrupted）都通过 `RebuildAll` 触发消息流重构。没有增量路径——`handle_event()` 只更新 pipeline 内部状态，返回 `PipelineAction::None`；`agent_ops` 在非流式事件后立即调用 `request_rebuild()`，流式文本通过 100ms 节流 `check_throttle()` 触发。
 
-| 路径 | 场景 | 入口 |
-|------|------|------|
-| 流式路径 | LLM 实时输出 | AgentEvent → 增量更新 → reconcile_tail() → messages_to_view_models() |
-| 恢复路径 | 历史加载 | BaseMessage[] → messages_to_view_models() → LoadHistory |
-
-核心转换函数 `messages_to_view_models(base_messages, cwd)`（`message_pipeline.rs:607`）是**唯一**的 BaseMessage → MessageViewModel 转换入口，流式 reconcile 和历史恢复都经过它，保证最终显示一致。
+**统一转换函数**：`messages_to_view_models(base_messages, cwd)`（`message_pipeline.rs`）是**唯一**的 BaseMessage → MessageViewModel 转换入口，`build_tail_vms()` 的 reconcile 路径和历史恢复都经过它，保证最终显示一致。
 
 ### 第一层：核心事件（AgentEvent）
 
 **核心层**（`rust-create-agent/src/agent/events.rs`）发射事件，TUI 层（`rust-agent-tui/src/app/events.rs`）定义扩展变体：
 
-| 核心事件 | 含义 | Pipeline 处理 |
-|----------|------|---------------|
-| `AssistantChunk(chunk)` | LLM 流式文本片段 | → `AppendChunk`（直通渲染层优化）或 SubAgent 内部路由 |
-| `AiReasoning(text)` | 思维链/推理内容 | → 仅缓冲，不触发 UI 更新（推理内容不实时显示） |
-| `ToolStart { id, name, input }` | 工具调用开始 | → finalize 当前 AI → `AddMessage(ToolBlock/SubAgentGroup)` |
-| `ToolEnd { id, output, is_error }` | 工具调用结束 | → `UpdateToolResult`（按 id 精确定位，支持并行） |
-| `StateSnapshot(msgs)` | 完整消息快照 | → 覆盖 `completed`，清除流式缓冲 |
-| `SubAgentStart/End` | 子 agent 生命周期 | → 路由进 SubAgentGroup VM 的 recent_messages 滑动窗口 |
+| 核心事件 | 含义 | Pipeline 内部操作 | RebuildAll 触发 |
+|----------|------|-------------------|-----------------|
+| `AssistantChunk(chunk)` | LLM 流式文本片段 | `push_chunk()` / SubAgent 内部路由 + arm throttle | `check_throttle()`（100ms 节流） |
+| `AiReasoning(text)` | 思维链/推理内容 | `push_reasoning()` / SubAgent 推理更新 + arm throttle | `check_throttle()`（100ms 节流） |
+| `ToolStart { id, name, input }` | 工具调用开始 | `finalize_current_ai()` + `pending_tools` 插入 | 立即 `request_rebuild()` |
+| `ToolEnd { id, output, is_error }` | 工具调用结束 | `pending_tools` 移除 + `completed_tools` 插入 | 立即 `request_rebuild()` |
+| `StateSnapshot(msgs)` | 完整消息快照 | `set_completed()` + 清除流式缓冲/pending/completed_tools | 立即 `request_rebuild()` |
+| `SubAgentStart/End` | 子 agent 生命周期 | 委托 `tool_start_internal`/`tool_end_internal` | 立即 `request_rebuild()` |
 
 **TUI 扩展事件**（Pipeline 返回 `None`，由 `agent_ops` 直接处理）：`Done`、`Error`、`Interrupted`、`CompactDone/Error`、`TokenUsageUpdate`、`InteractionRequest`、`TodoUpdate`、`LlmRetrying`、`ContextWarning`、`OAuth*`、`BackgroundTaskCompleted`。
 
-### 第二层：MessagePipeline（消息状态管理）
+### 第二层：MessagePipeline（规范状态管理）
 
 **位置**：`rust-agent-tui/src/app/message_pipeline.rs`
 
-维护规范消息状态 `completed: Vec<BaseMessage>` 和流式缓冲区：
+维护规范消息状态和流式缓冲区：
 
 ```rust
 pub struct MessagePipeline {
@@ -124,28 +124,46 @@ pub struct MessagePipeline {
     current_ai_tool_calls: Vec<ToolCallRequest>,  // 当前轮工具调用
     current_ai_finalized: bool,            // 当前 AI 消息是否已 finalize
     pending_tools: HashMap<String, PendingTool>,  // 已开始未结束的工具
+    completed_tools: Vec<CompletedTool>,   // ToolEnd 后、StateSnapshot 前的工具结果
     subagent_stack: Vec<SubAgentState>,    // SubAgent 执行栈
-    frozen_subagent_vms: Vec<MessageViewModel>,  // SubAgent 固化 VM
+    frozen_subagent_vms: Vec<MessageViewModel>,  // SubAgentEnd 时固化的 VM
+    // 节流状态
+    throttle_armed: bool,                  // 有待发射的节流 RebuildAll
+    throttle_last_fire: Option<Instant>,   // 上次节流发射时间
+    // 轮次追踪
+    completed_len_at_round_start: usize,   // 本轮开始时 completed 的长度
+    has_snapshot_this_round: bool,         // 本轮是否收到过 StateSnapshot
 }
 ```
 
-**流式 UX 优化**：`AssistantChunk` 使用 `AppendChunk` 直接操作渲染层（避免每字符重做 markdown），但在 **finalize 边界**（`ToolStart` / `Done` / `Interrupted`）会 reconcile 最后的 AssistantBubble，确保最终状态与恢复路径完全一致。
+**`build_tail_vms()`** 是核心重建方法，从 pipeline 规范状态构建尾部 VMs：
 
-**SubAgent 滑动窗口**：SubAgent 内部事件路由进 `SubAgentGroup` VM 的 `recent_messages`（最多 4 条，FIFO 淘汰），`total_steps` 不受窗口截断影响。`SubAgentEnd` 时将完整 VM（含 recent_messages + final_result）固化到 `frozen_subagent_vms`，`Done` 时通过 `reconcile_tail_with_subagents()` 将冻结 VM 合并回重建结果，防止显示从「展开+滑动窗口」退化为「折叠+空内容」。
+1. **reconcile**（仅 `has_snapshot_this_round=true`）：从 `completed[last_human_offset..]` 调用 `messages_to_view_models()` 重建
+2. **流式 AssistantBubble**：从 `current_ai_text`/`current_ai_reasoning`/`current_ai_tool_calls` 构建
+3. **pending tools**：`pending_tools` 中未完成的工具（跳过 `name=="Agent"`，由 subagent_stack 表示）
+4. **completed tools**：`completed_tools` 中 ToolEnd 后、StateSnapshot 前的工具结果
+5. **SubAgentGroup**：`has_snapshot=true` 时用 `merge_frozen_subagents()` 替换 reconcile 产出的占位符；`has_snapshot=false` 时直接从 `subagent_stack` 构建（运行中或已冻结）
+6. **聚合**：`aggregate_tool_groups()` 折叠相邻只读工具
+
+**100ms 节流机制**：`AssistantChunk`/`AiReasoning` 事件 arm throttle（`throttle_armed=true`），`poll_agent()` 每帧调用 `check_throttle()`，100ms 间隔发射 RebuildAll。`ToolStart`/`ToolEnd` 等非流式事件重置 throttle（`throttle_armed=false`）并立即触发 `request_rebuild()`。
+
+**SubAgent 生命周期**：SubAgent 内部事件（ToolStart/ToolEnd/AssistantChunk）路由进 `subagent_stack.last_mut()` 的 `recent_messages` 滑动窗口（最多 4 条，FIFO）。`SubAgentEnd` 时立即构建完整 SubAgentGroup VM 并推入 `frozen_subagent_vms`（不再等 Done）。
+
+**`finalize_current_ai()`**：设置 `current_ai_finalized=true` 但**不清空** `current_ai_text`/`current_ai_reasoning`——在 StateSnapshot 到达前，`build_tail_vms()` 仍需要这些内容来显示 AI 已输出的文本。`set_completed()` 到达时才清空。
 
 ### 第三层：PipelineAction → RenderEvent（桥接层）
 
-**位置**：`rust-agent-tui/src/app/agent_ops.rs:340-530`（`apply_pipeline_action()`）
+**位置**：`rust-agent-tui/src/app/agent_ops.rs`（`apply_pipeline_action()`）
+
+PipelineAction 精简为 3 种：
 
 | PipelineAction | 含义 | 对应 RenderEvent | 说明 |
 |----------------|------|-------------------|------|
 | `None` | 无 UI 变化 | — | 跳过 |
-| `AddMessage(vm)` | 新增完整消息 | `AddMessage` | 用户消息、ToolStart |
-| `AppendChunk(chunk)` | 流式文本追加 | `AppendChunk` 或 `AddMessage`（首个 chunk） | 直接操作渲染层，避免 markdown 重算 |
-| `UpdateLast(vm)` | 替换最后一条 | `UpdateLastMessage` | SubAgentGroup 更新专用 |
-| `UpdateToolResult { id, vm }` | 按 id 更新工具结果 | `LoadHistory`（全量同步） | 并行工具调用时精确定位，避免互相覆盖 |
-| `RemoveLast` | 移除最后一条 | `RemoveLastMessage` | 隐藏空 AssistantBubble |
-| `RebuildAll { prefix_len, tail_vms }` | 尾部重建 | `LoadHistoryWithAnchor` | Done/Interrupted 时 reconcile 后触发 |
+| `AddMessage(vm)` | 新增完整消息 | `Rebuild` | 外部通知（OAuth/MCP/Plugin/TokenUsage）+ 用户消息 |
+| `RebuildAll { prefix_len, tail_vms }` | 尾部重建 | `RebuildWithAnchor` | 所有消息更新统一走此路径 |
+
+**`request_rebuild()`** 辅助方法：`build_rebuild_all(round_start_vm_idx)` → `apply_pipeline_action()`。所有非流式事件处理器（ToolStart/ToolEnd/StateSnapshot/SubAgentStart/SubAgentEnd/Done）在 `handle_event()` 后调用 `request_rebuild()`。
 
 **`RebuildAll` 滚动锚点**：通过 `wrap_map` 将当前 `scroll_offset`（视觉行号）映射到消息索引 `anchor_message_idx`，渲染线程重建后计算该消息在新布局中的视觉行起始位置，写入 `cache.scroll_anchor`，UI 线程读取后恢复滚动位置。
 
@@ -180,21 +198,19 @@ pub struct RenderCache {
 
 | RenderEvent | 渲染策略 | 性能特征 |
 |-------------|---------|----------|
-| `AddMessage` | 追加消息 + 渲染最后一条 + 扩展 cache 尾部 | O(最后一条消息) |
-| `AppendChunk` | 找到最后 AssistantBubble → `append_chunk()` → 只重渲染最后一条 → `cache.lines.truncate(start) + extend` | O(最后一条消息) |
-| `StreamingDone` | 清除 `is_streaming` 标志 → 重渲染最后一条 | O(最后一条消息) |
-| `UpdateLastMessage` | 替换最后一条 → 重渲染 → truncate + extend | O(最后一条消息) |
-| `LoadHistory` | 替换全部消息 → `rebuild_all()` | O(全部消息) |
-| `LoadHistoryWithAnchor` | `rebuild_all()` + 计算锚点 | O(全部消息) |
+| `Rebuild` | 替换全部消息 → `rebuild_all()` | O(全部消息) |
+| `RebuildWithAnchor` | `rebuild_all()` + 计算锚点 | O(全部消息) |
 | `Resize` | `rebuild_all()` | O(全部消息) |
+| `Clear` | 清空所有缓存 | O(1) |
+| `ToggleToolMessages` | 更新标志位（后续 Rebuild 驱动实际渲染） | O(1) |
 
-**[TRAP]** `AppendChunk` 的首个 chunk：当 `view_messages` 最后一条不是 AssistantBubble 时（如首条 AI 消息），`apply_pipeline_action` 会创建新的 AssistantBubble 并发送 `AddMessage`（而非 `AppendChunk`），**但返回前不经过后续逻辑**——这是一个 early return 分支（`agent_ops.rs:374`），漏掉会导致渲染线程缺少消息。
+**Hash diff 优化**：渲染线程维护 `last_messages` + `message_hashes`，`rebuild_all()` 时对比每条消息的 hash，跳过未变更的消息，只重渲染变更部分。这使得统一 RebuildAll 路径的性能接近增量更新。
 
 **无界 channel**：渲染事件处理耗时微秒级，不会积压。有界 channel 的 `try_send` 静默丢弃会导致渲染线程与 App 状态分叉。
 
 ### 视图模型体系
 
-**MessageViewModel**（`rust-agent-tui/src/ui/message_view.rs:182`）— 7 种变体：
+**MessageViewModel**（`rust-agent-tui/src/ui/message_view.rs`）— 7 种变体：
 
 | 变体 | 用途 | 流式行为 |
 |------|------|---------|
@@ -214,39 +230,37 @@ pub struct RenderCache {
 | `Reasoning { char_count }` | 仅字数 | 不存储推理全文，只显示 "Thought for N chars" |
 | `ToolUse { name }` | 工具名 | 仅显示名称，参数在 ToolBlock 中 |
 
-**`append_chunk()` 机制**（`message_view.rs:543`）：如果最后一个 block 是 `Text`，直接 `push_str` + 标记 `dirty`；否则创建新 `Text` block。`collapsed` 状态在有内容追加时自动展开。
+**`append_chunk()` 机制**（`message_view.rs`）：如果最后一个 block 是 `Text`，直接 `push_str` + 标记 `dirty`；否则创建新 `Text` block。`collapsed` 状态在有内容追加时自动展开。
 
-### Done/Interrupted 时的 Reconcile 流程
+### Done/Interrupted 时的处理流程
 
 ```
 1. pipeline.done() / pipeline.interrupt()
-   ├── finalize_current_ai()：清理流式缓冲
-   ├── 清理 pending_tools
-   └── 收集 frozen_subagent_vms
+   ├── finalize_current_ai()：设置 finalized 标志（不清空文本）
+   ├── 清理 pending_tools / completed_tools
+   └── 清理节流状态
 
-2. reconcile_tail_with_subagents(round_start_vm_idx)
-   ├── 找到 completed 中最后一条 Human 消息
-   ├── messages_to_view_models(&completed[last_human..])
-   └── merge_frozen_subagents()：按位置匹配替换 SubAgentGroup 占位符
+2. request_rebuild()
+   ├── build_tail_vms()：从 pipeline 规范状态构建完整尾部
+   │   ├── reconcile（has_snapshot=true 时从 completed 重建）
+   │   ├── streaming bubble + pending/completed tools
+   │   ├── subagent_stack 或 frozen_subagent_vms
+   │   └── aggregate_tool_groups()
+   └── apply_pipeline_action(RebuildAll { prefix_len, tail_vms })
 
-3. 智能条件 RebuildAll
-   ├── 对比 reconcile 结果与当前 view_messages 尾部
-   ├── 一致 → 只发 StreamingDone（避免视觉跳动）
-   └── 不一致 → RebuildAll { prefix_len, tail_vms }
-
-4. 渲染线程处理 LoadHistoryWithAnchor
-   ├── rebuild_all()
+3. 渲染线程处理 RebuildWithAnchor
+   ├── rebuild_all()（含 hash diff 跳过未变更消息）
    ├── 计算锚点消息在新布局中的视觉行位置
    └── cache.scroll_anchor = Some(visual_row)
 ```
 
-**[TRAP]** `Interrupted`/`Error` 处理器会先完成 reconcile 并设置 `reconcile_already_done = true`，后续 `Done` 事件检测到该标记后跳过 reconcile，只发 `StreamingDone`——防止 RebuildAll 覆盖已添加的通知消息。
+**[TRAP]** `Interrupted`/`Error` 处理器会先调用 `request_rebuild()` 并添加通知消息（`AddMessage`），然后设置 `reconcile_already_done = true`。后续 `Done` 事件检测到该标记后跳过 `request_rebuild()`，只清除 streaming 标志 + `render_rebuild()`——防止 RebuildAll 覆盖已添加的通知消息。
 
 ### UI 线程与渲染线程同步
 
 **版本号机制**：`cache.version` 每次更新自增，UI 线程比较 `cache.version != last_render_version` 决定是否调用 `terminal.draw()`。
 
-**双份数据**：主线程维护 `view_messages: Vec<MessageViewModel>`（权威状态），渲染线程维护私有 `messages: Vec<MessageViewModel>`（副本），通过 `RenderEvent` channel 同步。`UpdateToolResult` 使用 `LoadHistory`（全量 clone + 发送）确保渲染线程完全同步，避免增量更新导致的状态分叉。
+**双份数据**：主线程维护 `view_messages: Vec<MessageViewModel>`（权威状态），渲染线程维护私有 `messages: Vec<MessageViewModel>`（副本），通过 `RenderEvent` channel 同步。所有消息更新通过 `RebuildWithAnchor`（全量 clone + 发送）确保渲染线程完全同步。
 
 **`parking_lot::RwLock`**：RenderCache 使用 `parking_lot::RwLock`（guard 是 `Send`），而非 `std::sync::RwLock`，确保在 async 上下文中跨 `.await` 持有 guard 不会编译失败。
 
@@ -291,14 +305,17 @@ pub struct RenderCache {
 2. AgentsMdMiddleware         ← 读 CLAUDE.md/AGENTS.md 注入 system
 3. SkillsMiddleware           ← Skills 摘要注入 system
 4. SkillPreloadMiddleware     ← #skill-name 全文注入（fake tool 序列）
-5. FilesystemMiddleware       ← 6 个文件系统工具（Read/Write/Edit/Glob/Grep/folder_operations）
-6. TerminalMiddleware         ← Bash 工具
-7. WebMiddleware             ← WebFetch/WebSearch 工具
-8. TodoMiddleware             ← after_tool 解析 TodoWrite
-9. CronMiddleware             ← Cron 调度工具
-10. HumanInTheLoopMiddleware   ← before_tool 拦截敏感工具
-11. SubAgentMiddleware        ← Agent 工具
-12. McpMiddleware             ← MCP 工具和资源注入（仅 pool 初始化成功时注册）
+5. PluginMiddleware           ← 插件命令注入 system
+6. HookMiddleware             ← 插件 hooks 事件拦截
+7. FilesystemMiddleware       ← 6 个文件系统工具（Read/Write/Edit/Glob/Grep/folder_operations）
+8. TerminalMiddleware         ← Bash 工具
+9. WebMiddleware             ← WebFetch/WebSearch 工具
+10. TodoMiddleware             ← after_tool 解析 TodoWrite
+11. CronMiddleware             ← Cron 调度工具
+12. LspMiddleware              ← LSP 工具 + after_tool 文件变更同步
+13. HumanInTheLoopMiddleware   ← before_tool 拦截敏感工具
+14. SubAgentMiddleware        ← Agent 工具
+15. McpMiddleware             ← MCP 工具和资源注入（仅 pool 初始化成功时注册）
 [ReActAgent.with_system_prompt()] ← system prompt prepend
 ```
 
@@ -362,6 +379,93 @@ Token 累积达到上下文窗口阈值（默认 85%）时自动触发：
 | `tool_bridge.rs` | MCP 工具 → `BaseTool` 桥接 |
 | `resource_tool.rs` | MCP 资源读取工具 |
 | `middleware.rs` | `Middleware` trait 实现，`collect_tools` 注入 |
+
+## 插件系统
+
+插件机制兼容 Claude Code 插件生态，支持命令、hooks、MCP 服务器、LSP 服务器、skills 和 agents 的注入。
+
+**核心模块**（`rust-agent-middlewares/src/plugin/`）：
+
+| 文件 | 职责 |
+|------|------|
+| `config.rs` | Claude Code 配置加载（settings.json/installed_plugins.json/known_marketplaces.json） |
+| `types.rs` | 类型定义：`PluginManifest`、`InstalledPlugin`、`MarketplacePlugin`、`McpServerEntry`（支持内联 Config 和 FilePath 两种格式） |
+| `loader.rs` | 加载已启用插件：`load_enabled_plugins()`、`LoadPlugin` 包含 commands/skills_dirs/agents_dirs/mcp_servers/hooks_config |
+| `installer.rs` | 插件安装/卸载/更新：支持 GitHub/git/url/file/directory/NPM 来源 |
+| `marketplace.rs` | Marketplace 管理：`MarketplaceManager` 管理多个 marketplace 入口 |
+| `install_counts.rs` | 安装次数缓存 |
+| `middleware.rs` | `PluginMiddleware`——into system prompt（commands 列表） |
+
+**配置来源**：
+
+| 来源 | 路径 | 说明 |
+|------|------|------|
+| 全局 | `~/.peri/settings.json` | 全局 settings，ClaudeCode 格式相同字段 |
+| 插件 | 安装在 `~/.claude/plugins/cache/` | `plugin.json` manifest 驱动 |
+
+**插件清单字段**（`PluginManifest`）：`commands`、`agents`、`skills`、`hooks`、`mcpServers`、`lspServers`、`channels`、`options`、`settings`。
+
+**`McpServerEntry`**：插件 MCP 服务器支持内联配置直接写入 manifest，或 `.mcp.json` 文件路径引用。枚举 `Config(McpServerConfig)` / `FilePath(String)`。
+
+**Hooks（`rust-agent-middlewares/src/hooks/`）**
+
+对齐 Claude Code hooks 系统——4 种执行类型：
+
+| 类型 | 说明 |
+|------|------|
+| `Command` | Shell 命令（bash/powershell），同步/异步，通过 exit code 控制流程 |
+| `Prompt` | LLM 提示词评估 |
+| `Http` | HTTP POST |
+| `Agent` | 子 agent 完整循环 |
+
+**支持的事件**（`HookEvent`）：`PreToolUse`、`PostToolUse`、`PostToolUseFailure`、`PermissionRequest`、`UserPromptSubmit`、`SessionStart`、`SessionEnd`、`Stop`、`StopFailure`、`SubagentStart`、`SubagentStop`、`PreCompact`、`PostCompact`、`Notification`。
+
+**Hook 流程控制**：通过 exit code（Command）或 JSON response 控制：
+- exit 0 / `continue: true` → Allow
+- exit 1 → Allow with warning
+- exit 2 / `continue: false` → Block
+- stdout JSON 的 `hook_specific_output.hookEventName.PreToolUse.updatedInput` → ModifyInput
+
+**PermissionRequest 门控**：仅对敏感工具触发（同 HITL 列表），不查 permission_mode——YOLO 模式也触发以便日志/观察。
+
+**SSRF 防护**（`hooks/ssrf_guard.rs`）：阻止对内网私有地址（10.0.0.0/8、172.16.0.0/12、192.168.0.0/16、100.64.0.0/10、169.254.0.0/16）的 HTTP hook 请求，回环地址（127.0.0.1、::1）允许（本地开发）。
+
+**变量替换**（`hooks/variables.rs`）：`${CLAUDE_PROJECT_DIR}`、`${CLAUDE_PLUGIN_ROOT}`、`${CLAUDE_PLUGIN_DATA}`、`${ARGUMENTS}` 等占位符展开。
+
+## LSP 中间件
+
+LSP 支持通过 `LspMiddleware` + `LspTool` + `perihelion-lsp` 客户端库实现。
+
+**`perihelion-lsp` crate**（`perihelion-lsp/src/`）：
+
+| 文件 | 职责 |
+|------|------|
+| `client.rs` | `LspClient`——LSP 协议客户端（initialize/didOpen/didChange/didSave/shutdown）和通用 `request`/`notification` |
+| `pool.rs` | `LspServerPool`——按文件扩展名映射 LSP 服务器，按需自动初始化 |
+| `config.rs` | 配置加载：`LspConfigFile`（`{cwd}/.peri/lsp.json`）和 `LspServerConfig` |
+| `diagnostics.rs` | 诊断缓存（`DiagnosticsCache`）——按 URI 存储最近诊断结果 |
+| `error.rs` | `LspClientError` |
+| `jsonrpc/` | JSON-RPC 2.0 协议编解码器（`codec.rs`）、消息类型（`message.rs`）、transport（`transport.rs`——Line-based TCP transport） |
+| `protocol/` | LSP 协议通知/请求类型封装（复用 `lsp-types`） |
+
+**`LspMiddleware`**（`rust-agent-middlewares/src/lsp/`）：提供 `LSP` 工具（goToDefinition/findReferences/hover/documentSymbol/workspaceSymbol/diagnostics 等 10 种操作），并在 `after_tool` 中自动同步 Write/Edit 后的文件变更到 LSP 服务器（`didChange` + `didSave`）。
+
+**`LspTool` 操作**：goToDefinition、findReferences、hover、documentSymbol、workspaceSymbol、goToImplementation、prepareCallHierarchy、incomingCalls、outgoingCalls、diagnostics。
+
+## peri-cli（Node.js CLI）
+
+Node.js CLI 工具（`peri-cli/`），通过 GitHub Releases 分发项目二进制。使用 `commander` 框架：
+
+```bash
+peri install [package]   # 安装指定包（agent/acpx-g 或完整标签 agent-v1.17）
+peri list                # 列出 GitHub 可用版本（top 5）
+peri update              # 升级到最新版本
+peri add-env             # 将 peri 二进制添加到 PATH
+peri uninstall           # 卸载并清理
+peri clean               # 清理旧版本，每个包保留最新 2 个
+```
+
+位于 `peri-cli/`，非 workspace 成员，独立管理。
 
 ## SubAgents（子 Agent 委派）
 

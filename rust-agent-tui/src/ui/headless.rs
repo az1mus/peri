@@ -14,6 +14,7 @@
 //! ```
 
 use std::sync::Arc;
+use std::time::Duration;
 
 use ratatui::{backend::TestBackend, Terminal};
 use tokio::sync::Notify;
@@ -73,13 +74,6 @@ mod tests {
         use rust_create_agent::messages::BaseMessage;
 
         let (mut app, mut handle) = App::new_headless(120, 30).await;
-        // Pipeline: AssistantChunk → AppendChunk (1 个 RenderEvent)
-        // Pipeline: StateSnapshot → None (0 个 RenderEvent)
-        // Pipeline: Done           → RebuildAll/LoadHistory (1 个 RenderEvent)
-        // 合计 2 个通知：必须在发送事件前预注册所有 waiter
-        let notify = Arc::clone(&handle.render_notify);
-        let n1 = notify.notified();
-        let n2 = notify.notified();
         app.push_agent_event(AgentEvent::AssistantChunk("Hello world".into()));
         app.push_agent_event(AgentEvent::StateSnapshot(vec![
             BaseMessage::human("q"),
@@ -87,7 +81,8 @@ mod tests {
         ]));
         app.push_agent_event(AgentEvent::Done);
         app.process_pending_events();
-        tokio::join!(n1, n2);
+        app.flush_rebuild();
+        tokio::time::sleep(Duration::from_millis(50)).await;
         handle
             .terminal
             .draw(|f| main_ui::render(f, &mut app))
@@ -152,17 +147,17 @@ mod tests {
 
     #[tokio::test]
     async fn test_clear_empties_render_cache() {
-        let (mut app, handle) = App::new_headless(120, 30).await;
-        let notify = Arc::clone(&handle.render_notify);
+        use crate::ui::render_thread::RenderEvent;
 
-        // Pipeline: 每个 AssistantChunk → AppendChunk (1 个 RenderEvent)
-        // 合计 2 个通知，必须在发送事件前预注册所有 waiter
-        let n1 = notify.notified();
-        let n2 = notify.notified();
-        app.push_agent_event(AgentEvent::AssistantChunk("SomeUniqueContent".into()));
-        app.push_agent_event(AgentEvent::AssistantChunk("SomeUniqueContent".into()));
-        app.process_pending_events();
-        tokio::join!(n1, n2);
+        let (mut app, _handle) = App::new_headless(120, 30).await;
+
+        // 直接发送 LoadHistory 填充 RenderCache
+        let msgs = vec![MessageViewModel::user("test content".into())];
+        let _ = app.session_mgr.sessions[app.session_mgr.active]
+            .messages
+            .render_tx
+            .send(RenderEvent::Rebuild(msgs));
+        tokio::time::sleep(Duration::from_millis(50)).await;
 
         // 验证 RenderCache 有内容
         let lines_before = app.session_mgr.sessions[app.session_mgr.active]
@@ -172,17 +167,12 @@ mod tests {
             .total_lines;
         assert!(lines_before > 0, "清空前应有内容");
 
-        // 注册监听后发送 Clear，确保不错过通知
-        let notified_clear = handle.render_notify.notified();
-        app.session_mgr.sessions[app.session_mgr.active]
-            .messages
-            .view_messages
-            .clear();
+        // 发送 Clear 清空 RenderCache
         let _ = app.session_mgr.sessions[app.session_mgr.active]
             .messages
             .render_tx
             .send(RenderEvent::Clear);
-        notified_clear.await;
+        tokio::time::sleep(Duration::from_millis(50)).await;
 
         // 验证 RenderCache 已清空
         let cache = app.session_mgr.sessions[app.session_mgr.active]
@@ -496,13 +486,6 @@ mod tests {
     async fn test_subagent_group_basic() {
         // SubAgentStart → 2×ToolCall → SubAgentEnd → 渲染验证
         let (mut app, mut handle) = App::new_headless(120, 30).await;
-        let notify = Arc::clone(&handle.render_notify);
-
-        // 事件数：SubAgentStart(1) + ToolCall×2(2) + SubAgentEnd(1) = 4 个 RenderEvent
-        let n1 = notify.notified();
-        let n2 = notify.notified();
-        let n3 = notify.notified();
-        let n4 = notify.notified();
 
         app.push_agent_event(AgentEvent::SubAgentStart {
             agent_id: "code-reviewer".into(),
@@ -528,7 +511,8 @@ mod tests {
             is_error: false,
         });
         app.process_pending_events();
-        tokio::join!(n1, n2, n3, n4);
+        app.flush_rebuild();
+        tokio::time::sleep(Duration::from_millis(50)).await;
 
         handle
             .terminal
@@ -736,9 +720,6 @@ mod tests {
         app.process_pending_events();
 
         // 再发送非空 chunk
-        let notify = Arc::clone(&handle.render_notify);
-        let n1 = notify.notified();
-        let n2 = notify.notified();
         app.push_agent_event(AgentEvent::AssistantChunk("Hello".into()));
         app.push_agent_event(AgentEvent::StateSnapshot(vec![
             BaseMessage::human("q"),
@@ -746,7 +727,8 @@ mod tests {
         ]));
         app.push_agent_event(AgentEvent::Done);
         app.process_pending_events();
-        tokio::join!(n1, n2);
+        app.flush_rebuild();
+        tokio::time::sleep(Duration::from_millis(50)).await;
 
         handle
             .terminal
@@ -840,9 +822,6 @@ mod tests {
         use rust_create_agent::messages::BaseMessage;
 
         let (mut app, mut handle) = App::new_headless(120, 30).await;
-        let notify = Arc::clone(&handle.render_notify);
-        let n1 = notify.notified();
-        let n2 = notify.notified();
         app.push_agent_event(AgentEvent::AssistantChunk("Hello from agent".into()));
         app.push_agent_event(AgentEvent::StateSnapshot(vec![
             BaseMessage::human("q"),
@@ -850,7 +829,8 @@ mod tests {
         ]));
         app.push_agent_event(AgentEvent::Done);
         app.process_pending_events();
-        tokio::join!(n1, n2);
+        app.flush_rebuild();
+        tokio::time::sleep(Duration::from_millis(50)).await;
 
         handle
             .terminal
@@ -1811,8 +1791,6 @@ mod tests {
             .push(user_vm);
         app.render_rebuild();
 
-        let n1 = handle.render_notify.notified();
-        let n2 = handle.render_notify.notified();
         app.push_agent_event(AgentEvent::AssistantChunk("AI answer".into()));
         app.push_agent_event(AgentEvent::StateSnapshot(vec![
             BaseMessage::human("my question"),
@@ -1820,7 +1798,8 @@ mod tests {
         ]));
         app.push_agent_event(AgentEvent::Done);
         app.process_pending_events();
-        tokio::join!(n1, n2);
+        app.flush_rebuild();
+        tokio::time::sleep(Duration::from_millis(50)).await;
 
         handle
             .terminal
@@ -1874,8 +1853,6 @@ mod tests {
             .push(user1);
         app.render_rebuild();
 
-        let n1 = handle.render_notify.notified();
-        let n2 = handle.render_notify.notified();
         app.push_agent_event(AgentEvent::AssistantChunk("answer1".into()));
         app.push_agent_event(AgentEvent::StateSnapshot(vec![
             BaseMessage::human("turn1"),
@@ -1883,7 +1860,8 @@ mod tests {
         ]));
         app.push_agent_event(AgentEvent::Done);
         app.process_pending_events();
-        tokio::join!(n1, n2);
+        app.flush_rebuild();
+        tokio::time::sleep(Duration::from_millis(50)).await;
 
         // 第二轮：用户 → AI
         // 模拟 submit_message：先记录 round_start_vm_idx，再 push Human VM
@@ -1900,8 +1878,6 @@ mod tests {
             .push(user2);
         app.render_rebuild();
 
-        let n3 = handle.render_notify.notified();
-        let n4 = handle.render_notify.notified();
         app.push_agent_event(AgentEvent::AssistantChunk("answer2".into()));
         app.push_agent_event(AgentEvent::StateSnapshot(vec![
             BaseMessage::human("turn1"),
@@ -1911,7 +1887,8 @@ mod tests {
         ]));
         app.push_agent_event(AgentEvent::Done);
         app.process_pending_events();
-        tokio::join!(n3, n4);
+        app.flush_rebuild();
+        tokio::time::sleep(Duration::from_millis(50)).await;
 
         handle
             .terminal
@@ -1999,8 +1976,6 @@ mod tests {
     async fn test_tool_then_text_preserves_tool_block() {
         let (mut app, mut handle) = App::new_headless(120, 30).await;
 
-        let n1 = handle.render_notify.notified();
-        let n2 = handle.render_notify.notified();
         app.push_agent_event(AgentEvent::ToolStart {
             tool_call_id: "tc1".into(),
             name: "Bash".into(),
@@ -2010,7 +1985,8 @@ mod tests {
         });
         app.push_agent_event(AgentEvent::AssistantChunk("result is here".into()));
         app.process_pending_events();
-        tokio::join!(n1, n2);
+        app.flush_rebuild();
+        tokio::time::sleep(Duration::from_millis(50)).await;
 
         handle
             .terminal
@@ -3300,9 +3276,6 @@ mod tests {
         );
 
         // 3. AI 开始输出文本（AssistantChunk → 创建 AssistantBubble）
-        let notify = Arc::clone(&handle.render_notify);
-        let n1 = notify.notified();
-        let n2 = notify.notified();
         app.push_agent_event(AgentEvent::AssistantChunk(
             "Recursion is a technique where ".into(),
         ));
@@ -3317,7 +3290,8 @@ mod tests {
         // Done → reconcile_tail → 可能触发 RebuildAll
         app.push_agent_event(AgentEvent::Done);
         app.process_pending_events();
-        tokio::join!(n1, n2);
+        app.flush_rebuild();
+        tokio::time::sleep(Duration::from_millis(50)).await;
 
         handle
             .terminal
@@ -3391,8 +3365,6 @@ mod tests {
         n2.await;
 
         // 5. 更多 thinking + 文本回复
-        let n3 = notify.notified();
-        let n4 = notify.notified();
         app.push_agent_event(AgentEvent::AiReasoning("Now I can explain...".into()));
         app.push_agent_event(AgentEvent::AssistantChunk(
             "Here is the content of main.rs:".into(),
@@ -3416,7 +3388,8 @@ mod tests {
         ]));
         app.push_agent_event(AgentEvent::Done);
         app.process_pending_events();
-        tokio::join!(n3, n4);
+        app.flush_rebuild();
+        tokio::time::sleep(Duration::from_millis(50)).await;
 
         handle
             .terminal
