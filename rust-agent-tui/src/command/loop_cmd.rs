@@ -1,7 +1,6 @@
 use super::Command;
 use crate::app::App;
 use crate::ui::message_view::MessageViewModel;
-use crate::ui::render_thread::RenderEvent;
 
 pub struct LoopCommand;
 
@@ -24,11 +23,8 @@ impl Command for LoopCommand {
             app.session_mgr.sessions[app.session_mgr.active]
                 .messages
                 .view_messages
-                .push(vm.clone());
-            let _ = app.session_mgr.sessions[app.session_mgr.active]
-                .messages
-                .render_tx
-                .send(RenderEvent::AddMessage(vm));
+                .push(vm);
+            app.render_rebuild();
             return;
         }
 

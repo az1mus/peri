@@ -1,3 +1,5 @@
+use std::hash::{Hash, Hasher};
+
 use crate::ui::theme;
 use ratatui::style::Color;
 use ratatui::text::Text;
@@ -6,7 +8,7 @@ use rust_create_agent::messages::{BaseMessage, ContentBlock};
 use super::markdown::parse_markdown_default;
 
 /// 只读工具分类，用于折叠聚合
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum ToolCategory {
     Read,    // Read
     Search,  // Grep
@@ -96,7 +98,7 @@ impl ToolCategory {
 }
 
 /// ToolCallGroup 中的单条工具记录
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ToolEntry {
     pub tool_name: String,
     pub display_name: String,
@@ -326,6 +328,87 @@ impl PartialEq for MessageViewModel {
     }
 }
 
+/// Hash 包含所有影响渲染输出的字段（内容 + UI 状态如 collapsed/is_streaming/is_running）。
+/// `rendered` 和 `color` 不参与 hash（rendered 依赖宽度缓存，color 可从 tool_name 推导）。
+impl Hash for MessageViewModel {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        match self {
+            MessageViewModel::UserBubble { content, .. } => {
+                0u8.hash(state);
+                content.hash(state);
+            }
+            MessageViewModel::AssistantBubble {
+                blocks,
+                is_streaming,
+                collapsed,
+                ..
+            } => {
+                1u8.hash(state);
+                blocks.hash(state);
+                is_streaming.hash(state);
+                collapsed.hash(state);
+            }
+            MessageViewModel::ToolBlock {
+                tool_name,
+                tool_call_id,
+                display_name,
+                args_display,
+                content,
+                is_error,
+                collapsed,
+                ..
+            } => {
+                2u8.hash(state);
+                tool_name.hash(state);
+                tool_call_id.hash(state);
+                display_name.hash(state);
+                args_display.hash(state);
+                content.hash(state);
+                is_error.hash(state);
+                collapsed.hash(state);
+            }
+            MessageViewModel::SystemNote { content } => {
+                3u8.hash(state);
+                content.hash(state);
+            }
+            MessageViewModel::CacheWarning { content } => {
+                4u8.hash(state);
+                content.hash(state);
+            }
+            MessageViewModel::ToolCallGroup {
+                category,
+                tools,
+                collapsed,
+            } => {
+                5u8.hash(state);
+                category.hash(state);
+                tools.hash(state);
+                collapsed.hash(state);
+            }
+            MessageViewModel::SubAgentGroup {
+                agent_id,
+                task_preview,
+                total_steps,
+                recent_messages,
+                is_running,
+                collapsed,
+                final_result,
+                is_error,
+            } => {
+                6u8.hash(state);
+                agent_id.hash(state);
+                task_preview.hash(state);
+                total_steps.hash(state);
+                recent_messages.hash(state);
+                is_running.hash(state);
+                collapsed.hash(state);
+                final_result.hash(state);
+                is_error.hash(state);
+            }
+        }
+    }
+}
+
 /// ContentBlock 的视图化表示
 #[derive(Debug, Clone)]
 pub enum ContentBlockView {
@@ -365,6 +448,28 @@ impl PartialEq for ContentBlockView {
                 a == b
             }
             _ => false,
+        }
+    }
+}
+
+/// Hash 基于 PartialEq 的语义字段（忽略 `rendered` 缓存）。
+/// 用于渲染线程的 hash diff：判断消息是否需要重新渲染。
+impl Hash for ContentBlockView {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        match self {
+            ContentBlockView::Text { raw, dirty, .. } => {
+                0u8.hash(state);
+                raw.hash(state);
+                dirty.hash(state);
+            }
+            ContentBlockView::Reasoning { char_count } => {
+                1u8.hash(state);
+                char_count.hash(state);
+            }
+            ContentBlockView::ToolUse { name } => {
+                2u8.hash(state);
+                name.hash(state);
+            }
         }
     }
 }

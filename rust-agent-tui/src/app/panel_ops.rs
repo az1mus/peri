@@ -306,11 +306,8 @@ impl App {
             self.session_mgr.sessions[self.session_mgr.active]
                 .messages
                 .view_messages
-                .push(vm.clone());
-            let _ = self.session_mgr.sessions[self.session_mgr.active]
-                .messages
-                .render_tx
-                .send(crate::ui::render_thread::RenderEvent::AddMessage(vm));
+                .push(vm);
+            self.render_rebuild();
             return;
         }
         let panel = McpPanel::new(infos);
@@ -333,11 +330,8 @@ impl App {
             self.session_mgr.sessions[self.session_mgr.active]
                 .messages
                 .view_messages
-                .push(vm.clone());
-            let _ = self.session_mgr.sessions[self.session_mgr.active]
-                .messages
-                .render_tx
-                .send(crate::ui::render_thread::RenderEvent::AddMessage(vm));
+                .push(vm);
+            self.render_rebuild();
             return;
         }
         let panel = CronPanel::new(tasks);

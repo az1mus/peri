@@ -1,7 +1,6 @@
 use super::Command;
 use crate::app::App;
 use crate::ui::message_view::MessageViewModel;
-use crate::ui::render_thread::RenderEvent;
 
 pub struct RenameCommand;
 
@@ -16,12 +15,16 @@ impl Command for RenameCommand {
 
     fn execute(&self, app: &mut App, args: &str) {
         let name = args.trim();
-        let session = app.session_mgr.current_mut();
+        let thread_id = app.session_mgr.current_mut().current_thread_id.clone();
 
-        let Some(thread_id) = session.current_thread_id.clone() else {
+        let Some(thread_id) = thread_id else {
             let vm = MessageViewModel::system("当前无活跃会话，无法重命名".to_string());
-            session.messages.view_messages.push(vm.clone());
-            let _ = session.messages.render_tx.send(RenderEvent::AddMessage(vm));
+            app.session_mgr
+                .current_mut()
+                .messages
+                .view_messages
+                .push(vm);
+            app.render_rebuild();
             return;
         };
 
@@ -36,28 +39,37 @@ impl Command for RenameCommand {
             })
             .unwrap_or_else(|| "(无标题)".to_string());
             let vm = MessageViewModel::system(format!("当前标题: {}", title));
-            let session = app.session_mgr.current_mut();
-            session.messages.view_messages.push(vm.clone());
-            let _ = session.messages.render_tx.send(RenderEvent::AddMessage(vm));
+            app.session_mgr
+                .current_mut()
+                .messages
+                .view_messages
+                .push(vm);
+            app.render_rebuild();
         } else {
             // 更新标题
             let store = app.services.thread_store.clone();
             let result = tokio::task::block_in_place(|| {
                 tokio::runtime::Handle::current().block_on(store.update_title(&thread_id, name))
             });
-            let session = app.session_mgr.current_mut();
             match result {
                 Ok(()) => {
                     let vm = MessageViewModel::system(format!("会话标题已更新为: {}", name));
-                    session.messages.view_messages.push(vm.clone());
-                    let _ = session.messages.render_tx.send(RenderEvent::AddMessage(vm));
+                    app.session_mgr
+                        .current_mut()
+                        .messages
+                        .view_messages
+                        .push(vm);
                 }
                 Err(e) => {
                     let vm = MessageViewModel::system(format!("重命名失败: {}", e));
-                    session.messages.view_messages.push(vm.clone());
-                    let _ = session.messages.render_tx.send(RenderEvent::AddMessage(vm));
+                    app.session_mgr
+                        .current_mut()
+                        .messages
+                        .view_messages
+                        .push(vm);
                 }
             }
+            app.render_rebuild();
         }
     }
 }

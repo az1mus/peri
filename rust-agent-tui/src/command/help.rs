@@ -53,10 +53,7 @@ impl Command for HelpCommand {
         app.session_mgr.sessions[app.session_mgr.active]
             .messages
             .view_messages
-            .push(vm.clone());
-        let _ = app.session_mgr.sessions[app.session_mgr.active]
-            .messages
-            .render_tx
-            .send(crate::ui::render_thread::RenderEvent::AddMessage(vm));
+            .push(vm);
+        app.render_rebuild();
     }
 }

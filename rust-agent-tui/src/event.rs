@@ -9,7 +9,6 @@ use tui_textarea::{Input, Key};
 use crate::app::panel_manager::{EventResult, PanelContext, PanelKind};
 use crate::app::plugin_panel::PluginPanel;
 use crate::app::{App, MessageViewModel, PendingAttachment};
-use crate::ui::render_thread::RenderEvent;
 use rust_create_agent::messages::BaseMessage;
 
 /// 将 RGBA 像素数据编码为 PNG，再返回 base64 字符串和 PNG 字节数
@@ -207,10 +206,11 @@ async fn handle_event(app: &mut App, ev: Event) -> Result<Option<Action>> {
                                             &BaseMessage::system(format!("配置保存失败: {}", e)),
                                             &[],
                                         );
-                                        let _ = app.session_mgr.sessions[app.session_mgr.active]
+                                        app.session_mgr.sessions[app.session_mgr.active]
                                             .messages
-                                            .render_tx
-                                            .send(RenderEvent::AddMessage(msg));
+                                            .view_messages
+                                            .push(msg);
+                                        app.render_rebuild();
                                     }
                                 }
                             }

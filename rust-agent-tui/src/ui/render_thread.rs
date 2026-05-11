@@ -1,3 +1,5 @@
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
 use parking_lot::RwLock;
@@ -76,35 +78,33 @@ impl RenderCache {
 
 /// 渲染线程接收的事件
 pub enum RenderEvent {
-    /// 新增一条完整消息（用户消息/工具结果等）
-    AddMessage(MessageViewModel),
-    /// 追加流式 chunk 到最后一条 assistant 消息
-    AppendChunk(String),
-    /// 流式输出结束，清除最后一条 assistant 消息的 is_streaming 标志
-    StreamingDone,
-    /// 终端宽度变化，需要全量重新计算行包装
-    Resize(u16),
-    /// 清空所有消息
-    Clear,
-    /// 加载历史消息（批量）
-    LoadHistory(Vec<MessageViewModel>),
-    /// 加载历史消息并保持滚动位置（RebuildAll 后滚动锚点）
-    LoadHistoryWithAnchor {
+    /// 全量重建消息列表（通过 hash diff 优化渲染）
+    Rebuild(Vec<MessageViewModel>),
+    /// 全量重建并设置滚动锚点（RebuildAll 后保持滚动位置）
+    RebuildWithAnchor {
         messages: Vec<MessageViewModel>,
         /// 锚点对应的消息在旧 view_messages 中的索引
         anchor_message_idx: usize,
     },
+    /// 终端宽度变化，渲染线程自动用 last_messages 重建
+    Resize(u16),
+    /// 清空所有消息
+    Clear,
     /// 切换工具调用消息的显示状态
     ToggleToolMessages(bool),
-    /// 替换最后一条消息并重新渲染（SubAgentGroup 更新专用）
-    UpdateLastMessage(MessageViewModel),
-    /// 移除最后一条消息（用于隐藏空的 AssistantBubble）
-    RemoveLastMessage,
 }
 
-/// 渲染线程，持有消息数据的私有副本，在后台执行渲染计算
+/// 渲染线程，在后台执行渲染计算
+///
+/// 消息状态由 App 持有（view_messages），渲染线程通过 Rebuild 事件接收完整快照，
+/// 通过 hash diff 只重新渲染发生变化的消息，避免不必要的 markdown 解析。
 struct RenderTask {
-    messages: Vec<MessageViewModel>,
+    /// 上一次 Rebuild 收到的消息（Resize 时用于全量重建）
+    last_messages: Vec<MessageViewModel>,
+    /// 每条消息的渲染行缓存
+    message_lines: Vec<Vec<Line<'static>>>,
+    /// 每条消息的语义 hash（用于 diff 判断）
+    message_hashes: Vec<u64>,
     cache: Arc<RwLock<RenderCache>>,
     notify: Arc<Notify>,
     width: u16,
@@ -176,15 +176,44 @@ impl RenderTask {
         lines
     }
 
-    /// 全量重新渲染所有消息，写入缓存
-    fn rebuild_all(&mut self) {
+    /// 计算单个 MessageViewModel 的语义 hash
+    fn compute_hash(vm: &MessageViewModel) -> u64 {
+        let mut hasher = DefaultHasher::new();
+        vm.hash(&mut hasher);
+        hasher.finish()
+    }
+
+    /// 全量重建：接收完整消息列表，通过 hash diff 只重新渲染变化的消息
+    fn rebuild(&mut self, messages: Vec<MessageViewModel>) {
         let width = self.width as usize;
+        let new_len = messages.len();
+
+        // 保留一份用于 Resize（Resize 时没有新的 Rebuild 事件）
+        self.last_messages = messages.clone();
+
+        // 在渲染前计算 hash（render_one 会修改 dirty 等字段）
+        let new_hashes: Vec<u64> = messages.iter().map(Self::compute_hash).collect();
+
+        // 调整 message_lines 容量
+        self.message_lines.resize(new_len, Vec::new());
+
+        // 只重新渲染 hash 变化的消息
+        for (i, mut vm) in messages.into_iter().enumerate() {
+            if i < self.message_hashes.len() && new_hashes[i] == self.message_hashes[i] {
+                // hash 未变，跳过渲染
+                continue;
+            }
+            self.message_lines[i] = Self::render_one(&mut vm, i + 1, width);
+        }
+
+        self.message_hashes = new_hashes;
+
+        // 拼接所有消息行
         let mut all_lines: Vec<Line<'static>> = Vec::new();
         let mut offsets: Vec<usize> = Vec::new();
-
-        for (i, vm) in self.messages.iter_mut().enumerate() {
+        for lines in &self.message_lines {
             offsets.push(all_lines.len());
-            all_lines.extend(Self::render_one(vm, i + 1, width));
+            all_lines.extend(lines.iter().cloned());
         }
 
         // 过滤连续空行，保留单个空行作为消息分隔符
@@ -205,11 +234,10 @@ impl RenderTask {
         }) {
             deduped.pop();
         }
-        all_lines = deduped;
 
         let render_width = self.width;
         let mut cache = self.cache.write();
-        cache.lines = all_lines;
+        cache.lines = deduped;
         cache.message_offsets = offsets;
         cache.total_lines = RenderCache::compute_wrapped_height(&cache.lines, render_width);
         cache.wrap_map = Self::build_wrap_map(&cache.lines, self.width);
@@ -221,125 +249,14 @@ impl RenderTask {
     async fn run(mut self, mut rx: mpsc::UnboundedReceiver<RenderEvent>) {
         while let Some(event) = rx.recv().await {
             match event {
-                RenderEvent::AddMessage(vm) => {
-                    self.messages.push(vm);
-                    let width = self.width as usize;
-                    let idx = self.messages.len() - 1;
-                    let lines = Self::render_one(&mut self.messages[idx], idx + 1, width);
-
-                    let render_width = self.width;
-                    let mut cache = self.cache.write();
-                    // 确保新消息与上一条消息之间有空行间隔
-                    //（rebuild_all 会移除末尾空行，所以 AddMessage 时需要补回）
-                    let needs_gap = !cache.lines.is_empty()
-                        && cache.lines.last().is_none_or(|l| {
-                            !(l.spans.is_empty()
-                                || (l.spans.len() == 1 && l.spans[0].content.is_empty()))
-                        });
-                    if needs_gap {
-                        cache.lines.push(Line::from(""));
-                    }
-                    let offset = cache.lines.len();
-                    cache.message_offsets.push(offset);
-                    cache.lines.extend(lines);
-                    cache.total_lines =
-                        RenderCache::compute_wrapped_height(&cache.lines, render_width);
-                    cache.wrap_map = Self::build_wrap_map(&cache.lines, self.width);
-                    cache.version += 1;
+                RenderEvent::Rebuild(messages) => {
+                    self.rebuild(messages);
                 }
-                RenderEvent::AppendChunk(chunk) => {
-                    // 找到最后一条 assistant 消息并追加 chunk
-                    let appended = if let Some(last) = self.messages.last_mut() {
-                        if last.is_assistant() {
-                            last.append_chunk(&chunk);
-                            true
-                        } else {
-                            false
-                        }
-                    } else {
-                        false
-                    };
-
-                    if !appended {
-                        // 没有 assistant 消息，创建一个新的
-                        let mut vm = MessageViewModel::assistant();
-                        vm.append_chunk(&chunk);
-                        self.messages.push(vm);
-                    }
-
-                    // 重新渲染最后一条消息，替换缓存中对应区间
-                    let width = self.width as usize;
-                    let last_idx = self.messages.len() - 1;
-                    let new_lines =
-                        Self::render_one(&mut self.messages[last_idx], last_idx + 1, width);
-
-                    let render_width = self.width;
-                    let mut cache = self.cache.write();
-                    // 获取最后一条消息的起始偏移
-                    let start = if let Some(&offset) = cache.message_offsets.last() {
-                        offset
-                    } else {
-                        // 新消息，还没有 offset
-                        let offset = cache.lines.len();
-                        cache.message_offsets.push(offset);
-                        offset
-                    };
-                    // 替换从 start 开始到末尾的所有行
-                    cache.lines.truncate(start);
-                    cache.lines.extend(new_lines);
-                    cache.total_lines =
-                        RenderCache::compute_wrapped_height(&cache.lines, render_width);
-                    cache.wrap_map = Self::build_wrap_map(&cache.lines, self.width);
-                    cache.version += 1;
-                }
-                RenderEvent::StreamingDone => {
-                    // 将最后一条 assistant 消息的 is_streaming 设为 false，重新渲染
-                    if let Some(MessageViewModel::AssistantBubble { is_streaming, .. }) =
-                        self.messages.last_mut()
-                    {
-                        *is_streaming = false;
-                    }
-                    // 重新渲染最后一条消息
-                    let width = self.width as usize;
-                    if !self.messages.is_empty() {
-                        let last_idx = self.messages.len() - 1;
-                        let new_lines =
-                            Self::render_one(&mut self.messages[last_idx], last_idx + 1, width);
-                        let render_width = self.width;
-                        let mut cache = self.cache.write();
-                        if let Some(&start) = cache.message_offsets.last() {
-                            cache.lines.truncate(start);
-                            cache.lines.extend(new_lines);
-                            cache.total_lines =
-                                RenderCache::compute_wrapped_height(&cache.lines, render_width);
-                            cache.wrap_map = Self::build_wrap_map(&cache.lines, self.width);
-                            cache.version += 1;
-                        }
-                    }
-                }
-                RenderEvent::Resize(new_width) => {
-                    self.width = new_width;
-                    self.rebuild_all();
-                }
-                RenderEvent::Clear => {
-                    self.messages.clear();
-                    let mut cache = self.cache.write();
-                    cache.lines.clear();
-                    cache.message_offsets.clear();
-                    cache.total_lines = 0;
-                    cache.wrap_map = Vec::new();
-                    cache.version += 1;
-                }
-                RenderEvent::LoadHistory(vms) => {
-                    self.messages = vms;
-                    self.rebuild_all();
-                }
-                RenderEvent::LoadHistoryWithAnchor {
+                RenderEvent::RebuildWithAnchor {
                     messages,
                     anchor_message_idx,
                 } => {
-                    self.messages = messages;
-                    self.rebuild_all();
+                    self.rebuild(messages);
                     // 计算锚点消息在新布局中的视觉行起始位置
                     let anchor_visual_row =
                         if anchor_message_idx < self.cache.read().message_offsets.len() {
@@ -357,53 +274,32 @@ impl RenderTask {
                         self.cache.write().scroll_anchor = Some(row);
                     }
                 }
+                RenderEvent::Resize(new_width) => {
+                    self.width = new_width;
+                    // 清空 hash 缓存，强制全量重渲染
+                    self.message_hashes.clear();
+                    // 用 last_messages 重新渲染（宽度变化需要重新计算所有行的 wrap）
+                    if !self.last_messages.is_empty() {
+                        let messages = std::mem::take(&mut self.last_messages);
+                        self.rebuild(messages);
+                    }
+                }
+                RenderEvent::Clear => {
+                    self.message_lines.clear();
+                    self.message_hashes.clear();
+                    let mut cache = self.cache.write();
+                    cache.lines.clear();
+                    cache.message_offsets.clear();
+                    cache.total_lines = 0;
+                    cache.wrap_map = Vec::new();
+                    cache.version += 1;
+                }
                 RenderEvent::ToggleToolMessages(show) => {
                     self.show_tool_messages = show;
-                    self.rebuild_all();
-                }
-                RenderEvent::UpdateLastMessage(vm) => {
-                    // 替换最后一条消息（SubAgentGroup 更新专用）
-                    if let Some(last) = self.messages.last_mut() {
-                        *last = vm;
-                    } else {
-                        self.messages.push(vm);
-                    }
-                    // 重新渲染最后一条消息，替换缓存中对应区间的行
-                    let width = self.width as usize;
-                    if !self.messages.is_empty() {
-                        let last_idx = self.messages.len() - 1;
-                        let new_lines =
-                            Self::render_one(&mut self.messages[last_idx], last_idx + 1, width);
-                        let render_width = self.width;
-                        let mut cache = self.cache.write();
-                        if let Some(&start) = cache.message_offsets.last() {
-                            cache.lines.truncate(start);
-                            cache.lines.extend(new_lines);
-                            cache.total_lines =
-                                RenderCache::compute_wrapped_height(&cache.lines, render_width);
-                            cache.wrap_map = Self::build_wrap_map(&cache.lines, self.width);
-                            cache.version += 1;
-                        }
-                    }
-                }
-                RenderEvent::RemoveLastMessage => {
-                    // 移除最后一条消息及其对应的渲染缓存
-                    if !self.messages.is_empty() {
-                        self.messages.pop();
-                        let render_width = self.width;
-                        let mut cache = self.cache.write();
-                        // 移除最后一条消息的 offset
-                        cache.message_offsets.pop();
-                        if let Some(&start) = cache.message_offsets.last() {
-                            cache.lines.truncate(start);
-                        } else {
-                            cache.lines.clear();
-                        }
-                        cache.total_lines =
-                            RenderCache::compute_wrapped_height(&cache.lines, render_width);
-                        cache.wrap_map = Self::build_wrap_map(&cache.lines, self.width);
-                        cache.version += 1;
-                    }
+                    // collapsed 状态是 hash 的一部分，ToggleToolMessages 会改变消息的 hash
+                    // 但如果 App 端没有修改 view_messages 中的 collapsed 状态，
+                    // 需要 App 发送新的 Rebuild 事件来反映变化
+                    // 这里只更新标志位，实际渲染由后续 Rebuild 驱动
                 }
             }
 
@@ -428,7 +324,9 @@ pub fn spawn_render_thread(
     let notify = Arc::new(Notify::new());
 
     let task = RenderTask {
-        messages: Vec::new(),
+        last_messages: Vec::new(),
+        message_lines: Vec::new(),
+        message_hashes: Vec::new(),
         cache: Arc::clone(&cache),
         notify: Arc::clone(&notify),
         width,
@@ -445,154 +343,83 @@ mod tests {
     use super::*;
 
     #[tokio::test]
-    async fn test_add_message_increments_version() {
+    async fn test_rebuild_increments_version() {
         let (tx, cache, _notify) = spawn_render_thread(80);
 
-        // 初始 version 为 0
         assert_eq!(cache.read().version, 0);
 
-        // 发送一条用户消息（UnboundedSender::send 是同步的）
-        tx.send(RenderEvent::AddMessage(MessageViewModel::user(
+        tx.send(RenderEvent::Rebuild(vec![MessageViewModel::user(
             "Hello".to_string(),
-        )))
+        )]))
         .unwrap();
 
-        // 等待渲染线程处理
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
 
         let c = cache.read();
-        assert!(c.version > 0, "version should increment after AddMessage");
+        assert!(c.version > 0, "version should increment after Rebuild");
         assert!(
             !c.lines.is_empty(),
-            "lines should not be empty after AddMessage"
+            "lines should not be empty after Rebuild"
         );
     }
 
     #[tokio::test]
-    async fn test_append_chunk_updates_last_message() {
+    async fn test_rebuild_hash_diff_skips_unchanged() {
         let (tx, cache, _notify) = spawn_render_thread(80);
 
-        // 先添加一条 assistant 消息
-        let mut vm = MessageViewModel::assistant();
-        vm.append_chunk("Hello ");
-        tx.send(RenderEvent::AddMessage(vm)).unwrap();
+        // 第一次 Rebuild：渲染两条消息
+        let user1 = MessageViewModel::user("First".to_string());
+        let user2 = MessageViewModel::user("Second".to_string());
+        tx.send(RenderEvent::Rebuild(vec![user1.clone(), user2.clone()]))
+            .unwrap();
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
 
         let v1 = cache.read().version;
-        let _lines_before = cache.read().lines.len();
+        let lines_v1 = cache.read().lines.len();
 
-        // AppendChunk
-        tx.send(RenderEvent::AppendChunk("World".to_string()))
-            .unwrap();
+        // 第二次 Rebuild：相同内容，hash diff 应跳过渲染
+        tx.send(RenderEvent::Rebuild(vec![user1, user2])).unwrap();
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
 
         let c = cache.read();
-        assert!(c.version > v1, "version should increment after AppendChunk");
-        // offset 不应增加（仍是同一条消息）
-        assert_eq!(
-            c.message_offsets.len(),
-            1,
-            "should still have 1 message offset"
-        );
+        // version 仍应递增（即使内容不变）
+        assert!(c.version > v1, "version should still increment");
+        // 行数不变
+        assert_eq!(c.lines.len(), lines_v1, "lines count should be the same");
     }
 
     #[tokio::test]
-    async fn test_add_message_gap_after_single_rebuild() {
+    async fn test_rebuild_no_trailing_blank() {
         let (tx, cache, _notify) = spawn_render_thread(80);
 
-        // 只有一条用户消息，触发 LoadHistory
-        let user1 = MessageViewModel::user("First".to_string());
-        tx.send(RenderEvent::AddMessage(user1.clone())).unwrap();
-        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-
-        // 触发 rebuild_all
-        tx.send(RenderEvent::LoadHistory(vec![user1])).unwrap();
-        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-
-        // 确认末尾无空行
-        {
-            let c = cache.read();
-            let last_is_empty = c.lines.last().is_some_and(|l| {
-                l.spans.is_empty() || (l.spans.len() == 1 && l.spans[0].content.is_empty())
-            });
-            assert!(!last_is_empty, "after rebuild_all, no trailing blank");
-        }
-
-        // 添加第二条用户消息
-        tx.send(RenderEvent::AddMessage(MessageViewModel::user(
-            "Second".to_string(),
-        )))
+        tx.send(RenderEvent::Rebuild(vec![MessageViewModel::user(
+            "Hello".to_string(),
+        )]))
         .unwrap();
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
 
         let c = cache.read();
-        // 找 "Second" 的行，检查前一行
-        let mut idx = None;
-        for (i, line) in c.lines.iter().enumerate() {
-            for span in &line.spans {
-                if span.content.contains("Second") {
-                    idx = Some(i);
-                    break;
-                }
-            }
-            if idx.is_some() {
-                break;
-            }
-        }
-        let i = idx.expect("should find 'Second'");
-        assert!(i > 0, "second msg should not be first line");
-        let prev_empty = c.lines[i - 1].spans.is_empty()
-            || (c.lines[i - 1].spans.len() == 1 && c.lines[i - 1].spans[0].content.is_empty());
-        assert!(
-            prev_empty,
-            "gap before second msg, line {} = {:?}",
-            i - 1,
-            c.lines[i - 1]
-        );
+        let last_is_empty = c.lines.last().is_some_and(|l| {
+            l.spans.is_empty() || (l.spans.len() == 1 && l.spans[0].content.is_empty())
+        });
+        assert!(!last_is_empty, "should not have trailing blank line");
     }
 
     #[tokio::test]
-    async fn test_add_message_has_gap_after_rebuild_all() {
+    async fn test_rebuild_multiple_messages_have_gaps() {
         let (tx, cache, _notify) = spawn_render_thread(80);
 
-        // 模拟 rebuild_all：添加两条消息后触发 LoadHistory
-        let user1 = MessageViewModel::user("First message".to_string());
-        let mut asst = MessageViewModel::assistant();
-        asst.append_chunk("Reply");
-        tx.send(RenderEvent::AddMessage(user1.clone())).unwrap();
-        tx.send(RenderEvent::AddMessage(asst.clone())).unwrap();
-        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-
-        // 触发 LoadHistory（等同于 rebuild_all，会移除末尾空行）
-        tx.send(RenderEvent::LoadHistory(vec![user1, asst]))
-            .unwrap();
-        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-
-        // 确认末尾没有空行（rebuild_all 行为）
-        {
-            let c = cache.read();
-            let last_is_empty = c.lines.last().is_some_and(|l| {
-                l.spans.is_empty() || (l.spans.len() == 1 && l.spans[0].content.is_empty())
-            });
-            assert!(
-                !last_is_empty,
-                "rebuild_all should remove trailing blank line"
-            );
-        }
-
-        // 添加第二条用户消息
-        tx.send(RenderEvent::AddMessage(MessageViewModel::user(
-            "Second message".to_string(),
-        )))
+        tx.send(RenderEvent::Rebuild(vec![
+            MessageViewModel::user("First message".to_string()),
+            MessageViewModel::user("Second message".to_string()),
+        ]))
         .unwrap();
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
 
-        // 验证第二条用户消息前有空行间隔
         let c = cache.read();
-        let lines = &c.lines;
-        // 找到 "❯ Second message" 所在行，检查其前一行是否为空行
+        // 找 "Second message" 的行，检查前一行是否为空行
         let mut second_msg_idx = None;
-        for (i, line) in lines.iter().enumerate() {
+        for (i, line) in c.lines.iter().enumerate() {
             for span in &line.spans {
                 if span.content.contains("Second message") {
                     second_msg_idx = Some(i);
@@ -605,14 +432,71 @@ mod tests {
         }
         let idx = second_msg_idx.expect("should find second user message");
         assert!(idx > 0, "second message should not be the first line");
-        let prev_is_empty = lines[idx - 1].spans.is_empty()
-            || (lines[idx - 1].spans.len() == 1 && lines[idx - 1].spans[0].content.is_empty());
+        let prev_is_empty = c.lines[idx - 1].spans.is_empty()
+            || (c.lines[idx - 1].spans.len() == 1 && c.lines[idx - 1].spans[0].content.is_empty());
         assert!(
             prev_is_empty,
             "should have blank line before second user message, but line {} is: {:?}",
             idx - 1,
-            lines[idx - 1]
+            c.lines[idx - 1]
         );
+    }
+
+    #[tokio::test]
+    async fn test_rebuild_with_anchor_sets_scroll_anchor() {
+        let (tx, cache, _notify) = spawn_render_thread(80);
+
+        tx.send(RenderEvent::RebuildWithAnchor {
+            messages: vec![
+                MessageViewModel::user("First".to_string()),
+                MessageViewModel::user("Second".to_string()),
+            ],
+            anchor_message_idx: 1,
+        })
+        .unwrap();
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+
+        let c = cache.read();
+        assert!(c.scroll_anchor.is_some(), "scroll_anchor should be set");
+    }
+
+    #[tokio::test]
+    async fn test_clear_resets_cache() {
+        let (tx, cache, _notify) = spawn_render_thread(80);
+
+        tx.send(RenderEvent::Rebuild(vec![MessageViewModel::user(
+            "Hello".to_string(),
+        )]))
+        .unwrap();
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+
+        tx.send(RenderEvent::Clear).unwrap();
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+
+        let c = cache.read();
+        assert!(c.lines.is_empty(), "lines should be empty after Clear");
+        assert_eq!(c.total_lines, 0);
+    }
+
+    #[tokio::test]
+    async fn test_resize_rebuilds_with_new_width() {
+        let (tx, cache, _notify) = spawn_render_thread(80);
+
+        let user = MessageViewModel::user("Hello world".to_string());
+        tx.send(RenderEvent::Rebuild(vec![user.clone()])).unwrap();
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+
+        let v1 = cache.read().version;
+        let total_v1 = cache.read().total_lines;
+
+        // Resize
+        tx.send(RenderEvent::Resize(40)).unwrap();
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+
+        let c = cache.read();
+        assert!(c.version > v1, "version should increment after Resize");
+        // 窄宽度可能导致更多 wrap 行
+        assert!(c.total_lines >= total_v1);
     }
 
     #[test]
@@ -637,7 +521,6 @@ mod tests {
         let lines: Vec<Line<'static>> = vec![Line::from(long_text)];
         let result = RenderTask::build_wrap_map(&lines, 40);
         assert_eq!(result.len(), 1);
-        // width=40; 200 chars / 40 per line = 5 visual rows
         assert_eq!(result[0].visual_row_start, 0);
         assert_eq!(result[0].visual_row_end, 5);
     }
@@ -647,13 +530,11 @@ mod tests {
         let lines = vec![Line::from("你好世界")];
         let result = RenderTask::build_wrap_map(&lines, 80);
         assert_eq!(result[0].char_widths, vec![2, 2, 2, 2]);
-        // line_display_width = 8, width = 80, fits in 1 row
         assert_eq!(result[0].visual_row_end - result[0].visual_row_start, 1);
     }
 
     #[test]
     fn test_build_wrap_map_multi_line_visual_rows() {
-        // First line: 80 chars, width=40 → 80/40=2 visual rows
         let first_line: String = "A".repeat(80);
         let second_line = Line::from("short");
         let lines: Vec<Line<'static>> = vec![Line::from(first_line), second_line];

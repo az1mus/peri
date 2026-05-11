@@ -1,7 +1,6 @@
 use super::Command;
 use crate::app::App;
 use crate::ui::message_view::MessageViewModel;
-use crate::ui::render_thread::RenderEvent;
 
 pub struct DoctorCommand;
 
@@ -115,13 +114,8 @@ impl Command for DoctorCommand {
             .current_mut()
             .messages
             .view_messages
-            .push(vm.clone());
-        let _ = app
-            .session_mgr
-            .current_mut()
-            .messages
-            .render_tx
-            .send(RenderEvent::AddMessage(vm));
+            .push(vm);
+        app.render_rebuild();
     }
 }
 

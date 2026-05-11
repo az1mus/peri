@@ -1,6 +1,7 @@
 use super::message_pipeline::PipelineAction;
 use super::plugin_panel::PluginPanel;
 use super::*;
+use crate::ui::render_thread::RenderEvent;
 use rust_agent_middlewares::hitl::BatchItem;
 
 /// 从输入文本中提取 `/skill-name` 格式的 token（字母、数字、连字符、下划线）
@@ -19,6 +20,27 @@ fn extract_skill_tokens(input: &str) -> Vec<String> {
 }
 
 impl App {
+    /// 发送当前 view_messages 的全量重建到渲染线程
+    pub(crate) fn render_rebuild(&self) {
+        let session = &self.session_mgr.sessions[self.session_mgr.active];
+        let _ = session
+            .messages
+            .render_tx
+            .send(RenderEvent::Rebuild(session.messages.view_messages.clone()));
+    }
+
+    /// 发送带滚动锚点的全量重建到渲染线程
+    pub(crate) fn render_rebuild_with_anchor(&self, anchor_message_idx: usize) {
+        let session = &self.session_mgr.sessions[self.session_mgr.active];
+        let _ = session
+            .messages
+            .render_tx
+            .send(RenderEvent::RebuildWithAnchor {
+                messages: session.messages.view_messages.clone(),
+                anchor_message_idx,
+            });
+    }
+
     pub fn submit_message(&mut self, input: String) {
         if input.trim().is_empty() {
             return;
@@ -337,6 +359,9 @@ impl App {
     }
 
     /// 将 PipelineAction 映射到 view_messages 更新 + RenderEvent 发送
+    ///
+    /// 所有修改 view_messages 的 action 统一发送 `RenderEvent::Rebuild`，
+    /// 渲染线程通过 hash diff 只重新渲染变化的消息。
     fn apply_pipeline_action(&mut self, action: PipelineAction) {
         match action {
             PipelineAction::None => {}
@@ -344,11 +369,8 @@ impl App {
                 self.session_mgr.sessions[self.session_mgr.active]
                     .messages
                     .view_messages
-                    .push(vm.clone());
-                let _ = self.session_mgr.sessions[self.session_mgr.active]
-                    .messages
-                    .render_tx
-                    .send(RenderEvent::AddMessage(vm));
+                    .push(vm);
+                self.render_rebuild();
             }
             PipelineAction::AppendChunk(chunk) => {
                 match self.session_mgr.sessions[self.session_mgr.active]
@@ -360,24 +382,16 @@ impl App {
                         m.append_chunk(&chunk);
                     }
                     _ => {
-                        // 首个 chunk：创建带内容的 assistant bubble，通过 AddMessage 通知渲染线程
+                        // 首个 chunk：创建带内容的 assistant bubble
                         let mut vm = MessageViewModel::assistant();
                         vm.append_chunk(&chunk);
                         self.session_mgr.sessions[self.session_mgr.active]
                             .messages
                             .view_messages
-                            .push(vm.clone());
-                        let _ = self.session_mgr.sessions[self.session_mgr.active]
-                            .messages
-                            .render_tx
-                            .send(RenderEvent::AddMessage(vm));
-                        return;
+                            .push(vm);
                     }
                 }
-                let _ = self.session_mgr.sessions[self.session_mgr.active]
-                    .messages
-                    .render_tx
-                    .send(RenderEvent::AppendChunk(chunk));
+                self.render_rebuild();
             }
             PipelineAction::UpdateLast(vm) => {
                 if let Some(last) = self.session_mgr.sessions[self.session_mgr.active]
@@ -385,27 +399,21 @@ impl App {
                     .view_messages
                     .last_mut()
                 {
-                    *last = vm.clone();
+                    *last = vm;
                 } else {
                     self.session_mgr.sessions[self.session_mgr.active]
                         .messages
                         .view_messages
-                        .push(vm.clone());
+                        .push(vm);
                 }
-                let _ = self.session_mgr.sessions[self.session_mgr.active]
-                    .messages
-                    .render_tx
-                    .send(RenderEvent::UpdateLastMessage(vm));
+                self.render_rebuild();
             }
             PipelineAction::RemoveLast => {
                 self.session_mgr.sessions[self.session_mgr.active]
                     .messages
                     .view_messages
                     .pop();
-                let _ = self.session_mgr.sessions[self.session_mgr.active]
-                    .messages
-                    .render_tx
-                    .send(RenderEvent::RemoveLastMessage);
+                self.render_rebuild();
             }
             PipelineAction::UpdateToolResult { tool_call_id, vm } => {
                 // 按 tool_call_id 精确查找 ToolBlock（并行工具调用时避免 UpdateLast 互相覆盖）
@@ -447,15 +455,7 @@ impl App {
                         .view_messages
                         .push((*vm).clone());
                 }
-                // 刷新渲染（用 LoadHistory 保证渲染线程同步）
-                let msgs = self.session_mgr.sessions[self.session_mgr.active]
-                    .messages
-                    .view_messages
-                    .clone();
-                let _ = self.session_mgr.sessions[self.session_mgr.active]
-                    .messages
-                    .render_tx
-                    .send(RenderEvent::LoadHistory(msgs));
+                self.render_rebuild();
             }
             PipelineAction::RemoveLastN(n) => {
                 for _ in 0..n {
@@ -464,12 +464,7 @@ impl App {
                         .view_messages
                         .pop();
                 }
-                for _ in 0..n {
-                    let _ = self.session_mgr.sessions[self.session_mgr.active]
-                        .messages
-                        .render_tx
-                        .send(RenderEvent::RemoveLastMessage);
-                }
+                self.render_rebuild();
             }
             PipelineAction::RebuildAll {
                 prefix_len,
@@ -486,7 +481,7 @@ impl App {
                 self.session_mgr.sessions[self.session_mgr.active]
                     .messages
                     .view_messages
-                    .extend(tail_vms.clone());
+                    .extend(tail_vms);
                 // 计算滚动锚点：找到当前可见区域对应的第一条消息索引
                 // 通过 wrap_map 将 scroll_offset（视觉行）映射到消息索引
                 let anchor_message_idx = {
@@ -516,16 +511,7 @@ impl App {
                             .len(),
                     )
                 };
-                let _ = self.session_mgr.sessions[self.session_mgr.active]
-                    .messages
-                    .render_tx
-                    .send(RenderEvent::LoadHistoryWithAnchor {
-                        messages: self.session_mgr.sessions[self.session_mgr.active]
-                            .messages
-                            .view_messages
-                            .clone(),
-                        anchor_message_idx,
-                    });
+                self.render_rebuild_with_anchor(anchor_message_idx);
             }
         }
     }
@@ -642,11 +628,8 @@ impl App {
                 self.session_mgr.sessions[self.session_mgr.active]
                     .messages
                     .view_messages
-                    .push(vm.clone());
-                let _ = self.session_mgr.sessions[self.session_mgr.active]
-                    .messages
-                    .render_tx
-                    .send(RenderEvent::AddMessage(vm));
+                    .push(vm);
+                self.render_rebuild();
                 (true, false, false)
             }
             AgentEvent::OAuthAuthorizationFailed { server_name, error } => {
@@ -667,11 +650,8 @@ impl App {
                 self.session_mgr.sessions[self.session_mgr.active]
                     .messages
                     .view_messages
-                    .push(vm.clone());
-                let _ = self.session_mgr.sessions[self.session_mgr.active]
-                    .messages
-                    .render_tx
-                    .send(RenderEvent::AddMessage(vm));
+                    .push(vm);
+                self.render_rebuild();
                 (true, false, false)
             }
             AgentEvent::McpActionCompleted {
@@ -701,11 +681,8 @@ impl App {
                 self.session_mgr.sessions[self.session_mgr.active]
                     .messages
                     .view_messages
-                    .push(vm.clone());
-                let _ = self.session_mgr.sessions[self.session_mgr.active]
-                    .messages
-                    .render_tx
-                    .send(RenderEvent::AddMessage(vm));
+                    .push(vm);
+                self.render_rebuild();
                 (true, false, false)
             }
             AgentEvent::PluginActionCompleted {
@@ -818,11 +795,8 @@ impl App {
                 self.session_mgr.sessions[self.session_mgr.active]
                     .messages
                     .view_messages
-                    .push(vm.clone());
-                let _ = self.session_mgr.sessions[self.session_mgr.active]
-                    .messages
-                    .render_tx
-                    .send(RenderEvent::AddMessage(vm));
+                    .push(vm);
+                self.render_rebuild();
                 (true, false, false)
             }
             AgentEvent::TokenUsageUpdate {
@@ -867,11 +841,8 @@ impl App {
                         self.session_mgr.sessions[self.session_mgr.active]
                             .messages
                             .view_messages
-                            .push(vm.clone());
-                        let _ = self.session_mgr.sessions[self.session_mgr.active]
-                            .messages
-                            .render_tx
-                            .send(RenderEvent::AddMessage(vm));
+                            .push(vm);
+                        self.render_rebuild();
                     }
                 }
                 // 更新 spinner 的 token 显示（仅当次调用的 token，不累计）
@@ -1043,18 +1014,28 @@ impl App {
                             tail_vms,
                         });
                     } else {
-                        // 只清除 is_streaming 标志，不触发全量重建
-                        let _ = self.session_mgr.sessions[self.session_mgr.active]
-                            .messages
-                            .render_tx
-                            .send(RenderEvent::StreamingDone);
+                        // 清除 is_streaming 标志并发送全量重建
+                        if let Some(MessageViewModel::AssistantBubble { is_streaming, .. }) =
+                            self.session_mgr.sessions[self.session_mgr.active]
+                                .messages
+                                .view_messages
+                                .last_mut()
+                        {
+                            *is_streaming = false;
+                        }
+                        self.render_rebuild();
                     }
                 } else {
-                    // Interrupted/Error 已完成 reconcile，只需通知渲染线程清除 streaming 标志
-                    let _ = self.session_mgr.sessions[self.session_mgr.active]
-                        .messages
-                        .render_tx
-                        .send(RenderEvent::StreamingDone);
+                    // Interrupted/Error 已完成 reconcile，清除 streaming 标志并重建
+                    if let Some(MessageViewModel::AssistantBubble { is_streaming, .. }) =
+                        self.session_mgr.sessions[self.session_mgr.active]
+                            .messages
+                            .view_messages
+                            .last_mut()
+                    {
+                        *is_streaming = false;
+                    }
+                    self.render_rebuild();
                 }
                 // 跨切面：Langfuse
                 let langfuse_tracer = self.session_mgr.sessions[self.session_mgr.active]
@@ -1199,15 +1180,7 @@ impl App {
                             .messages
                             .view_messages
                             .truncate(round_start);
-                        let _ = self.session_mgr.sessions[self.session_mgr.active]
-                            .messages
-                            .render_tx
-                            .send(RenderEvent::LoadHistory(
-                                self.session_mgr.sessions[self.session_mgr.active]
-                                    .messages
-                                    .view_messages
-                                    .clone(),
-                            ));
+                        self.render_rebuild();
                         // 截断 agent_state_messages（回滚 StateSnapshot 扩展的内容）
                         let pre_len = self.session_mgr.sessions[self.session_mgr.active]
                             .metadata

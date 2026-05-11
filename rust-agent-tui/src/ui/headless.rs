@@ -135,11 +135,8 @@ mod tests {
         app.session_mgr.sessions[app.session_mgr.active]
             .messages
             .view_messages
-            .push(vm.clone());
-        let _ = app.session_mgr.sessions[app.session_mgr.active]
-            .messages
-            .render_tx
-            .send(RenderEvent::AddMessage(vm));
+            .push(vm);
+        app.render_rebuild();
         notified.await;
         handle
             .terminal
@@ -657,7 +654,7 @@ mod tests {
     async fn test_tool_call_message_visible_when_toggled() {
         let (mut app, mut handle) = App::new_headless(120, 30).await;
 
-        // 使用 ToolStart 事件添加工具调用（会发送 RenderEvent::AddMessage）
+        // 使用 ToolStart 事件添加工具调用（会发送 RenderEvent::Rebuild）
         let notified1 = handle.render_notify.notified();
         app.push_agent_event(AgentEvent::ToolStart {
             tool_call_id: "tc1".into(),
@@ -953,11 +950,8 @@ mod tests {
             app.session_mgr.sessions[app.session_mgr.active]
                 .messages
                 .view_messages
-                .push(vm.clone());
-            let _ = app.session_mgr.sessions[app.session_mgr.active]
-                .messages
-                .render_tx
-                .send(RenderEvent::AddMessage(vm));
+                .push(vm);
+            app.render_rebuild();
             notified.await;
         }
 
@@ -1035,11 +1029,8 @@ mod tests {
             app.session_mgr.sessions[app.session_mgr.active]
                 .messages
                 .view_messages
-                .push(vm.clone());
-            let _ = app.session_mgr.sessions[app.session_mgr.active]
-                .messages
-                .render_tx
-                .send(RenderEvent::AddMessage(vm));
+                .push(vm);
+            app.render_rebuild();
             notified.await;
         }
 
@@ -1083,11 +1074,8 @@ mod tests {
             app.session_mgr.sessions[app.session_mgr.active]
                 .messages
                 .view_messages
-                .push(vm.clone());
-            let _ = app.session_mgr.sessions[app.session_mgr.active]
-                .messages
-                .render_tx
-                .send(RenderEvent::AddMessage(vm));
+                .push(vm);
+            app.render_rebuild();
             notified.await;
         }
 
@@ -1820,11 +1808,8 @@ mod tests {
         app.session_mgr.sessions[app.session_mgr.active]
             .messages
             .view_messages
-            .push(user_vm.clone());
-        let _ = app.session_mgr.sessions[app.session_mgr.active]
-            .messages
-            .render_tx
-            .send(RenderEvent::AddMessage(user_vm));
+            .push(user_vm);
+        app.render_rebuild();
 
         let n1 = handle.render_notify.notified();
         let n2 = handle.render_notify.notified();
@@ -1886,11 +1871,8 @@ mod tests {
         app.session_mgr.sessions[app.session_mgr.active]
             .messages
             .view_messages
-            .push(user1.clone());
-        let _ = app.session_mgr.sessions[app.session_mgr.active]
-            .messages
-            .render_tx
-            .send(RenderEvent::AddMessage(user1));
+            .push(user1);
+        app.render_rebuild();
 
         let n1 = handle.render_notify.notified();
         let n2 = handle.render_notify.notified();
@@ -1915,11 +1897,8 @@ mod tests {
         app.session_mgr.sessions[app.session_mgr.active]
             .messages
             .view_messages
-            .push(user2.clone());
-        let _ = app.session_mgr.sessions[app.session_mgr.active]
-            .messages
-            .render_tx
-            .send(RenderEvent::AddMessage(user2));
+            .push(user2);
+        app.render_rebuild();
 
         let n3 = handle.render_notify.notified();
         let n4 = handle.render_notify.notified();
@@ -3272,6 +3251,188 @@ mod tests {
                 .agent
                 .needs_auto_compact,
             "needs_auto_compact should be cleared when no background tasks"
+        );
+    }
+
+    /// 回归：Anthropic thinking 模式下，流式阶段 AI message 不可见是预期的（reasoning 被跳过），
+    /// 但 Done 后 RebuildAll 不应丢失 user message
+    #[tokio::test]
+    async fn test_thinking_mode_user_message_survives_rebuild() {
+        use rust_create_agent::messages::BaseMessage;
+
+        let (mut app, mut handle) = App::new_headless(120, 30).await;
+
+        // 1. 模拟 submit_message：设置 round_start_vm_idx，添加 UserBubble
+        app.session_mgr.sessions[app.session_mgr.active]
+            .messages
+            .round_start_vm_idx = app.session_mgr.sessions[app.session_mgr.active]
+            .messages
+            .view_messages
+            .len();
+        let user_vm = MessageViewModel::user("explain recursion".into());
+        app.session_mgr.sessions[app.session_mgr.active]
+            .messages
+            .view_messages
+            .push(user_vm);
+        app.render_rebuild();
+
+        // 等待 UserBubble 渲染
+        let n0 = handle.render_notify.notified();
+        n0.await;
+
+        // 2. AI 开始 thinking（AiReasoning 事件 → PipelineAction::None → 无 VM 创建）
+        app.push_agent_event(AgentEvent::AiReasoning(
+            "Let me think about recursion...".into(),
+        ));
+        app.push_agent_event(AgentEvent::AiReasoning(
+            "Recursion is when a function calls itself...".into(),
+        ));
+        app.process_pending_events();
+
+        // 此时 view_messages 应只有 UserBubble（reasoning 不创建 VM）
+        assert_eq!(
+            app.session_mgr.sessions[app.session_mgr.active]
+                .messages
+                .view_messages
+                .len(),
+            1,
+            "thinking 阶段应只有 UserBubble"
+        );
+
+        // 3. AI 开始输出文本（AssistantChunk → 创建 AssistantBubble）
+        let notify = Arc::clone(&handle.render_notify);
+        let n1 = notify.notified();
+        let n2 = notify.notified();
+        app.push_agent_event(AgentEvent::AssistantChunk(
+            "Recursion is a technique where ".into(),
+        ));
+        app.push_agent_event(AgentEvent::AssistantChunk(
+            "a function calls itself.".into(),
+        ));
+        // StateSnapshot 包含 Human + Ai（含 reasoning）
+        app.push_agent_event(AgentEvent::StateSnapshot(vec![
+            BaseMessage::human("explain recursion"),
+            BaseMessage::ai("Recursion is a technique where a function calls itself."),
+        ]));
+        // Done → reconcile_tail → 可能触发 RebuildAll
+        app.push_agent_event(AgentEvent::Done);
+        app.process_pending_events();
+        tokio::join!(n1, n2);
+
+        handle
+            .terminal
+            .draw(|f| main_ui::render(f, &mut app))
+            .unwrap();
+
+        let snap = handle.snapshot();
+        // 关键断言：user message 在 RebuildAll 后仍然可见
+        assert!(
+            handle.contains("explain recursion"),
+            "Done 后 RebuildAll 不应丢失 user message，实际:\n{}",
+            snap.join("\n")
+        );
+        // AI message 也应可见
+        assert!(
+            handle.contains("Recursion is a technique"),
+            "AI 回复应在 RebuildAll 后可见，实际:\n{}",
+            snap.join("\n")
+        );
+    }
+
+    /// 回归：thinking → tool_call → text 的完整流程，RebuildAll 后所有消息可见
+    #[tokio::test]
+    async fn test_thinking_toolcall_text_rebuild_preserves_user() {
+        use rust_create_agent::messages::{BaseMessage, ContentBlock, MessageContent, MessageId};
+
+        let (mut app, mut handle) = App::new_headless(120, 30).await;
+
+        // 1. submit_message
+        app.session_mgr.sessions[app.session_mgr.active]
+            .messages
+            .round_start_vm_idx = app.session_mgr.sessions[app.session_mgr.active]
+            .messages
+            .view_messages
+            .len();
+        let user_vm = MessageViewModel::user("show me main.rs".into());
+        app.session_mgr.sessions[app.session_mgr.active]
+            .messages
+            .view_messages
+            .push(user_vm);
+        app.render_rebuild();
+        let n0 = handle.render_notify.notified();
+        n0.await;
+
+        // 2. thinking
+        app.push_agent_event(AgentEvent::AiReasoning("I need to read the file...".into()));
+        app.process_pending_events();
+
+        // 3. tool_call (AI 调用 Read)
+        let notify = Arc::clone(&handle.render_notify);
+        let n1 = notify.notified();
+        app.push_agent_event(AgentEvent::ToolStart {
+            tool_call_id: "tc_read".into(),
+            name: "Read".into(),
+            display: "ReadFile".into(),
+            args: "src/main.rs".into(),
+            input: serde_json::json!({"path": "src/main.rs"}),
+        });
+        app.process_pending_events();
+        n1.await;
+
+        // 4. tool_end
+        let n2 = notify.notified();
+        app.push_agent_event(AgentEvent::ToolEnd {
+            tool_call_id: "tc_read".into(),
+            name: "Read".into(),
+            output: "fn main() { println!(\"hello\"); }".into(),
+            is_error: false,
+        });
+        app.process_pending_events();
+        n2.await;
+
+        // 5. 更多 thinking + 文本回复
+        let n3 = notify.notified();
+        let n4 = notify.notified();
+        app.push_agent_event(AgentEvent::AiReasoning("Now I can explain...".into()));
+        app.push_agent_event(AgentEvent::AssistantChunk(
+            "Here is the content of main.rs:".into(),
+        ));
+        // StateSnapshot: Human + Ai(tool_call) + Tool + Ai(text)
+        let ai_with_tool = BaseMessage::ai_from_blocks(vec![ContentBlock::tool_use(
+            "tc_read",
+            "Read",
+            serde_json::json!({"path": "src/main.rs"}),
+        )]);
+        app.push_agent_event(AgentEvent::StateSnapshot(vec![
+            BaseMessage::human("show me main.rs"),
+            ai_with_tool,
+            BaseMessage::Tool {
+                id: MessageId::new(),
+                tool_call_id: "tc_read".into(),
+                content: MessageContent::text("fn main() { println!(\"hello\"); }"),
+                is_error: false,
+            },
+            BaseMessage::ai("Here is the content of main.rs:"),
+        ]));
+        app.push_agent_event(AgentEvent::Done);
+        app.process_pending_events();
+        tokio::join!(n3, n4);
+
+        handle
+            .terminal
+            .draw(|f| main_ui::render(f, &mut app))
+            .unwrap();
+
+        let snap = handle.snapshot();
+        assert!(
+            handle.contains("show me main.rs"),
+            "thinking+tool 流程 RebuildAll 后 user message 应可见，实际:\n{}",
+            snap.join("\n")
+        );
+        assert!(
+            handle.contains("Here is the content"),
+            "AI 最终回复应可见，实际:\n{}",
+            snap.join("\n")
         );
     }
 }

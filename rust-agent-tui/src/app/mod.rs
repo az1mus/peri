@@ -424,7 +424,7 @@ impl App {
                         let _ = self.session_mgr.sessions[self.session_mgr.active]
                             .messages
                             .render_tx
-                            .send(RenderEvent::LoadHistory(remaining));
+                            .send(RenderEvent::Rebuild(remaining));
                     }
                     // 截断 agent_state_messages（回滚 StateSnapshot 扩展的内容）
                     let pre_len = self.session_mgr.sessions[self.session_mgr.active]
@@ -464,11 +464,8 @@ impl App {
                     self.session_mgr.sessions[self.session_mgr.active]
                         .messages
                         .view_messages
-                        .push(vm.clone());
-                    let _ = self.session_mgr.sessions[self.session_mgr.active]
-                        .messages
-                        .render_tx
-                        .send(RenderEvent::AddMessage(vm));
+                        .push(vm);
+                    self.render_rebuild();
                 } else {
                     let vm = MessageViewModel::system(
                         "⚠ 已强制中断（后台任务可能仍在运行）".to_string(),
@@ -476,11 +473,8 @@ impl App {
                     self.session_mgr.sessions[self.session_mgr.active]
                         .messages
                         .view_messages
-                        .push(vm.clone());
-                    let _ = self.session_mgr.sessions[self.session_mgr.active]
-                        .messages
-                        .render_tx
-                        .send(RenderEvent::AddMessage(vm));
+                        .push(vm);
+                    self.render_rebuild();
                 }
             } else {
                 let vm =
@@ -488,11 +482,8 @@ impl App {
                 self.session_mgr.sessions[self.session_mgr.active]
                     .messages
                     .view_messages
-                    .push(vm.clone());
-                let _ = self.session_mgr.sessions[self.session_mgr.active]
-                    .messages
-                    .render_tx
-                    .send(RenderEvent::AddMessage(vm));
+                    .push(vm);
+                self.render_rebuild();
             }
         }
     }

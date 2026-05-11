@@ -209,7 +209,7 @@ impl App {
         let _ = self.session_mgr.sessions[self.session_mgr.active]
             .messages
             .render_tx
-            .send(RenderEvent::LoadHistory(
+            .send(RenderEvent::Rebuild(
                 self.session_mgr.sessions[self.session_mgr.active]
                     .messages
                     .view_messages
@@ -309,11 +309,8 @@ impl App {
             self.session_mgr.sessions[self.session_mgr.active]
                 .messages
                 .view_messages
-                .push(vm.clone());
-            let _ = self.session_mgr.sessions[self.session_mgr.active]
-                .messages
-                .render_tx
-                .send(crate::ui::render_thread::RenderEvent::AddMessage(vm));
+                .push(vm);
+            self.render_rebuild();
             return;
         }
 
@@ -332,11 +329,8 @@ impl App {
                 self.session_mgr.sessions[self.session_mgr.active]
                     .messages
                     .view_messages
-                    .push(vm.clone());
-                let _ = self.session_mgr.sessions[self.session_mgr.active]
-                    .messages
-                    .render_tx
-                    .send(crate::ui::render_thread::RenderEvent::AddMessage(vm));
+                    .push(vm);
+                self.render_rebuild();
                 return;
             }
         };
@@ -369,11 +363,8 @@ impl App {
         self.session_mgr.sessions[self.session_mgr.active]
             .messages
             .view_messages
-            .push(vm.clone());
-        let _ = self.session_mgr.sessions[self.session_mgr.active]
-            .messages
-            .render_tx
-            .send(RenderEvent::AddMessage(vm));
+            .push(vm);
+        self.render_rebuild();
 
         // 保存快照：compact 失败时恢复，防止 tracker 失去对上下文大小的感知
         self.session_mgr.sessions[self.session_mgr.active]
