@@ -218,10 +218,11 @@ impl ChatAnthropic {
                         "is_error": is_error
                     });
 
+                    // Anthropic 要求 tool_result blocks 必须在 user content 数组开头
                     let appended = if let Some(last) = result.last_mut() {
                         if last["role"] == "user" {
                             if let Some(arr) = last["content"].as_array_mut() {
-                                arr.push(tool_result_block.clone());
+                                arr.insert(0, tool_result_block.clone());
                                 true
                             } else {
                                 false
@@ -453,6 +454,13 @@ impl BaseModel for ChatAnthropic {
             req = req.header("anthropic-beta", "prompt-caching-2024-07-31");
         }
 
+        tracing::debug!(
+            provider = "anthropic",
+            model = %self.model,
+            messages_count = body["messages"].as_array().map(|a| a.len()).unwrap_or(0),
+            "LLM 请求发送"
+        );
+
         let resp = req.json(&body).send().await.map_err(|e| {
             tracing::error!(
                 provider = "anthropic",
@@ -496,16 +504,31 @@ impl BaseModel for ChatAnthropic {
                 .unwrap_or("未知错误")
                 .to_string();
             let error_type = resp_json["error"]["type"].as_str().unwrap_or("unknown");
-            tracing::error!(
-                provider = "anthropic",
-                model = %self.model,
-                status = %status,
-                error_type,
-                error_message = %msg,
-                elapsed_ms = start.elapsed().as_millis() as u64,
-                msg_count,
-                "LLM API 错误"
-            );
+
+            // 500 错误记录完整请求体以便排查服务端 bug
+            if status.as_u16() == 500 {
+                tracing::error!(
+                    provider = "anthropic",
+                    model = %self.model,
+                    status = %status,
+                    error_type,
+                    error_message = %msg,
+                    elapsed_ms = start.elapsed().as_millis() as u64,
+                    request_messages = %serde_json::to_string(&body["messages"]).unwrap_or_else(|_| "serialize failed".into()),
+                    "LLM API 500 错误（服务端 bug），已记录请求体"
+                );
+            } else {
+                tracing::error!(
+                    provider = "anthropic",
+                    model = %self.model,
+                    status = %status,
+                    error_type,
+                    error_message = %msg,
+                    elapsed_ms = start.elapsed().as_millis() as u64,
+                    msg_count,
+                    "LLM API 错误"
+                );
+            }
             return Err(AgentError::LlmHttpError {
                 status: status.as_u16(),
                 message: format!("API 错误 {status}: {msg}"),

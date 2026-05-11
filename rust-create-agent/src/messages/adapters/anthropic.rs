@@ -241,8 +241,9 @@ impl AnthropicAdapter {
                     if should_append {
                         if let Some(last) = result.last_mut() {
                             // 安全：should_append 为 true 时已确认 content 是数组
+                            // Anthropic 要求 tool_result blocks 必须在 user content 数组开头
                             if let Some(arr) = last["content"].as_array_mut() {
-                                arr.push(tool_result_block);
+                                arr.insert(0, tool_result_block);
                             }
                         }
                     } else {

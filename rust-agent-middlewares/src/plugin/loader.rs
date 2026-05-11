@@ -2,7 +2,11 @@ use crate::hooks::types::HooksConfig;
 use crate::hooks::types::RegisteredHook;
 use crate::mcp::config::McpConfigFile;
 use crate::mcp::McpServerConfig;
-use crate::plugin::config::{load_claude_settings, load_installed_plugins, load_plugin_manifest};
+use crate::plugin::config::{
+    load_claude_settings, load_installed_plugins, load_plugin_manifest, marketplaces_cache_dir,
+};
+use crate::plugin::installer::generate_synthetic_manifest;
+use crate::plugin::marketplace::read_manifest_from_path;
 use crate::plugin::types::{InstalledPlugins, McpServerEntry, PluginManifest};
 use gray_matter::{engine::YAML, Matter};
 use perihelion_lsp::config::LspConfigSource;
@@ -87,6 +91,69 @@ pub struct LoadedPlugin {
 pub fn load_manifest(plugin_dir: &Path) -> Result<PluginManifest, LoaderError> {
     load_plugin_manifest(plugin_dir)
         .map_err(|e| LoaderError::ManifestLoadFailed(format!("{}: {e}", plugin_dir.display())))
+}
+
+/// 尝试从 marketplace manifest 中查找插件条目，生成合成 plugin.json 到插件缓存目录。
+/// 返回 true 表示成功生成，false 表示无法生成（marketplace 不存在或插件条目未找到）。
+fn try_generate_synthetic_manifest_fallback(
+    install_path: &Path,
+    plugin_name: &str,
+    marketplace: &str,
+) -> bool {
+    if marketplace.is_empty() {
+        return false;
+    }
+
+    let cache_dir = marketplaces_cache_dir().join(marketplace);
+    let manifest_path = cache_dir.join("marketplace.json");
+    let subdir_path = cache_dir.join(".claude-plugin").join("marketplace.json");
+
+    let manifest_file = if manifest_path.exists() {
+        manifest_path
+    } else if subdir_path.exists() {
+        subdir_path
+    } else {
+        return false;
+    };
+
+    let marketplace_manifest = match read_manifest_from_path(&manifest_file) {
+        Ok(m) => m,
+        Err(_) => return false,
+    };
+
+    let marketplace_plugin = match marketplace_manifest
+        .plugins
+        .iter()
+        .find(|p| p.name == plugin_name)
+    {
+        Some(p) => p,
+        None => return false,
+    };
+
+    // 只有当插件确实没有原生 plugin.json 时才生成
+    let existing = install_path.join(".claude-plugin").join("plugin.json");
+    if existing.exists() {
+        return false;
+    }
+
+    match generate_synthetic_manifest(install_path, marketplace_plugin) {
+        Ok(()) => {
+            debug!(
+                plugin = %plugin_name,
+                marketplace = %marketplace,
+                "已为旧缓存插件生成合成 plugin.json"
+            );
+            true
+        }
+        Err(e) => {
+            warn!(
+                plugin = %plugin_name,
+                error = %e,
+                "生成合成 plugin.json 失败"
+            );
+            false
+        }
+    }
 }
 
 pub(crate) fn extract_commands(
@@ -287,8 +354,19 @@ pub fn load_plugins(installed: &InstalledPlugins) -> Result<Vec<LoadedPlugin>, L
         let manifest = match load_manifest(&plugin.install_path) {
             Ok(m) => m,
             Err(_) => {
-                // 静默跳过无法加载的插件（文件被删除或移动）
-                continue;
+                // 尝试从 marketplace manifest 生成合成 plugin.json（兼容修复前安装的 LSP 插件）
+                if try_generate_synthetic_manifest_fallback(
+                    &plugin.install_path,
+                    &plugin.name,
+                    &plugin.marketplace,
+                ) {
+                    match load_manifest(&plugin.install_path) {
+                        Ok(m) => m,
+                        Err(_) => continue,
+                    }
+                } else {
+                    continue;
+                }
             }
         };
 
@@ -1056,6 +1134,65 @@ pub(crate) mod tests {
 
         let loaded = load_plugins(&installed).unwrap();
         assert!(loaded.is_empty());
+    }
+
+    #[test]
+    fn test_load_plugins_synthetic_manifest_fallback() {
+        let dir = tempdir().unwrap();
+
+        // 创建插件缓存目录（无 plugin.json）
+        let plugin_install_path = dir
+            .path()
+            .join("cache")
+            .join("test-mkt")
+            .join("lsp-plugin")
+            .join("1.0.0");
+        std::fs::create_dir_all(&plugin_install_path).unwrap();
+
+        // marketplaces_cache_dir() 读取的是 ~/.claude/plugins/marketplaces，
+        // 测试中无法覆盖。直接测试 try_generate_synthetic_manifest_fallback 函数，
+        // 验证当 marketplace 缓存不在默认路径时返回 false。
+        let result = try_generate_synthetic_manifest_fallback(
+            &plugin_install_path,
+            "lsp-plugin",
+            "test-mkt",
+        );
+
+        // 由于 marketplace 缓存不在默认路径，fallback 应该返回 false
+        assert!(!result);
+    }
+
+    #[test]
+    fn test_try_generate_synthetic_manifest_fallback_no_marketplace() {
+        let dir = tempdir().unwrap();
+        let plugin_path = dir.path().join("some-plugin");
+
+        // marketplace 为空时应该返回 false
+        let result = try_generate_synthetic_manifest_fallback(&plugin_path, "some-plugin", "");
+        assert!(!result);
+    }
+
+    #[test]
+    fn test_try_generate_synthetic_manifest_fallback_already_has_manifest() {
+        let dir = tempdir().unwrap();
+        let plugin_path = dir.path().join("has-manifest");
+        std::fs::create_dir_all(plugin_path.join(".claude-plugin")).unwrap();
+        std::fs::write(
+            plugin_path.join(".claude-plugin").join("plugin.json"),
+            r#"{"name":"existing","version":"1.0.0"}"#,
+        )
+        .unwrap();
+
+        // 已有 plugin.json 时不应覆盖
+        let result =
+            try_generate_synthetic_manifest_fallback(&plugin_path, "has-manifest", "test-mkt");
+        assert!(!result);
+
+        // 原有内容保持不变
+        let content =
+            std::fs::read_to_string(plugin_path.join(".claude-plugin").join("plugin.json"))
+                .unwrap();
+        assert!(content.contains("existing"));
     }
 
     #[test]
