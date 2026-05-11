@@ -118,6 +118,8 @@ TUI pipeline:
 
 ## 修复方案
 
+### 核心修复（已实施）
+
 将 `tool_dispatch.rs:40` 的 `AiReasoning` 改为 `TextChunk`，使工具前文本走 `AssistantChunk` → `push_chunk()` → `current_ai_text` 路径：
 
 ```rust
@@ -134,6 +136,41 @@ if !reasoning.thought.trim().is_empty() {
 ```
 
 `ai_msg_id` 已在 line 35 捕获（`let ai_msg_id = ai_msg.id();`），可直接使用。
+
+### TUI 层补充修复（未提交）
+
+`message_pipeline.rs` 的未提交修改在 `ToolStart` 时检查 `throttle_armed` 并立即发射 `RebuildAll`，确保工具调用前的流式文本被显示：
+
+```rust
+AgentEvent::ToolStart { ... } => {
+    // Fire pending throttle before disarming to ensure text streamed before
+    // tool call is displayed. This fixes the bug where AI text disappears
+    // when tool calls arrive.
+    let action = if self.throttle_armed {
+        self.throttle_armed = false;
+        // Return RebuildAll with the current streaming content
+        Some(PipelineAction::RebuildAll {
+            prefix_len: self.completed_len_at_round_start,
+            tail_vms: self.build_tail_vms(),
+        })
+    } else {
+        self.throttle_armed = false;
+        None
+    };
+
+    if self.in_subagent() {
+        self.subagent_tool_start(&tool_call_id, &name, input);
+    } else {
+        self.tool_start_internal(&tool_call_id, &name, input);
+    }
+
+    if let Some(a) = action {
+        vec![a]
+    } else {
+        vec![PipelineAction::None]
+    }
+}
+```
 
 ## 相关代码
 
@@ -153,6 +190,8 @@ if !reasoning.thought.trim().is_empty() {
 - `rust-create-agent`：313 passed, 0 failed
 - `rust-agent-tui`：391 passed, 0 failed
 
+**待提交的 TUI 层补充修复**：`rust-agent-tui/src/app/message_pipeline.rs` 的未提交修改
+
 ## 待验证
 
 需要用户实际运行 TUI（`cargo run -p rust-agent-tui`）验证以下场景：
@@ -161,3 +200,8 @@ if !reasoning.thought.trim().is_empty() {
 2. **纯文本场景**：发送一个不需要工具的纯文本问题，确认纯文本回复仍然正常流式显示
 3. **混合模式**：发送一个需要多轮工具调用的问题，确认每轮工具调用前后的文本都能正常显示
 4. **Reasoning 场景**：如果使用带 reasoning 的模型，确认 "Thought for N chars" 推理提示仍然正常显示（推理内容由 LLM 适配器流式发射的 `AiReasoning` 事件驱动，不受此次修改影响）
+
+## 用户报告问题仍存在的可能原因
+
+1. **未重新编译代码**：如果用户直接运行了旧的二进制文件，修复不会生效。需要使用 `cargo run -p rust-agent-tui` 重新编译
+2. **TUI 层补充修复未生效**：`message_pipeline.rs` 的未提交修改可能需要与核心修复一起生效

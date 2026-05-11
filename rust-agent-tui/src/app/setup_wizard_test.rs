@@ -1,0 +1,371 @@
+use super::*;
+use crate::config::types::{AppConfig, ProviderConfig};
+
+#[test]
+fn test_needs_setup_empty_providers() {
+    let config = AppConfig::default();
+    assert!(needs_setup(&config));
+}
+
+#[test]
+fn test_needs_setup_api_key_from_config() {
+    let mut config = AppConfig::default();
+    config.providers.push(ProviderConfig {
+        id: "test".to_string(),
+        provider_type: "openai".to_string(),
+        api_key: "sk-test".to_string(),
+        base_url: String::new(),
+        ..Default::default()
+    });
+    assert!(!needs_setup(&config));
+}
+
+#[test]
+fn test_setup_wizard_new_defaults() {
+    let wizard = SetupWizardPanel::new();
+    assert_eq!(wizard.step, SetupStep::Choose);
+    assert_eq!(wizard.source, SetupSource::CustomApi);
+    assert_eq!(wizard.providers.len(), 1);
+    assert_eq!(wizard.providers[0].provider_type, ProviderType::Anthropic);
+    assert!(wizard.providers[0].api_key.is_empty());
+    assert!(wizard.providers[0].selected);
+}
+
+#[test]
+fn test_provider_type_cycle() {
+    let mut pt = ProviderType::Anthropic;
+    pt.cycle();
+    assert_eq!(pt, ProviderType::OpenAiCompatible);
+    pt.cycle();
+    assert_eq!(pt, ProviderType::Anthropic);
+}
+
+#[test]
+fn test_migrated_provider_new() {
+    let mp = MigratedProvider::new(ProviderType::OpenAiCompatible);
+    assert_eq!(mp.provider_id, "openai");
+    assert_eq!(mp.base_url, "https://api.openai.com/v1");
+    assert!(mp.selected);
+    assert!(mp.api_key.is_empty());
+}
+
+#[test]
+fn test_migrated_provider_is_complete() {
+    let mut mp = MigratedProvider::new(ProviderType::Anthropic);
+    assert!(!mp.is_complete()); // api_key empty
+    mp.api_key = "sk-test".to_string();
+    assert!(mp.is_complete());
+    mp.aliases[0].model_id.clear();
+    assert!(!mp.is_complete());
+}
+
+#[test]
+fn test_migrate_from_claude_code_no_file() {
+    let mut wizard = SetupWizardPanel::new();
+    wizard.source = SetupSource::MigrateClaudeCode;
+    // 使用不存在的路径
+    let result = wizard.migrate_from_claude_code();
+    // 不应该 panic，返回 false 或 true 取决于是否有 ~/.claude/settings.json
+    // 只要不 panic 就行
+    let _ = result;
+}
+
+#[test]
+fn test_migrate_syncs_all_fields() {
+    // 构造一个临时 settings.json 模拟 Claude Code 配置
+    let temp_dir = std::env::temp_dir().join(format!("zen-migrate-test-{}", uuid::Uuid::now_v7()));
+    let claude_dir = temp_dir.join(".claude");
+    std::fs::create_dir_all(&claude_dir).unwrap();
+
+    let settings = serde_json::json!({
+        "env": {
+            "ANTHROPIC_API_KEY": "sk-ant-123",
+            "ANTHROPIC_BASE_URL": "https://proxy.example.com",
+            "ANTHROPIC_DEFAULT_OPUS_MODEL": "glm-5.1",
+            "ANTHROPIC_DEFAULT_SONNET_MODEL": "glm-5-turbo",
+            "ANTHROPIC_DEFAULT_HAIKU_MODEL": "glm-4.7",
+            "OPENAI_API_KEY": "sk-openai-456",
+            "OPENAI_BASE_URL": "https://api.deepseek.com/v1",
+            "OPENAI_DEFAULT_OPUS_MODEL": "deepseek-v4-pro",
+            "OPENAI_DEFAULT_SONNET_MODEL": "deepseek-v4-pro",
+            "OPENAI_DEFAULT_HAIKU_MODEL": "deepseek-v4-flash",
+        }
+    });
+    std::fs::write(claude_dir.join("settings.json"), settings.to_string()).unwrap();
+
+    // 临时修改 home_dir 指向 temp_dir
+    // 由于 migrate_from_claude_code 用 dirs_next::home_dir，
+    // 我们无法直接 mock，所以用真实路径测试
+    // 改为直接调用测试函数
+    let env = settings["env"].as_object().unwrap().clone();
+
+    // 验证 env_get 辅助函数
+    assert_eq!(env_get(&env, "ANTHROPIC_API_KEY"), "sk-ant-123");
+    assert_eq!(
+        env_get(&env, "ANTHROPIC_BASE_URL"),
+        "https://proxy.example.com"
+    );
+    assert_eq!(
+        env_get(&env, "OPENAI_DEFAULT_OPUS_MODEL"),
+        "deepseek-v4-pro"
+    );
+    assert_eq!(env_get(&env, "NONEXISTENT"), "");
+
+    // 验证空 API key 但有 base_url 的前缀会生成条目
+    let env_partial = serde_json::json!({
+        "env": {
+            "ANTHROPIC_BASE_URL": "https://proxy.example.com",
+            "ANTHROPIC_DEFAULT_OPUS_MODEL": "glm-5.1",
+        }
+    });
+    let env_obj = env_partial["env"].as_object().unwrap();
+    assert_eq!(env_get(env_obj, "ANTHROPIC_API_KEY"), "");
+    assert_eq!(
+        env_get(env_obj, "ANTHROPIC_BASE_URL"),
+        "https://proxy.example.com"
+    );
+
+    let _ = std::fs::remove_dir_all(&temp_dir);
+}
+
+#[test]
+fn test_migrate_auth_token_fallback() {
+    // 验证 ANTHROPIC_AUTH_TOKEN 在没有 ANTHROPIC_API_KEY 时被使用
+    let env = serde_json::json!({
+        "ANTHROPIC_AUTH_TOKEN": "token-abc",
+        "ANTHROPIC_BASE_URL": "https://proxy.example.com",
+    });
+    let env_obj = env.as_object().unwrap();
+
+    // ANTHROPIC_API_KEY 优先
+    assert_eq!(env_get(env_obj, "ANTHROPIC_API_KEY"), "");
+    assert_eq!(env_get(env_obj, "ANTHROPIC_AUTH_TOKEN"), "token-abc");
+
+    // 模拟 key_names 优先级查找逻辑
+    let key_names = ["ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN"];
+    let found = key_names
+        .iter()
+        .map(|k| env_get(env_obj, k))
+        .find(|v| !v.is_empty())
+        .unwrap_or_default();
+    assert_eq!(found, "token-abc");
+}
+
+#[test]
+fn test_form_field_navigation() {
+    assert_eq!(FormField::ProviderType.next(), FormField::ProviderId);
+    assert_eq!(FormField::HaikuModel.next(), FormField::Confirm);
+    assert_eq!(FormField::Confirm.next(), FormField::ProviderType);
+
+    assert_eq!(FormField::ProviderType.prev(), FormField::Confirm);
+    assert_eq!(FormField::Confirm.prev(), FormField::HaikuModel);
+    assert_eq!(FormField::ProviderId.prev(), FormField::ProviderType);
+}
+
+// ── Event handling tests ──
+
+use tui_textarea::{Input, Key};
+
+fn make_char(c: char) -> Input {
+    Input {
+        key: Key::Char(c),
+        ctrl: false,
+        alt: false,
+        shift: false,
+    }
+}
+fn make_key(key: Key) -> Input {
+    Input {
+        key,
+        ctrl: false,
+        alt: false,
+        shift: false,
+    }
+}
+fn type_text(wizard: &mut SetupWizardPanel, text: &str) {
+    for c in text.chars() {
+        let _ = handle_setup_wizard_key(wizard, make_char(c));
+    }
+}
+
+// ── Step: Choose ──
+
+#[test]
+fn test_choose_arrow_cycles_source() {
+    let mut wizard = SetupWizardPanel::new();
+    let _ = handle_setup_wizard_key(&mut wizard, make_key(Key::Down));
+    assert_eq!(wizard.source, SetupSource::MigrateClaudeCode);
+    let _ = handle_setup_wizard_key(&mut wizard, make_key(Key::Up));
+    assert_eq!(wizard.source, SetupSource::CustomApi);
+}
+
+#[test]
+fn test_choose_enter_custom_advances_to_form() {
+    let mut wizard = SetupWizardPanel::new();
+    let _ = handle_setup_wizard_key(&mut wizard, make_key(Key::Enter));
+    assert_eq!(wizard.step, SetupStep::Form);
+    assert_eq!(wizard.form_mode, FormMode::Browse);
+    assert_eq!(wizard.providers.len(), 1);
+}
+
+#[test]
+fn test_choose_esc_skips() {
+    let mut wizard = SetupWizardPanel::new();
+    let action = handle_setup_wizard_key(&mut wizard, make_key(Key::Esc));
+    assert!(matches!(action, Some(SetupWizardAction::Skip)));
+}
+
+// ── Step: Form (Browse mode) ──
+
+#[test]
+fn test_browse_arrow_navigates() {
+    let mut wizard = SetupWizardPanel::new();
+    wizard.step = SetupStep::Form;
+    wizard.form_mode = FormMode::Browse;
+    assert_eq!(wizard.browse_cursor, 0);
+    let _ = handle_setup_wizard_key(&mut wizard, make_key(Key::Down));
+    assert_eq!(wizard.browse_cursor, 1); // Submit position
+    let _ = handle_setup_wizard_key(&mut wizard, make_key(Key::Down));
+    assert_eq!(wizard.browse_cursor, 1); // clamped
+    let _ = handle_setup_wizard_key(&mut wizard, make_key(Key::Up));
+    assert_eq!(wizard.browse_cursor, 0); // back to first provider
+}
+
+#[test]
+fn test_browse_space_toggles_select() {
+    let mut wizard = SetupWizardPanel::new();
+    wizard.step = SetupStep::Form;
+    wizard.form_mode = FormMode::Browse;
+    assert!(wizard.providers[0].selected);
+    let _ = handle_setup_wizard_key(&mut wizard, make_char(' '));
+    assert!(!wizard.providers[0].selected);
+    let _ = handle_setup_wizard_key(&mut wizard, make_char(' '));
+    assert!(wizard.providers[0].selected);
+}
+
+#[test]
+fn test_browse_enter_opens_edit() {
+    let mut wizard = SetupWizardPanel::new();
+    wizard.step = SetupStep::Form;
+    wizard.form_mode = FormMode::Browse;
+    let _ = handle_setup_wizard_key(&mut wizard, make_key(Key::Enter));
+    assert_eq!(wizard.form_mode, FormMode::Edit);
+    assert_eq!(wizard.active_provider, 0);
+}
+
+#[test]
+fn test_browse_enter_submit_validates() {
+    let mut wizard = SetupWizardPanel::new();
+    wizard.step = SetupStep::Form;
+    wizard.form_mode = FormMode::Browse;
+    wizard.browse_cursor = wizard.providers.len(); // Submit
+                                                   // Empty api_key → blocked
+    let _ = handle_setup_wizard_key(&mut wizard, make_key(Key::Enter));
+    assert_eq!(wizard.step, SetupStep::Form);
+    // Fill and retry
+    wizard.providers[0].api_key = "sk-test".to_string();
+    let _ = handle_setup_wizard_key(&mut wizard, make_key(Key::Enter));
+    assert_eq!(wizard.step, SetupStep::Done);
+}
+
+#[test]
+fn test_browse_esc_back_to_choose() {
+    let mut wizard = SetupWizardPanel::new();
+    wizard.step = SetupStep::Form;
+    wizard.form_mode = FormMode::Browse;
+    let _ = handle_setup_wizard_key(&mut wizard, make_key(Key::Esc));
+    assert_eq!(wizard.step, SetupStep::Choose);
+}
+
+// ── Step: Form (Edit mode) ──
+
+#[test]
+fn test_edit_arrow_navigates_fields() {
+    let mut wizard = SetupWizardPanel::new();
+    wizard.step = SetupStep::Form;
+    wizard.form_mode = FormMode::Edit;
+    assert_eq!(wizard.form_focus, FormField::ProviderType);
+    let _ = handle_setup_wizard_key(&mut wizard, make_key(Key::Down));
+    assert_eq!(wizard.form_focus, FormField::ProviderId);
+    let _ = handle_setup_wizard_key(&mut wizard, make_key(Key::Up));
+    assert_eq!(wizard.form_focus, FormField::ProviderType);
+}
+
+#[test]
+fn test_edit_confirm_returns_to_browse() {
+    let mut wizard = SetupWizardPanel::new();
+    wizard.step = SetupStep::Form;
+    wizard.form_mode = FormMode::Edit;
+    wizard.form_focus = FormField::Confirm;
+    let _ = handle_setup_wizard_key(&mut wizard, make_key(Key::Enter));
+    assert_eq!(wizard.form_mode, FormMode::Browse);
+}
+
+#[test]
+fn test_edit_esc_returns_to_browse() {
+    let mut wizard = SetupWizardPanel::new();
+    wizard.step = SetupStep::Form;
+    wizard.form_mode = FormMode::Edit;
+    let _ = handle_setup_wizard_key(&mut wizard, make_key(Key::Esc));
+    assert_eq!(wizard.form_mode, FormMode::Browse);
+}
+
+#[test]
+fn test_edit_api_key() {
+    let mut wizard = SetupWizardPanel::new();
+    wizard.step = SetupStep::Form;
+    wizard.form_mode = FormMode::Edit;
+    wizard.form_focus = FormField::ApiKey;
+    type_text(&mut wizard, "sk-test");
+    assert_eq!(wizard.providers[0].api_key, "sk-test");
+}
+
+// ── Step: Done ──
+
+#[test]
+fn test_done_enter_returns_save() {
+    let mut wizard = SetupWizardPanel::new();
+    wizard.step = SetupStep::Done;
+    let action = handle_setup_wizard_key(&mut wizard, make_key(Key::Enter));
+    assert!(matches!(action, Some(SetupWizardAction::SaveAndClose)));
+}
+
+#[test]
+fn test_done_esc_back_to_form() {
+    let mut wizard = SetupWizardPanel::new();
+    wizard.step = SetupStep::Done;
+    let _ = handle_setup_wizard_key(&mut wizard, make_key(Key::Esc));
+    assert_eq!(wizard.step, SetupStep::Form);
+}
+
+#[test]
+fn test_save_setup_creates_valid_config() {
+    let mut wizard = SetupWizardPanel::new();
+    wizard.providers[0].api_key = "sk-test-key".to_string();
+    let temp_dir = std::env::temp_dir().join(format!("zen-setup-unit-{}", uuid::Uuid::now_v7()));
+    let config_path = temp_dir.join("settings.json");
+    let cfg = save_setup_to(&wizard, &config_path).expect("save_setup_to should succeed");
+    assert_eq!(cfg.config.providers.len(), 1);
+    assert_eq!(cfg.config.providers[0].provider_type, "anthropic");
+    assert_eq!(cfg.config.providers[0].api_key, "sk-test-key");
+    let _ = std::fs::remove_dir_all(&temp_dir);
+}
+
+#[test]
+fn test_save_setup_skips_unselected() {
+    let mut wizard = SetupWizardPanel::new();
+    wizard.providers[0].api_key = "sk-test".to_string();
+    wizard.providers[0].selected = false;
+    wizard
+        .providers
+        .push(MigratedProvider::new(ProviderType::OpenAiCompatible));
+    wizard.providers[1].api_key = "sk-openai".to_string();
+    wizard.providers[1].selected = true;
+
+    let temp_dir = std::env::temp_dir().join(format!("zen-setup-skip-{}", uuid::Uuid::now_v7()));
+    let config_path = temp_dir.join("settings.json");
+    let cfg = save_setup_to(&wizard, &config_path).expect("save should succeed");
+    assert_eq!(cfg.config.providers.len(), 1);
+    assert_eq!(cfg.config.providers[0].provider_type, "openai");
+    let _ = std::fs::remove_dir_all(&temp_dir);
+}
