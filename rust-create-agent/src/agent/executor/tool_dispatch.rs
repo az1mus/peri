@@ -36,8 +36,13 @@ pub(crate) async fn dispatch_tools<L: ReactLLM, S: State>(
     let ai_msg_clone = ai_msg.clone();
     state.add_message(ai_msg);
     agent.emit(AgentEvent::MessageAdded(ai_msg_clone));
-    // emit AI 推理内容
-    agent.emit(AgentEvent::AiReasoning(reasoning.thought.clone()));
+    // emit AI 工具前文本（作为 TextChunk 而非 AiReasoning，确保 TUI 正确显示为文本而非推理提示）
+    if !reasoning.thought.trim().is_empty() {
+        agent.emit(AgentEvent::TextChunk {
+            message_id: ai_msg_id,
+            chunk: reasoning.thought.clone(),
+        });
+    }
 
     // 阶段一：批量 before_tool（利用中间件的 batch 方法，如 HITL 批量审批）
     let original_calls: Vec<ToolCall> = reasoning.tool_calls.clone();
