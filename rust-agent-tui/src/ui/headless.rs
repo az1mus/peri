@@ -3176,4 +3176,102 @@ mod tests {
             );
         }
     }
+
+    // ── Auto-compact deferred during background tasks ──────────────────────
+
+    /// 验证后台任务运行时 auto-compact 被延迟，后台任务完成后触发
+    #[tokio::test]
+    async fn test_auto_compact_deferred_during_background_tasks() {
+        let (mut app, _handle) = App::new_headless(120, 30).await;
+
+        // 模拟 agent 已回复（agent_replied = true）且需要 auto-compact
+        app.session_mgr.sessions[app.session_mgr.active]
+            .agent
+            .agent_replied = true;
+        app.session_mgr.sessions[app.session_mgr.active]
+            .agent
+            .needs_auto_compact = true;
+        // 模拟后台任务正在运行
+        app.session_mgr.sessions[app.session_mgr.active].background_task_count = 1;
+        // 设置 agent_done_pending_bg（Done 处理程序在有后台任务时会设置此标记）
+        app.session_mgr.sessions[app.session_mgr.active]
+            .agent
+            .agent_done_pending_bg = true;
+
+        // Done 事件：因为有后台任务，auto-compact 应被跳过
+        app.push_agent_event(AgentEvent::Done);
+        app.process_pending_events();
+
+        // 断言：needs_auto_compact 仍然为 true（未被清除）
+        assert!(
+            app.session_mgr.sessions[app.session_mgr.active]
+                .agent
+                .needs_auto_compact,
+            "needs_auto_compact should remain true when background tasks are running"
+        );
+        // 断言：background_task_count 未变
+        assert_eq!(
+            app.session_mgr.sessions[app.session_mgr.active].background_task_count, 1,
+            "background_task_count should not change during Done"
+        );
+
+        // 后台任务完成：auto-compact 应被触发（start_compact 需要 provider，
+        // 但 needs_auto_compact 应被清除）
+        app.push_agent_event(AgentEvent::BackgroundTaskCompleted {
+            task_id: "bg-compact-test".into(),
+            agent_name: "worker".into(),
+            success: true,
+            output: "done".into(),
+            tool_calls_count: 1,
+            duration_ms: 100,
+        });
+        app.process_pending_events();
+
+        // 断言：needs_auto_compact 已被清除（compact 被触发或 provider 缺失时被处理）
+        assert!(
+            !app.session_mgr.sessions[app.session_mgr.active]
+                .agent
+                .needs_auto_compact,
+            "needs_auto_compact should be cleared after deferred compact attempt"
+        );
+        // 断言：background_task_count 归零
+        assert_eq!(
+            app.session_mgr.sessions[app.session_mgr.active].background_task_count, 0,
+            "background_task_count should be zero after task completion"
+        );
+        // 断言：agent_done_pending_bg 已被清除
+        assert!(
+            !app.session_mgr.sessions[app.session_mgr.active]
+                .agent
+                .agent_done_pending_bg,
+            "agent_done_pending_bg should be cleared after all background tasks complete"
+        );
+    }
+
+    /// 验证无后台任务时 auto-compact 正常触发（needs_auto_compact 被清除）
+    #[tokio::test]
+    async fn test_auto_compact_triggers_when_no_background_tasks() {
+        let (mut app, _handle) = App::new_headless(120, 30).await;
+
+        // 模拟 agent 已回复且需要 auto-compact，无后台任务
+        app.session_mgr.sessions[app.session_mgr.active]
+            .agent
+            .agent_replied = true;
+        app.session_mgr.sessions[app.session_mgr.active]
+            .agent
+            .needs_auto_compact = true;
+        app.session_mgr.sessions[app.session_mgr.active].background_task_count = 0;
+
+        // Done 事件：无后台任务，auto-compact 应正常触发
+        app.push_agent_event(AgentEvent::Done);
+        app.process_pending_events();
+
+        // 断言：needs_auto_compact 被清除
+        assert!(
+            !app.session_mgr.sessions[app.session_mgr.active]
+                .agent
+                .needs_auto_compact,
+            "needs_auto_compact should be cleared when no background tasks"
+        );
+    }
 }

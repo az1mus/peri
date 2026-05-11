@@ -67,6 +67,9 @@ pub struct AgentComm {
     /// 本轮 agent 是否已产生回复（收到 TextChunk/ToolStart/AssistantChunk），
     /// 用于 Ctrl+C 中断时判断是否恢复用户文本
     pub agent_replied: bool,
+    /// 标记 Interrupted/Error 处理器已完成 reconcile，Done 到达时应跳过重复 reconcile
+    /// （防止 Done 的 RebuildAll 覆盖 Interrupted/Error 添加的通知消息）
+    pub reconcile_already_done: bool,
 }
 
 impl Default for AgentComm {
@@ -94,6 +97,7 @@ impl Default for AgentComm {
             pending_bg_continuation: None,
             agent_done_pending_bg: false,
             agent_replied: false,
+            reconcile_already_done: false,
         }
     }
 }

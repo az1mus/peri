@@ -1140,4 +1140,74 @@ mod tests {
         assert_eq!(prefix_len, 0);
         assert!(tail_vms.is_empty());
     }
+
+    /// 验证 Interrupted 后 reconcile_tail 产生一致结果（可用于后续 RebuildAll）
+    ///
+    /// 场景：agent 回复了文本后被中断，Interrupted 处理器调用 reconcile_tail_with_subagents
+    /// 然后 Done 到达，如果重复 reconcile_tail 并 RebuildAll，会覆盖 Interrupted 添加的通知消息。
+    #[test]
+    fn test_reconcile_tail_interrupted_then_done_consistency() {
+        let mut pipeline = MessagePipeline::new("/tmp".to_string());
+
+        // 模拟流式：用户发送消息，agent 回复了文本，然后开始工具调用
+        pipeline.push_chunk("I'll read the file");
+        let _ = pipeline.tool_start("tc1", "Read", json!({"file_path": "/tmp/test.rs"}));
+        let _ = pipeline.tool_end("tc1", "Read", "file content here", false);
+
+        // 模拟 StateSnapshot 填充 completed（来自 agent.rs:388）
+        pipeline.set_completed(vec![
+            BaseMessage::human("read file"),
+            BaseMessage::ai_from_blocks(vec![
+                ContentBlock::text("I'll read the file"),
+                ContentBlock::tool_use("tc1", "Read", json!({"file_path": "/tmp/test.rs"})),
+            ]),
+            BaseMessage::tool_result("tc1", "file content here"),
+        ]);
+
+        // Interrupted 处理器调用 reconcile_tail_with_subagents
+        let round_start_vm_idx = 0;
+        let (prefix_len, tail_vms) = pipeline.reconcile_tail_with_subagents(round_start_vm_idx);
+
+        // 验证 reconcile 结果包含所有消息
+        assert_eq!(prefix_len, 0);
+        assert!(
+            tail_vms.len() >= 3,
+            "reconcile 应包含 UserBubble + AssistantBubble + ToolBlock/Group"
+        );
+
+        // Done 到达时，再次 reconcile 应产生相同结果
+        let (prefix_len2, tail_vms2) = pipeline.reconcile_tail_with_subagents(round_start_vm_idx);
+        assert_eq!(prefix_len, prefix_len2);
+        assert_eq!(tail_vms.len(), tail_vms2.len());
+        // reconcile 结果应完全一致
+        for (a, b) in tail_vms.iter().zip(tail_vms2.iter()) {
+            assert_eq!(a, b, "两次 reconcile 结果应一致");
+        }
+    }
+
+    /// 验证 Done 后 pipeline.done() 是幂等的（不改变 reconcile 结果）
+    #[test]
+    fn test_done_idempotent_reconcile() {
+        let mut pipeline = MessagePipeline::new("/tmp".to_string());
+
+        pipeline.push_chunk("Hello world");
+        pipeline.set_completed(vec![
+            BaseMessage::human("hi"),
+            BaseMessage::ai("Hello world"),
+        ]);
+
+        // 第一次 done
+        pipeline.done();
+        let (p1, t1) = pipeline.reconcile_tail(0);
+
+        // 第二次 done（模拟 Interrupted -> Done 双重调用）
+        pipeline.done();
+        let (p2, t2) = pipeline.reconcile_tail(0);
+
+        assert_eq!(p1, p2);
+        assert_eq!(t1.len(), t2.len());
+        for (a, b) in t1.iter().zip(t2.iter()) {
+            assert_eq!(a, b, "多次 done 后 reconcile 结果应一致");
+        }
+    }
 }

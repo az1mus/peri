@@ -114,6 +114,9 @@ impl App {
         self.session_mgr.sessions[self.session_mgr.active]
             .agent
             .agent_replied = false;
+        self.session_mgr.sessions[self.session_mgr.active]
+            .agent
+            .reconcile_already_done = false;
         // 清理后台任务 continuation 状态（用户主动发消息时覆盖自动 continuation）
         self.session_mgr.sessions[self.session_mgr.active]
             .agent
@@ -984,7 +987,7 @@ impl App {
                 self.session_mgr.sessions[self.session_mgr.active]
                     .agent
                     .retry_status = None;
-                // Pipeline：finalize 当前 AI 消息 + reconcile 重建 view_messages
+                // Pipeline：finalize 当前 AI 消息
                 let actions = self.session_mgr.sessions[self.session_mgr.active]
                     .messages
                     .pipeline
@@ -992,32 +995,45 @@ impl App {
                 for action in actions {
                     self.apply_pipeline_action(action);
                 }
-                // reconcile 尾部重建：使用 pipeline 内部冻结的 SubAgentGroup 富状态，防止显示退化
-                let (prefix_len, tail_vms) = self.session_mgr.sessions[self.session_mgr.active]
-                    .messages
-                    .pipeline
-                    .reconcile_tail_with_subagents(
-                        self.session_mgr.sessions[self.session_mgr.active]
+                // 跳过已由 Interrupted/Error 处理器完成的 reconcile，
+                // 防止 RebuildAll 覆盖它们添加的通知消息
+                if !self.session_mgr.sessions[self.session_mgr.active]
+                    .agent
+                    .reconcile_already_done
+                {
+                    // reconcile 尾部重建：使用 pipeline 内部冻结的 SubAgentGroup 富状态，防止显示退化
+                    let (prefix_len, tail_vms) = self.session_mgr.sessions[self.session_mgr.active]
+                        .messages
+                        .pipeline
+                        .reconcile_tail_with_subagents(
+                            self.session_mgr.sessions[self.session_mgr.active]
+                                .messages
+                                .round_start_vm_idx,
+                        );
+                    // 智能条件 RebuildAll：对比 reconcile 结果与当前 view_messages，
+                    // 如果一致则只发 StreamingDone，避免不必要的视觉跳动
+                    let current_tail = &self.session_mgr.sessions[self.session_mgr.active]
+                        .messages
+                        .view_messages[prefix_len..];
+                    let needs_rebuild = current_tail.len() != tail_vms.len()
+                        || current_tail
+                            .iter()
+                            .zip(tail_vms.iter())
+                            .any(|(a, b)| a != b);
+                    if needs_rebuild {
+                        self.apply_pipeline_action(PipelineAction::RebuildAll {
+                            prefix_len,
+                            tail_vms,
+                        });
+                    } else {
+                        // 只清除 is_streaming 标志，不触发全量重建
+                        let _ = self.session_mgr.sessions[self.session_mgr.active]
                             .messages
-                            .round_start_vm_idx,
-                    );
-                // 智能条件 RebuildAll：对比 reconcile 结果与当前 view_messages，
-                // 如果一致则只发 StreamingDone，避免不必要的视觉跳动
-                let current_tail = &self.session_mgr.sessions[self.session_mgr.active]
-                    .messages
-                    .view_messages[prefix_len..];
-                let needs_rebuild = current_tail.len() != tail_vms.len()
-                    || current_tail
-                        .iter()
-                        .zip(tail_vms.iter())
-                        .any(|(a, b)| a != b);
-                if needs_rebuild {
-                    self.apply_pipeline_action(PipelineAction::RebuildAll {
-                        prefix_len,
-                        tail_vms,
-                    });
+                            .render_tx
+                            .send(RenderEvent::StreamingDone);
+                    }
                 } else {
-                    // 只清除 is_streaming 标志，不触发全量重建
+                    // Interrupted/Error 已完成 reconcile，只需通知渲染线程清除 streaming 标志
                     let _ = self.session_mgr.sessions[self.session_mgr.active]
                         .messages
                         .render_tx
@@ -1055,6 +1071,11 @@ impl App {
                 // Auto-compact 两级策略
                 // 中断后不触发 compact（Interrupted 已清除 needs_auto_compact），
                 // agent_replied 为 false 时也跳过（上下文极小，无需压缩）
+                // 后台任务运行时跳过 auto-compact：start_compact 会替换 agent_rx，
+                // 导致后台任务的 BackgroundTaskCompleted 事件发送到已关闭的旧通道而丢失。
+                // needs_auto_compact 标记保留，待后台任务完成后由 BackgroundTaskCompleted 处理器触发。
+                let has_bg_tasks =
+                    self.session_mgr.sessions[self.session_mgr.active].background_task_count > 0;
                 let should_check_compact = self.session_mgr.sessions[self.session_mgr.active]
                     .agent
                     .agent_replied;
@@ -1062,6 +1083,7 @@ impl App {
                     && self.session_mgr.sessions[self.session_mgr.active]
                         .agent
                         .needs_auto_compact
+                    && !has_bg_tasks
                 {
                     self.session_mgr.sessions[self.session_mgr.active]
                         .agent
@@ -1231,6 +1253,10 @@ impl App {
                             .to_string(),
                     );
                     self.apply_pipeline_action(PipelineAction::AddMessage(vm));
+                    // 标记 reconcile 已完成，防止后续 Done 事件重复 RebuildAll 覆盖通知消息
+                    self.session_mgr.sessions[self.session_mgr.active]
+                        .agent
+                        .reconcile_already_done = true;
                 }
                 (true, false, false)
             }
@@ -1259,6 +1285,10 @@ impl App {
                     *collapsed = false;
                 }
                 self.apply_pipeline_action(PipelineAction::AddMessage(vm));
+                // 标记 reconcile 已完成，防止后续 Done 事件重复 RebuildAll 覆盖错误消息
+                self.session_mgr.sessions[self.session_mgr.active]
+                    .agent
+                    .reconcile_already_done = true;
                 // Langfuse：错误路径也需结束 Trace
                 let langfuse_tracer = self.session_mgr.sessions[self.session_mgr.active]
                     .langfuse
@@ -1551,6 +1581,12 @@ impl App {
                 self.session_mgr.sessions[self.session_mgr.active]
                     .agent
                     .pre_compact_token_snapshot = None;
+                // 清理后台任务残留状态（防御性：auto-compact 现已跳过后台任务运行期，
+                // 但手动 /compact 或竞态仍可能在此处遇到非零计数）
+                self.session_mgr.sessions[self.session_mgr.active]
+                    .agent
+                    .agent_done_pending_bg = false;
+                self.session_mgr.sessions[self.session_mgr.active].background_task_count = 0;
 
                 if !self.session_mgr.sessions[self.session_mgr.active]
                     .messages
@@ -1735,6 +1771,23 @@ impl App {
                     self.session_mgr.sessions[self.session_mgr.active]
                         .agent
                         .pending_bg_continuation = Some(display_notification);
+
+                    // 后台任务运行期间被延迟的 auto-compact：现在通道已安全关闭，可以触发。
+                    // compact 完成后（loading = false），poll_agent 会在下一帧处理
+                    // pending_bg_continuation 并通过 submit_message 自动提交 continuation。
+                    if self.session_mgr.sessions[self.session_mgr.active]
+                        .agent
+                        .needs_auto_compact
+                    {
+                        self.session_mgr.sessions[self.session_mgr.active]
+                            .agent
+                            .needs_auto_compact = false;
+                        tracing::info!(
+                            "auto-compact: deferred from Done (background tasks were running), triggering now"
+                        );
+                        self.start_compact("auto".to_string());
+                        return (true, false, true);
+                    }
                     return (true, false, true);
                 }
 
