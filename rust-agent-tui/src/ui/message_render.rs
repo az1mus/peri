@@ -219,10 +219,16 @@ pub fn render_view_model(
                 perihelion_widgets::ToolCallStatus::Completed
             };
 
+            // Write 工具完成后默认展开（显示写入结果）
+            let effective_collapsed = if !is_running && tool_name == "Write" {
+                false
+            } else {
+                *collapsed
+            };
             let mut state =
                 perihelion_widgets::ToolCallState::new(display_name.clone(), theme::TEXT);
             state.status = status;
-            state.collapsed = *collapsed;
+            state.collapsed = effective_collapsed;
             state.is_error = *is_error;
             if let Some(args) = args_display {
                 state.args_summary = args.clone();
@@ -380,8 +386,16 @@ pub fn render_view_model(
                 )]));
 
                 // 嵌套消息（不渲染序号），跳过无可见内容的条目
+                // 当有 final_result 时，跳过最后一条消息（其内容已包含在 final_result 中）
+                let has_final = final_result.as_ref().is_some_and(|r| !r.is_empty());
+                let skip_last = has_final && recent_messages.len() > 1;
+                let iter_messages: &[MessageViewModel] = if skip_last {
+                    &recent_messages[..recent_messages.len() - 1]
+                } else {
+                    recent_messages
+                };
                 let bg_style = Style::default().bg(theme::SUB_AGENT_BG);
-                for inner_vm in recent_messages.iter() {
+                for inner_vm in iter_messages.iter() {
                     let inner_lines = render_view_model(inner_vm, None, _width);
                     if inner_lines.is_empty() {
                         continue;
@@ -393,41 +407,24 @@ pub fn render_view_model(
                         lines.push(Line::from(new_spans));
                     }
                 }
+                // 移除尾部空行
+                while lines.last().is_some_and(|l| l.spans.is_empty()) {
+                    lines.pop();
+                }
 
-                // 子 agent 完成后，渲染 final_result（工具执行摘要 + 最终回复）
+                // 子 agent 完成后，渲染 final_result 摘要（仅第一行）
                 if let Some(ref result) = final_result {
                     if !result.is_empty() {
-                        // 空行分隔
-                        lines.push(Line::from(vec![Span::raw("")]));
-                        // 前缀缩进 + 分隔符
-                        lines.push(Line::from(vec![Span::styled(
-                            "  ── 执行结果 ──".to_string(),
-                            Style::default().fg(theme::DIM).bg(theme::SUB_AGENT_BG),
-                        )]));
-                        // 逐行渲染 final_result（最多 20 行，过长截断）
-                        let max_lines = 20;
-                        for (i, line_text) in result.lines().take(max_lines).enumerate() {
-                            if i == max_lines - 1 && result.lines().count() > max_lines {
-                                let truncated: String =
-                                    line_text.chars().take(80).collect::<String>() + "…";
+                        if let Some(first_line) = result.lines().next() {
+                            if !first_line.is_empty() {
+                                let text: String = first_line.chars().take(80).collect();
                                 lines.push(Line::from(vec![
                                     Span::styled(
                                         "  ⎿ ",
                                         Style::default().fg(theme::DIM).bg(theme::SUB_AGENT_BG),
                                     ),
                                     Span::styled(
-                                        truncated,
-                                        Style::default().fg(theme::MUTED).bg(theme::SUB_AGENT_BG),
-                                    ),
-                                ]));
-                            } else {
-                                lines.push(Line::from(vec![
-                                    Span::styled(
-                                        "  ⎿ ",
-                                        Style::default().fg(theme::DIM).bg(theme::SUB_AGENT_BG),
-                                    ),
-                                    Span::styled(
-                                        line_text.to_string(),
+                                        text,
                                         Style::default().fg(theme::MUTED).bg(theme::SUB_AGENT_BG),
                                     ),
                                 ]));

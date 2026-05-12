@@ -102,7 +102,7 @@
 - 每条有内容的消息后加 **1 个空行**，由 `render_one` 统一管理
 - 空内容消息（如纯思考被隐藏的 AssistantBubble）不渲染、不占位
 - 消息内部不插入多余空行
-- SubAgent 展开时用空行 + `── 执行结果 ──`（DIM 色）分隔结果区
+- SubAgent 展开时用空行分隔嵌套消息与结果区
 
 ### 工具状态指示器
 
@@ -150,7 +150,7 @@ read_file、search_files_rg、glob_files 等只读工具自动聚合：
 ## SubAgent 渲染
 
 - 折叠：`● agent_id`（SAGE + BOLD）+ `task_preview…`（MUTED，截断 50 字符）
-- 展开：名称 + 任务描述 + 缩进 2 空格的嵌套消息 + `── 执行结果 ──`（DIM）+ 结果行 ` │ `（MUTED，最多 20 行，超长截断 80 字符 + `…`）
+- 展开：名称 + 任务描述 + 缩进 2 空格的嵌套消息 + 空行 + 结果行 ` │ `（MUTED，最多 20 行，超长截断 80 字符 + `…`）
 - 错误态：前缀和名称使用 ERROR 色，显示 error_summary
 
 ## Welcome Card
