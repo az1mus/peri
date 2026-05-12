@@ -76,6 +76,9 @@ pub struct AgentComm {
     pub pre_compact_user_input: Option<String>,
     /// 连续 auto-compact re-submit 次数（防止无限循环，上限 3 次）
     pub auto_compact_resubmit_count: u32,
+    /// compact 完成后是否应自动 resubmit（仅 agent 执行中 auto-compact 为 true，
+    /// 手动 /compact 和 Done 后 auto-compact 为 false）
+    pub compact_should_resubmit: bool,
     /// LSP 诊断计数（由 LspDiagnostics 事件更新）
     pub lsp_errors: usize,
     pub lsp_warnings: usize,
@@ -111,6 +114,7 @@ impl Default for AgentComm {
             last_user_input: None,
             pre_compact_user_input: None,
             auto_compact_resubmit_count: 0,
+            compact_should_resubmit: false,
             lsp_errors: 0,
             lsp_warnings: 0,
             lsp_files_with_errors: 0,

@@ -1,5 +1,6 @@
 use super::message_pipeline::PipelineAction;
 use super::*;
+use crate::ui::message_view::MessageViewModel;
 
 impl App {
     pub(crate) fn handle_background_task_completed(
@@ -44,33 +45,64 @@ impl App {
                 state_notification.as_str(),
             ));
 
-        // 以 ToolBlock 样式显示（紧凑单行格式，折叠长输出）
+        // 尝试在 view_messages 中找到匹配的 SubAgentGroup 并更新
         let short_id = &task_id[..8.min(task_id.len())];
-        let display_name = format!("bg:{}", agent_name);
-        // 输出截断为单行（取第一行，再截取前 80 字符）
-        let first_line = output.lines().next().unwrap_or("");
-        let one_line = if first_line.chars().count() > 80 {
-            let truncated: String = first_line.chars().take(80).collect();
-            format!("{}...", truncated)
-        } else if first_line.is_empty() && !output.is_empty() {
-            String::from("(empty)")
-        } else {
-            first_line.to_string()
-        };
-        let header_info = if success {
-            format!(
-                "{} completed ({} calls, {}ms): {}",
-                short_id, tool_calls_count, duration_ms, one_line
-            )
-        } else {
-            format!("{} failed: {}", short_id, one_line)
-        };
-        let mut vm =
-            MessageViewModel::tool_block(display_name.clone(), header_info, None, !success);
-        if let MessageViewModel::ToolBlock { collapsed, .. } = &mut vm {
-            *collapsed = true; // 始终折叠，摘要已在 header 中
+        let mut found_and_updated = false;
+        let session = &mut self.session_mgr.sessions[self.session_mgr.active];
+
+        for vm in &mut session.messages.view_messages {
+            if let MessageViewModel::SubAgentGroup {
+                agent_id,
+                is_running,
+                is_background,
+                bg_hash: _,
+                final_result,
+                is_error,
+                ..
+            } = vm
+            {
+                // 匹配条件：后台 agent + 仍在运行 + agent_id 匹配
+                if *is_background && *is_running && agent_id == &agent_name {
+                    *is_running = false;
+                    *final_result = Some(output.clone());
+                    *is_error = !success;
+                    found_and_updated = true;
+                    break;
+                }
+            }
         }
-        self.apply_pipeline_action(PipelineAction::AddMessage(vm));
+
+        if found_and_updated {
+            // 成功更新 SubAgentGroup，触发 RebuildAll
+            self.request_rebuild();
+        } else {
+            // 未找到匹配的 SubAgentGroup，回退到创建 ToolBlock（兼容现有行为）
+            let display_name = format!("bg:{}", agent_name);
+            // 输出截断为单行（取第一行，再截取前 80 字符）
+            let first_line = output.lines().next().unwrap_or("");
+            let one_line = if first_line.chars().count() > 80 {
+                let truncated: String = first_line.chars().take(80).collect();
+                format!("{}...", truncated)
+            } else if first_line.is_empty() && !output.is_empty() {
+                String::from("(empty)")
+            } else {
+                first_line.to_string()
+            };
+            let header_info = if success {
+                format!(
+                    "{} completed ({} calls, {}ms): {}",
+                    short_id, tool_calls_count, duration_ms, one_line
+                )
+            } else {
+                format!("{} failed: {}", short_id, one_line)
+            };
+            let mut vm =
+                MessageViewModel::tool_block(display_name.clone(), header_info, None, !success);
+            if let MessageViewModel::ToolBlock { collapsed, .. } = &mut vm {
+                *collapsed = true; // 始终折叠，摘要已在 header 中
+            }
+            self.apply_pipeline_action(PipelineAction::AddMessage(vm));
+        }
 
         // 诊断日志：记录 BackgroundTaskCompleted 处理后的 view_messages 中 SubAgentGroup 数量
         {
@@ -156,6 +188,10 @@ impl App {
                     "auto-compact: deferred from Done (background tasks were running), triggering now"
                 );
                 self.start_compact("auto".to_string());
+                // Done 后 auto-compact 不应 resubmit：任务已结束
+                self.session_mgr.sessions[self.session_mgr.active]
+                    .agent
+                    .compact_should_resubmit = false;
                 return (true, false, true);
             }
             return (true, false, true);

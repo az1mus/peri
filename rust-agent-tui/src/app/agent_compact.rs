@@ -123,17 +123,30 @@ impl App {
         self.session_mgr.sessions[self.session_mgr.active].background_task_count = 0;
 
         // Auto-continue: compact 完成后自动用原始输入重新启动 agent
-        // 优先使用 pre_compact_user_input（在 start_compact 时保存，防止被 pending_messages 覆盖）
-        let resubmit_input = self.session_mgr.sessions[self.session_mgr.active]
+        // 仅在 agent 执行中 auto-compact 时 resubmit（compact_should_resubmit == true），
+        // 手动 /compact 和 Done 后 auto-compact 不 resubmit
+        // 先读取再清除，防止 flag 泄漏到下次 compact
+        let should_resubmit = self.session_mgr.sessions[self.session_mgr.active]
             .agent
-            .pre_compact_user_input
-            .take()
-            .or_else(|| {
-                self.session_mgr.sessions[self.session_mgr.active]
-                    .agent
-                    .last_user_input
-                    .clone()
-            });
+            .compact_should_resubmit;
+        self.session_mgr.sessions[self.session_mgr.active]
+            .agent
+            .compact_should_resubmit = false;
+        // 优先使用 pre_compact_user_input（在 start_compact 时保存，防止被 pending_messages 覆盖）
+        let resubmit_input = if should_resubmit {
+            self.session_mgr.sessions[self.session_mgr.active]
+                .agent
+                .pre_compact_user_input
+                .take()
+                .or_else(|| {
+                    self.session_mgr.sessions[self.session_mgr.active]
+                        .agent
+                        .last_user_input
+                        .clone()
+                })
+        } else {
+            None
+        };
 
         const MAX_AUTO_COMPACT_RESUBMITS: u32 = 3;
         if let Some(original_input) = resubmit_input {
@@ -175,8 +188,8 @@ impl App {
                 }
             }
         } else {
-            tracing::warn!(
-                "auto-compact: no user input available for re-submit, cannot continue automatically"
+            tracing::debug!(
+                "compact: skipping auto-resubmit (should_resubmit=false or no user input)"
             );
             // 未 resubmit 时处理待发消息
             if !self.session_mgr.sessions[self.session_mgr.active]

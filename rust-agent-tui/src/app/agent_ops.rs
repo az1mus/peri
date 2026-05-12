@@ -393,6 +393,10 @@ impl App {
                         "auto-compact: context threshold reached, triggering full compact"
                     );
                     self.start_compact("auto".to_string());
+                    // Done 后 auto-compact 不应 resubmit：任务已结束，重新执行无意义
+                    self.session_mgr.sessions[self.session_mgr.active]
+                        .agent
+                        .compact_should_resubmit = false;
                     return (true, false, true);
                 } else if should_check_compact {
                     let compact_config = self.get_compact_config();

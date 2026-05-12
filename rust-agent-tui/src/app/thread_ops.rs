@@ -98,6 +98,9 @@ impl App {
             .auto_compact_failures = 0;
         self.session_mgr.sessions[self.session_mgr.active]
             .agent
+            .compact_should_resubmit = false;
+        self.session_mgr.sessions[self.session_mgr.active]
+            .agent
             .retry_status = None;
         self.session_mgr.sessions[self.session_mgr.active]
             .agent
@@ -373,6 +376,13 @@ impl App {
             .agent
             .last_user_input
             .clone();
+
+        // 标记 compact 完成后是否应自动 resubmit：
+        // 仅 agent 执行中的 auto-compact 应 resubmit，
+        // 手动 /compact（instructions != "auto"）和 Done 后 auto-compact 不应 resubmit
+        self.session_mgr.sessions[self.session_mgr.active]
+            .agent
+            .compact_should_resubmit = instructions == "auto";
 
         // 保存快照：compact 失败时恢复，防止 tracker 失去对上下文大小的感知
         self.session_mgr.sessions[self.session_mgr.active]
