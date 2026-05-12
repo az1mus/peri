@@ -151,6 +151,10 @@ impl App {
             .view_messages
             .clear();
         self.session_mgr.sessions[self.session_mgr.active]
+            .messages
+            .ephemeral_notes
+            .clear();
+        self.session_mgr.sessions[self.session_mgr.active]
             .agent
             .agent_state_messages = base_msgs.clone();
 
@@ -262,6 +266,10 @@ impl App {
             .view_messages
             .clear();
         self.session_mgr.sessions[self.session_mgr.active]
+            .messages
+            .ephemeral_notes
+            .clear();
+        self.session_mgr.sessions[self.session_mgr.active]
             .agent
             .agent_state_messages
             .clear();
@@ -308,11 +316,7 @@ impl App {
             .agent_state_messages
             .is_empty()
         {
-            let vm = MessageViewModel::system("无可压缩的上下文（历史消息为空）".to_string());
-            self.session_mgr.sessions[self.session_mgr.active]
-                .messages
-                .view_messages
-                .push(vm);
+            self.push_system_note("无可压缩的上下文（历史消息为空）".to_string());
             self.render_rebuild();
             return;
         }
@@ -326,13 +330,9 @@ impl App {
         {
             Some(p) => p,
             None => {
-                let vm = MessageViewModel::system(
+                self.push_system_note(
                     "❌ 压缩失败: 未配置 LLM Provider（请设置 ANTHROPIC_API_KEY 或 OPENAI_API_KEY）".to_string(),
                 );
-                self.session_mgr.sessions[self.session_mgr.active]
-                    .messages
-                    .view_messages
-                    .push(vm);
                 self.render_rebuild();
                 return;
             }
@@ -362,11 +362,7 @@ impl App {
             .spinner_state
             .set_verb(Some("压缩上下文"));
 
-        let vm = MessageViewModel::system("正在压缩上下文…".to_string());
-        self.session_mgr.sessions[self.session_mgr.active]
-            .messages
-            .view_messages
-            .push(vm);
+        self.push_system_note("正在压缩上下文…".to_string());
         self.render_rebuild();
 
         // 保存用户输入副本：compact 后 resubmit 用，防止 last_user_input 被 pending_messages 覆盖

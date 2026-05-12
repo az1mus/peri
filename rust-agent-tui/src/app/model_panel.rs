@@ -260,20 +260,18 @@ impl ModelPanel {
 
         ctx.session_mgr.sessions[ctx.session_mgr.active]
             .messages
-            .view_messages
-            .push(crate::app::MessageViewModel::system(format!(
+            .push_system_note(format!(
                 "\u{6a21}\u{578b}\u{5df2}\u{5207}\u{6362}\u{4e3a}: {} ({} effort)",
                 alias_label, effort_display
-            )));
+            ));
 
         if let Err(e) = App::save_config(cfg, ctx.services.config_path_override.as_deref()) {
             ctx.session_mgr.sessions[ctx.session_mgr.active]
                 .messages
-                .view_messages
-                .push(crate::app::MessageViewModel::system(format!(
+                .push_system_note(format!(
                     "\u{914d}\u{7f6e}\u{4fdd}\u{5b58}\u{5931}\u{8d25}: {}",
                     e
-                )));
+                ));
         }
 
         if let Some(p) = crate::app::agent::LlmProvider::from_config(cfg) {

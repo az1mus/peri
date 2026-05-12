@@ -165,11 +165,10 @@ impl CronPanel {
             self.refresh(&ctx.services.cron.scheduler);
             ctx.session_mgr.sessions[ctx.session_mgr.active]
                 .messages
-                .view_messages
-                .push(crate::ui::message_view::MessageViewModel::system(format!(
+                .push_system_note(format!(
                     "\u{5df2}\u{5220}\u{9664}\u{5b9a}\u{65f6}\u{4efb}\u{52a1}: {}",
                     prompt_preview
-                )));
+                ));
         }
     }
 }

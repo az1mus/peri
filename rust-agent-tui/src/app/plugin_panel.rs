@@ -919,11 +919,10 @@ impl PluginPanel {
                     });
                     ctx.session_mgr.sessions[ctx.session_mgr.active]
                         .messages
-                        .view_messages
-                        .push(super::MessageViewModel::system(format!(
+                        .push_system_note(format!(
                             "\u{6b63}\u{5728}\u{66f4}\u{65b0} marketplace: {}",
                             name_for_msg
-                        )));
+                        ));
                 }
                 EventResult::Consumed
             }
@@ -970,11 +969,10 @@ impl PluginPanel {
                         if let Err(e) = self.persist_marketplace_delete(&name) {
                             ctx.session_mgr.sessions[ctx.session_mgr.active]
                                 .messages
-                                .view_messages
-                                .push(super::MessageViewModel::system(format!(
+                                .push_system_note(format!(
                                     "\u{5220}\u{9664}\u{5931}\u{8d25}: {}",
                                     e
-                                )));
+                                ));
                         }
                     }
                 }
@@ -1001,11 +999,7 @@ impl PluginPanel {
                     if let Err(e) = self.persist_marketplace_add(&input_str, ctx) {
                         ctx.session_mgr.sessions[ctx.session_mgr.active]
                             .messages
-                            .view_messages
-                            .push(super::MessageViewModel::system(format!(
-                                "\u{6dfb}\u{52a0}\u{5931}\u{8d25}: {}",
-                                e
-                            )));
+                            .push_system_note(format!("\u{6dfb}\u{52a0}\u{5931}\u{8d25}: {}", e));
                     }
                 }
                 EventResult::Consumed
@@ -1184,11 +1178,10 @@ impl PluginPanel {
 
         ctx.session_mgr.sessions[ctx.session_mgr.active]
             .messages
-            .view_messages
-            .push(super::MessageViewModel::system(format!(
+            .push_system_note(format!(
                 "Marketplace \u{5df2}\u{6dfb}\u{52a0}: {} (\u{6b63}\u{5728}\u{83b7}\u{53d6}\u{5185}\u{5bb9}...)",
                 name
-            )));
+            ));
 
         // Add placeholder entry to marketplace_entries
         self.marketplace_entries.push(MarketplaceViewEntry {

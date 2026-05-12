@@ -5,7 +5,6 @@ use ratatui::Frame;
 use tui_textarea::Input;
 
 use crate::config::{PeriConfig, ProviderConfig, ProviderModels};
-use crate::ui::message_view::MessageViewModel;
 
 use super::panel_component::PanelComponent;
 use super::panel_manager::{EventResult, PanelContext, PanelKind};
@@ -429,11 +428,7 @@ impl PanelComponent for LoginPanel {
                         if !selected_name.is_empty() {
                             ctx.session_mgr.sessions[ctx.session_mgr.active]
                                 .messages
-                                .view_messages
-                                .push(MessageViewModel::system(format!(
-                                    "已激活 Provider: {}",
-                                    selected_name
-                                )));
+                                .push_system_note(format!("已激活 Provider: {}", selected_name));
                         }
                         // Save config and update provider name
                         if let Err(e) = super::App::save_config(
@@ -442,11 +437,10 @@ impl PanelComponent for LoginPanel {
                         ) {
                             ctx.session_mgr.sessions[ctx.session_mgr.active]
                                 .messages
-                                .view_messages
-                                .push(MessageViewModel::system(format!(
+                                .push_system_note(format!(
                                     "\u{914d}\u{7f6e}\u{4fdd}\u{5b58}\u{5931}\u{8d25}: {}",
                                     e
-                                )));
+                                ));
                         }
                         if let Some(p) = super::agent::LlmProvider::from_config(cfg) {
                             ctx.services.provider_name = p.display_name().to_string();
@@ -564,10 +558,7 @@ impl PanelComponent for LoginPanel {
                         if !self.apply_edit(cfg) {
                             ctx.session_mgr.sessions[ctx.session_mgr.active]
                                 .messages
-                                .view_messages
-                                .push(MessageViewModel::system(
-                                    "保存失败：Provider 名称不能为空".to_string(),
-                                ));
+                                .push_system_note("保存失败：Provider 名称不能为空".to_string());
                             return EventResult::Consumed;
                         }
                         let display = if edit_name.is_empty() {
@@ -579,12 +570,11 @@ impl PanelComponent for LoginPanel {
                         self.select_provider(cfg);
                         ctx.session_mgr.sessions[ctx.session_mgr.active]
                             .messages
-                            .view_messages
-                            .push(MessageViewModel::system(format!(
+                            .push_system_note(format!(
                                 "已{}并激活 Provider: {}",
                                 if is_new { "新建" } else { "保存" },
                                 display
-                            )));
+                            ));
                         // Save config and update provider name
                         if let Err(e) = super::App::save_config(
                             cfg,
@@ -592,11 +582,10 @@ impl PanelComponent for LoginPanel {
                         ) {
                             ctx.session_mgr.sessions[ctx.session_mgr.active]
                                 .messages
-                                .view_messages
-                                .push(MessageViewModel::system(format!(
+                                .push_system_note(format!(
                                     "\u{914d}\u{7f6e}\u{4fdd}\u{5b58}\u{5931}\u{8d25}: {}",
                                     e
-                                )));
+                                ));
                         }
                         if let Some(p) = super::agent::LlmProvider::from_config(cfg) {
                             ctx.services.provider_name = p.display_name().to_string();
@@ -632,11 +621,7 @@ impl PanelComponent for LoginPanel {
                         if !deleted_name.is_empty() {
                             ctx.session_mgr.sessions[ctx.session_mgr.active]
                                 .messages
-                                .view_messages
-                                .push(MessageViewModel::system(format!(
-                                    "已删除 Provider: {}",
-                                    deleted_name
-                                )));
+                                .push_system_note(format!("已删除 Provider: {}", deleted_name));
                         }
                         // Save config and update provider name
                         if let Err(e) = super::App::save_config(
@@ -645,11 +630,10 @@ impl PanelComponent for LoginPanel {
                         ) {
                             ctx.session_mgr.sessions[ctx.session_mgr.active]
                                 .messages
-                                .view_messages
-                                .push(MessageViewModel::system(format!(
+                                .push_system_note(format!(
                                     "\u{914d}\u{7f6e}\u{4fdd}\u{5b58}\u{5931}\u{8d25}: {}",
                                     e
-                                )));
+                                ));
                         }
                         if let Some(p) = super::agent::LlmProvider::from_config(cfg) {
                             ctx.services.provider_name = p.display_name().to_string();

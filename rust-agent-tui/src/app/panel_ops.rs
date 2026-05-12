@@ -47,18 +47,16 @@ impl App {
         };
         self.session_mgr.sessions[self.session_mgr.active]
             .messages
-            .view_messages
-            .push(MessageViewModel::system(format!(
+            .push_system_note(format!(
                 "模型已切换为: {} ({} effort)",
                 alias_label, effort_display
-            )));
+            ));
         {
             let cfg = self.services.peri_config.as_ref().unwrap();
             if let Err(e) = Self::save_config(cfg, self.services.config_path_override.as_deref()) {
                 self.session_mgr.sessions[self.session_mgr.active]
                     .messages
-                    .view_messages
-                    .push(MessageViewModel::system(format!("配置保存失败: {}", e)));
+                    .push_system_note(format!("配置保存失败: {}", e));
             }
             if let Some(p) = agent::LlmProvider::from_config(cfg) {
                 self.services.provider_name = p.display_name().to_string();
@@ -109,17 +107,12 @@ impl App {
         if !selected_name.is_empty() {
             self.session_mgr.sessions[self.session_mgr.active]
                 .messages
-                .view_messages
-                .push(MessageViewModel::system(format!(
-                    "已激活 Provider: {}",
-                    selected_name
-                )));
+                .push_system_note(format!("已激活 Provider: {}", selected_name));
         }
         if let Err(e) = Self::save_config(cfg, self.services.config_path_override.as_deref()) {
             self.session_mgr.sessions[self.session_mgr.active]
                 .messages
-                .view_messages
-                .push(MessageViewModel::system(format!("配置保存失败: {}", e)));
+                .push_system_note(format!("配置保存失败: {}", e));
         }
         if let Some(p) = agent::LlmProvider::from_config(cfg) {
             self.services.provider_name = p.display_name().to_string();

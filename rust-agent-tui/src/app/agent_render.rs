@@ -36,15 +36,24 @@ impl App {
         self.apply_pipeline_action(action);
     }
 
+    /// 添加系统通知并记录锚点位置。
+    ///
+    /// 面板代码和中断处理等路径 B 调用点应使用此方法，而非直接 push 到 view_messages。
+    pub(crate) fn push_system_note(&mut self, content: String) {
+        self.session_mgr.sessions[self.session_mgr.active]
+            .messages
+            .push_system_note(content);
+    }
+
     /// 将 PipelineAction 映射到 view_messages 更新 + RenderEvent 发送
     pub(crate) fn apply_pipeline_action(&mut self, action: PipelineAction) {
         match action {
             PipelineAction::None => {}
             PipelineAction::AddMessage(vm) => {
-                self.session_mgr.sessions[self.session_mgr.active]
-                    .messages
-                    .view_messages
-                    .push(vm);
+                let session = &mut self.session_mgr.sessions[self.session_mgr.active];
+                let anchor = session.messages.view_messages.len();
+                session.messages.ephemeral_notes.push((anchor, vm.clone()));
+                session.messages.view_messages.push(vm);
                 self.render_rebuild();
             }
             PipelineAction::RebuildAll {
@@ -67,13 +76,17 @@ impl App {
                 } else {
                     prefix_len
                 };
-                // 保存即将被截断的 ephemeral SystemNote（通过 AddMessage 添加的系统通知）
-                let saved_notes: Vec<MessageViewModel> = session
+
+                // 保存 ephemeral_notes 中锚点在 tail 范围内的（锚点 < prefix_len 的已过期，丢弃）
+                let mut saved_notes: Vec<(usize, MessageViewModel)> = session
                     .messages
-                    .view_messages
-                    .drain(prefix_len..)
-                    .filter(|vm| matches!(vm, MessageViewModel::SystemNote { .. }))
+                    .ephemeral_notes
+                    .drain(..)
+                    .filter(|(anchor, _)| *anchor >= prefix_len)
                     .collect();
+
+                // drain 尾部
+                session.messages.view_messages.drain(prefix_len..);
 
                 // 去重：如果前缀末尾是 UserBubble 且 tail 首个也是 UserBubble（同一轮 Human 消息被
                 // submit_message 的 UserBubble 和 StateSnapshot reconcile 的 UserBubble 重复渲染），
@@ -98,7 +111,20 @@ impl App {
                 }
 
                 session.messages.view_messages.extend(tail_vms);
-                session.messages.view_messages.extend(saved_notes);
+
+                // 按锚点位置插入 saved_notes，然后重新注册锚点
+                saved_notes.sort_by_key(|(anchor, _)| *anchor);
+                for (anchor, vm) in saved_notes {
+                    let tail_len = session.messages.view_messages.len() - prefix_len;
+                    let insert_pos = (anchor - prefix_len).min(tail_len) + prefix_len;
+                    session
+                        .messages
+                        .view_messages
+                        .insert(insert_pos, vm.clone());
+                    // 重新注册到 ephemeral_notes，更新锚点为实际插入位置
+                    session.messages.ephemeral_notes.push((insert_pos, vm));
+                }
+
                 let anchor_message_idx = {
                     let cache = self.session_mgr.sessions[self.session_mgr.active]
                         .messages

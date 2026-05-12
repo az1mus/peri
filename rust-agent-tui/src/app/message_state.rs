@@ -20,6 +20,9 @@ pub struct MessageState {
     pub pending_messages: Vec<String>,
     /// 最近一次提交的用户文本（用于 Ctrl+C 中断时恢复到输入框）
     pub last_submitted_text: Option<String>,
+    /// 临时系统通知（不在 BaseMessage[] 中），记录 (锚点索引, VM)。
+    /// 锚点 = 创建时 view_messages.len()，RebuildAll 时按锚点插入到对应位置。
+    pub ephemeral_notes: Vec<(usize, MessageViewModel)>,
 }
 
 impl MessageState {
@@ -39,6 +42,17 @@ impl MessageState {
             last_render_version: 0,
             pending_messages: Vec::new(),
             last_submitted_text: None,
+            ephemeral_notes: Vec::new(),
         }
+    }
+
+    /// 添加系统通知并记录锚点位置。
+    ///
+    /// 面板代码（通过 PanelContext）和 App 方法均可调用。
+    pub fn push_system_note(&mut self, content: String) {
+        let anchor = self.view_messages.len();
+        let vm = MessageViewModel::system(content);
+        self.ephemeral_notes.push((anchor, vm.clone()));
+        self.view_messages.push(vm);
     }
 }

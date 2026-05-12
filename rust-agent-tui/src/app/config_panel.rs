@@ -5,7 +5,6 @@ use ratatui::Frame;
 use tui_textarea::Input;
 
 use crate::config::PeriConfig;
-use crate::ui::message_view::MessageViewModel;
 
 use super::panel_component::PanelComponent;
 use super::panel_manager::{EventResult, PanelContext, PanelKind};
@@ -332,18 +331,16 @@ impl PanelComponent for ConfigPanel {
                         {
                             ctx.session_mgr.sessions[ctx.session_mgr.active]
                                 .messages
-                                .view_messages
-                                .push(MessageViewModel::system(format!(
+                                .push_system_note(format!(
                                     "\u{914d}\u{7f6e}\u{4fdd}\u{5b58}\u{5931}\u{8d25}: {}",
                                     e
-                                )));
+                                ));
                         } else {
                             ctx.session_mgr.sessions[ctx.session_mgr.active]
                                 .messages
-                                .view_messages
-                                .push(MessageViewModel::system(
+                                .push_system_note(
                                     "\u{914d}\u{7f6e}\u{5df2}\u{4fdd}\u{5b58}".to_string(),
-                                ));
+                                );
                         }
                         EventResult::ClosePanel
                     }

@@ -48,11 +48,7 @@ impl crate::app::App {
                 panel.refresh(&self.services.cron.scheduler);
                 self.session_mgr.sessions[self.session_mgr.active]
                     .messages
-                    .view_messages
-                    .push(crate::ui::message_view::MessageViewModel::system(format!(
-                        "已删除定时任务: {}",
-                        prompt_preview
-                    )));
+                    .push_system_note(format!("已删除定时任务: {}", prompt_preview));
                 // 列表为空时关闭面板，清理面板元数据
                 if panel.tasks.is_empty() {
                     self.global_panels.close();

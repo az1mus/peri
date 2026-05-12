@@ -422,6 +422,10 @@ impl App {
                         .messages
                         .view_messages
                         .truncate(round_start);
+                    self.session_mgr.sessions[self.session_mgr.active]
+                        .messages
+                        .ephemeral_notes
+                        .retain(|(a, _)| *a < round_start);
                     {
                         let remaining = self.session_mgr.sessions[self.session_mgr.active]
                             .messages
@@ -465,30 +469,14 @@ impl App {
                     self.session_mgr.sessions[self.session_mgr.active]
                         .metadata
                         .last_human_message = None;
-                    let vm =
-                        MessageViewModel::system("⚠ 已强制中断（输入已恢复到输入框）".to_string());
-                    self.session_mgr.sessions[self.session_mgr.active]
-                        .messages
-                        .view_messages
-                        .push(vm);
+                    self.push_system_note("⚠ 已强制中断（输入已恢复到输入框）".to_string());
                     self.render_rebuild();
                 } else {
-                    let vm = MessageViewModel::system(
-                        "⚠ 已强制中断（后台任务可能仍在运行）".to_string(),
-                    );
-                    self.session_mgr.sessions[self.session_mgr.active]
-                        .messages
-                        .view_messages
-                        .push(vm);
+                    self.push_system_note("⚠ 已强制中断（后台任务可能仍在运行）".to_string());
                     self.render_rebuild();
                 }
             } else {
-                let vm =
-                    MessageViewModel::system("⚠ 已强制中断（后台任务可能仍在运行）".to_string());
-                self.session_mgr.sessions[self.session_mgr.active]
-                    .messages
-                    .view_messages
-                    .push(vm);
+                self.push_system_note("⚠ 已强制中断（后台任务可能仍在运行）".to_string());
                 self.render_rebuild();
             }
         }

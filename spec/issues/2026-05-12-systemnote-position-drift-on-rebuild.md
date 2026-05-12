@@ -1,8 +1,10 @@
 # SystemNote 在 RebuildAll 后堆积到消息列表末尾
 
-**状态**：Open
+**状态**：Fixed
 **优先级**：中
 **创建日期**：2026-05-12
+**修复日期**：2026-05-12
+**修复提交**：`8d66118`
 
 ## 问题描述
 
@@ -49,14 +51,18 @@ SystemNote 应保持在它被创建时的位置附近，不会因为后续的 Re
 
 ## 修复方案
 
-### 方案：VM 索引锚点
+### 方案：VM 索引锚点（已实施）
 
 为 `AddMessage` 路径的 `SystemNote` 记录创建时的 `view_messages` 索引位置作为锚点。`RebuildAll` 时根据锚点将 SystemNote 插入到 `tail_vms` 的对应位置。
 
 **关键设计**：
 
-1. **新增 `PipelineAction::InsertMessage { vm, anchor_vm_idx }`**：替代 `AddMessage`，携带锚点索引
-2. **锚点语义**：`anchor_vm_idx` = SystemNote 被创建时 `view_messages.len()`，即它应该插入的位置
-3. **RebuildAll 时的处理**：将 `saved_notes` 的锚点位置转换为 `tail_vms` 内的插入索引（`anchor - prefix_len`），插入到对应位置
-4. **冲突处理**：如果锚点位置在 prefix 范围内（已被 drain），丢弃该 SystemNote
-5. **不破坏持久化数组**：SystemNote 是纯 UI 层概念，不进入 `BaseMessage[]`，不影响持久化
+1. **`MessageState` 新增 `ephemeral_notes` 字段**：`Vec<(usize, MessageViewModel)>`，记录 (锚点, VM)
+2. **锚点语义**：`anchor` = SystemNote 被创建时 `view_messages.len()`
+3. **RebuildAll 时的处理**：从 `ephemeral_notes` 中取出锚点 >= prefix_len 的条目，按锚点排序后用 `Vec::insert` 插入到 `(anchor - prefix_len).min(tail_len) + prefix_len` 位置，然后重新注册锚点
+4. **冲突处理**：锚点在 prefix 范围内（已被 drain）→ 丢弃
+5. **不破坏持久化数组**：SystemNote 是纯 UI 层概念，不进入 `BaseMessage[]`
+
+**实际实施与原方案的差异**：
+- 没有新增 `PipelineAction::InsertMessage` 变体，而是在 `AddMessage` 分支和 `MessageState::push_system_note()` 内部自动记录锚点到 `ephemeral_notes`
+- 路径 B（面板直接 push）通过 `MessageState::push_system_note()` 统一，无需改动调用签名
