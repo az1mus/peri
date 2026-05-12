@@ -399,33 +399,11 @@ impl BaseModel for ChatAnthropic {
 
         let (mut messages, system_from_msgs) = Self::messages_to_anthropic(&request.messages);
 
-        // 检查并修复：extended thinking 要求 assistant 消息必须含有 thinking block
-        // 历史消息（来自非 extended thinking 会话或跨模型迁移）可能缺少 thinking，
-        // 注入占位 thinking block 避免 API 400 错误
-        for (i, msg) in messages.iter_mut().enumerate() {
-            if msg["role"] == "assistant" {
-                if let Some(content) = msg.get_mut("content") {
-                    if let Some(arr) = content.as_array_mut() {
-                        let has_thinking = arr.iter().any(|b| b["type"] == "thinking");
-                        let has_tool_use = arr.iter().any(|b| b["type"] == "tool_use");
-                        if self.extended_thinking && !has_thinking && has_tool_use {
-                            arr.insert(
-                                0,
-                                json!({
-                                    "type": "thinking",
-                                    "thinking": "(thinking)"
-                                }),
-                            );
-                            tracing::warn!(
-                                provider = "anthropic",
-                                msg_index = i,
-                                "extended thinking: 注入占位 thinking block（消息不含 thinking 但有 tool_use）"
-                            );
-                        }
-                    }
-                }
-            }
-        }
+        // 注意：不需要注入占位 thinking block。
+        // Anthropic API 要求保留已有的 thinking blocks（含 signature），
+        // 但不要求凭空注入。伪造的 thinking block 无合法 signature 会导致验证失败。
+        // 之前轮次的 thinking blocks 会被 API 自动剥离，不影响上下文。
+        // 已有的 thinking blocks 通过 ContentBlock::Reasoning → json 序列化正确回传。
 
         // 合并：消息列表中的 System（来自中间件，如 agent.md）在前，
         // request.system（BaseModelReactLLM 设置的基础提示词）在后

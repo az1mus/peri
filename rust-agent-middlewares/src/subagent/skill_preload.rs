@@ -8,16 +8,20 @@ use rust_create_agent::middleware::r#trait::Middleware;
 
 use crate::skills::{list_skills, load_global_skills_dir};
 
-/// SkillPreloadMiddleware - 将指定 skill 全文以 fake Read 工具调用注入到子 agent state
+/// SkillPreloadMiddleware - 将指定 skill 全文以 fake Read 工具调用注入到 agent state
 ///
 /// 在 `before_agent` 时，根据 `skill_names` 列表找到对应 SKILL.md 文件，
-/// 将其内容以 Human → Ai[ToolUse] → Tool[ToolResult] 消息序列注入到 state 前端，
-/// 使 LLM 从第一轮推理就能看到完整 skill 内容。
+/// 将其内容以 Ai[ToolUse] → Tool[ToolResult] 消息序列追加到用户消息之后（executor
+/// 在 `before_agent` 之前已将用户消息 `add_message` 到 state），使 LLM 从第一轮推理
+/// 就能看到完整 skill 内容。
+///
+/// 使用 `add_message` 而非 `prepend_message`，确保工具调用出现在用户消息之后，
+/// 不影响 Anthropic messages 数组的 prompt cache（cache_control 在第一条 user 消息上）。
 ///
 /// # 注入消息结构
 ///
 /// ```text
-/// [Human] "(System: Preloading skill files)"
+/// [Human "用户消息"]  ← 已由 executor 添加
 /// [Ai]    [ToolUse{Read, call_{hex}}, ToolUse{Read, call_{hex}}, ...]
 /// [Tool]  ToolResult{call_{hex}, skill_0_content}
 /// [Tool]  ToolResult{call_{hex}, skill_1_content}
@@ -107,16 +111,13 @@ impl<S: State> Middleware<S> for SkillPreloadMiddleware {
             })
             .collect();
 
-        // 逆序 prepend Tool 消息，保证最终顺序 Tool[0] → Tool[1] → ...
-        for (id, (_, content)) in call_ids.iter().zip(skill_contents.iter()).rev() {
-            state.prepend_message(BaseMessage::tool_result(id.clone(), content.clone()));
+        // 追加 Ai 消息（ai_from_blocks 自动双写 tool_calls）
+        state.add_message(BaseMessage::ai_from_blocks(tool_use_blocks));
+
+        // 追加 Tool 结果消息
+        for (id, (_, content)) in call_ids.iter().zip(skill_contents.iter()) {
+            state.add_message(BaseMessage::tool_result(id.clone(), content.clone()));
         }
-
-        // Prepend Ai 消息（ai_from_blocks 自动双写 tool_calls）
-        state.prepend_message(BaseMessage::ai_from_blocks(tool_use_blocks));
-
-        // Prepend Human 初始化消息（最后 prepend → 排最前）
-        state.prepend_message(BaseMessage::human("(System: Preloading skill files)"));
 
         Ok(())
     }
@@ -141,15 +142,21 @@ mod tests {
 
     #[tokio::test]
     async fn test_no_op_when_empty_names() {
+        // Arrange
         let dir = tempdir().unwrap();
         let mw = SkillPreloadMiddleware::new(vec![], dir.path().to_str().unwrap());
         let mut state = AgentState::new(dir.path().to_str().unwrap());
+
+        // Act
         mw.before_agent(&mut state).await.unwrap();
+
+        // Assert
         assert_eq!(state.messages().len(), 0);
     }
 
     #[tokio::test]
     async fn test_inject_single_skill() {
+        // Arrange
         let dir = tempdir().unwrap();
         let skills_dir = dir.path().join(".claude").join("skills");
         std::fs::create_dir_all(&skills_dir).unwrap();
@@ -160,14 +167,25 @@ mod tests {
             dir.path().to_str().unwrap(),
         );
         let mut state = AgentState::new(dir.path().to_str().unwrap());
+
+        // Act
         mw.before_agent(&mut state).await.unwrap();
 
-        // Human + Ai + Tool = 3 条消息
-        assert_eq!(state.messages().len(), 3, "应注入 3 条消息");
+        // Assert: Ai + Tool = 2 条消息
+        assert_eq!(state.messages().len(), 2, "应注入 2 条消息（Ai + Tool）");
+        assert!(
+            matches!(&state.messages()[0], BaseMessage::Ai { .. }),
+            "第一条应为 Ai"
+        );
+        assert!(
+            matches!(&state.messages()[1], BaseMessage::Tool { .. }),
+            "第二条应为 Tool"
+        );
     }
 
     #[tokio::test]
     async fn test_inject_multiple_skills() {
+        // Arrange
         let dir = tempdir().unwrap();
         let skills_dir = dir.path().join(".claude").join("skills");
         std::fs::create_dir_all(&skills_dir).unwrap();
@@ -184,14 +202,17 @@ mod tests {
             dir.path().to_str().unwrap(),
         );
         let mut state = AgentState::new(dir.path().to_str().unwrap());
+
+        // Act
         mw.before_agent(&mut state).await.unwrap();
 
-        // Human + Ai + Tool × 3 = 5 条消息
-        assert_eq!(state.messages().len(), 5, "3 个 skill 应注入 5 条消息");
+        // Assert: Ai + Tool × 3 = 4 条消息
+        assert_eq!(state.messages().len(), 4, "3 个 skill 应注入 4 条消息");
     }
 
     #[tokio::test]
     async fn test_skip_missing_skill() {
+        // Arrange
         let dir = tempdir().unwrap();
         let skills_dir = dir.path().join(".claude").join("skills");
         std::fs::create_dir_all(&skills_dir).unwrap();
@@ -202,26 +223,34 @@ mod tests {
             dir.path().to_str().unwrap(),
         );
         let mut state = AgentState::new(dir.path().to_str().unwrap());
+
+        // Act
         mw.before_agent(&mut state).await.unwrap();
 
-        // 只有 "exists" 被注入：Human + Ai + Tool = 3 条
-        assert_eq!(state.messages().len(), 3, "不存在的 skill 应静默跳过");
+        // Assert: 只有 "exists" → Ai + Tool = 2 条
+        assert_eq!(state.messages().len(), 2, "不存在的 skill 应静默跳过");
     }
 
     #[tokio::test]
     async fn test_no_op_when_all_skills_missing() {
+        // Arrange
         let dir = tempdir().unwrap();
         let mw = SkillPreloadMiddleware::new(
             vec!["nonexistent".to_string()],
             dir.path().to_str().unwrap(),
         );
         let mut state = AgentState::new(dir.path().to_str().unwrap());
+
+        // Act
         mw.before_agent(&mut state).await.unwrap();
+
+        // Assert
         assert_eq!(state.messages().len(), 0, "全部找不到时应 no-op");
     }
 
     #[tokio::test]
     async fn test_message_order() {
+        // Arrange
         let dir = tempdir().unwrap();
         let skills_dir = dir.path().join(".claude").join("skills");
         std::fs::create_dir_all(&skills_dir).unwrap();
@@ -233,70 +262,31 @@ mod tests {
             dir.path().to_str().unwrap(),
         );
         let mut state = AgentState::new(dir.path().to_str().unwrap());
+
+        // Act
         mw.before_agent(&mut state).await.unwrap();
 
+        // Assert
         let msgs = state.messages();
-        // [0] Human
         assert!(
-            matches!(&msgs[0], BaseMessage::Human { .. }),
-            "messages[0] 应为 Human，实际为 {:?}",
-            &msgs[0]
+            matches!(&msgs[0], BaseMessage::Ai { .. }),
+            "messages[0] 应为 Ai"
         );
+        assert!(msgs[0].has_tool_calls(), "Ai 消息应包含工具调用");
+        assert_eq!(msgs[0].tool_calls().len(), 2, "Ai 消息应有 2 个工具调用");
         assert!(
-            msgs[0].content().contains("Preloading skill files"),
-            "Human message content should contain 'Preloading skill files'"
+            matches!(&msgs[1], BaseMessage::Tool { .. }),
+            "messages[1] 应为 Tool"
         );
-        // [1] Ai
-        assert!(
-            matches!(&msgs[1], BaseMessage::Ai { .. }),
-            "messages[1] 应为 Ai"
-        );
-        assert!(msgs[1].has_tool_calls(), "Ai 消息应包含工具调用");
-        // [2] Tool
         assert!(
             matches!(&msgs[2], BaseMessage::Tool { .. }),
             "messages[2] 应为 Tool"
-        );
-        // [3] Tool
-        assert!(
-            matches!(&msgs[3], BaseMessage::Tool { .. }),
-            "messages[3] 应为 Tool"
-        );
-    }
-
-    #[tokio::test]
-    async fn test_ai_message_has_tool_calls() {
-        let dir = tempdir().unwrap();
-        let skills_dir = dir.path().join(".claude").join("skills");
-        std::fs::create_dir_all(&skills_dir).unwrap();
-        write_skill(&skills_dir, "skill-alpha", "Alpha");
-        write_skill(&skills_dir, "skill-beta", "Beta");
-
-        let mw = SkillPreloadMiddleware::new(
-            vec!["skill-alpha".to_string(), "skill-beta".to_string()],
-            dir.path().to_str().unwrap(),
-        );
-        let mut state = AgentState::new(dir.path().to_str().unwrap());
-        mw.before_agent(&mut state).await.unwrap();
-
-        let ai_msg = &state.messages()[1];
-        let tool_calls = ai_msg.tool_calls();
-        assert_eq!(tool_calls.len(), 2, "Ai 消息应有 2 个工具调用");
-        assert_eq!(tool_calls[0].name, "Read");
-        assert!(
-            tool_calls[0].id.starts_with("call_") && tool_calls[0].id.len() == 37,
-            "tool_call_id should be call_{{uuid}}, got: {}",
-            tool_calls[0].id
-        );
-        assert!(
-            tool_calls[1].id.starts_with("call_") && tool_calls[1].id.len() == 37,
-            "tool_call_id should be call_{{uuid}}, got: {}",
-            tool_calls[1].id
         );
     }
 
     #[tokio::test]
     async fn test_tool_call_ids_match() {
+        // Arrange
         let dir = tempdir().unwrap();
         let skills_dir = dir.path().join(".claude").join("skills");
         std::fs::create_dir_all(&skills_dir).unwrap();
@@ -305,17 +295,45 @@ mod tests {
         let mw =
             SkillPreloadMiddleware::new(vec!["my-skill".to_string()], dir.path().to_str().unwrap());
         let mut state = AgentState::new(dir.path().to_str().unwrap());
+
+        // Act
         mw.before_agent(&mut state).await.unwrap();
 
+        // Assert
         let msgs = state.messages();
-        let ai_id = &msgs[1].tool_calls()[0].id;
-        if let BaseMessage::Tool { tool_call_id, .. } = &msgs[2] {
+        let ai_id = &msgs[0].tool_calls()[0].id;
+        if let BaseMessage::Tool { tool_call_id, .. } = &msgs[1] {
             assert_eq!(
                 tool_call_id, ai_id,
-                "Tool 消息的 tool_call_id 应与 Ai 消息的 id 一致"
+                "Tool 消息的 tool_call_id 应与 Ai 消息一致"
             );
         } else {
-            unreachable!("messages[2] 应为 Tool");
+            unreachable!("messages[1] 应为 Tool");
         }
+    }
+
+    #[tokio::test]
+    async fn test_tool_result_contains_skill_content() {
+        // Arrange
+        let dir = tempdir().unwrap();
+        let skills_dir = dir.path().join(".claude").join("skills");
+        std::fs::create_dir_all(&skills_dir).unwrap();
+        write_skill(&skills_dir, "commit-skill", "提交技能");
+
+        let mw = SkillPreloadMiddleware::new(
+            vec!["commit-skill".to_string()],
+            dir.path().to_str().unwrap(),
+        );
+        let mut state = AgentState::new(dir.path().to_str().unwrap());
+
+        // Act
+        mw.before_agent(&mut state).await.unwrap();
+
+        // Assert
+        let tool_content = state.messages()[1].content();
+        assert!(
+            tool_content.contains("Skill content for commit-skill"),
+            "Tool 结果应包含 skill 全文内容"
+        );
     }
 }

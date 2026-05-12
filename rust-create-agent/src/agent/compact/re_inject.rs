@@ -44,16 +44,40 @@ fn extract_recent_files(messages: &[BaseMessage], max_files: usize) -> Vec<Strin
 }
 
 /// 从消息历史中提取 SkillPreloadMiddleware 注入的 Skills 路径（去重，保留出现顺序）
+///
+/// 支持三种来源：
+/// - Ai 消息的 tool_calls（旧格式：fake Human/Ai/Tool 序列）
+/// - System 消息中的 `[Skill: path]` 标记（中间格式）
+/// - Human 消息中的 `[Skill: path]` 标记（当前格式）
 fn extract_skills_paths(messages: &[BaseMessage]) -> Vec<String> {
     let mut seen = std::collections::HashSet::<String>::new();
     let mut paths = Vec::new();
 
     for msg in messages.iter() {
+        // 路径 1：扫描 Ai 消息的 tool_calls（旧格式兼容）
         for tc in msg.tool_calls() {
             if tc.name == "Read" {
                 if let Some(path) = tc.arguments.get("path").and_then(|v| v.as_str()) {
                     if is_skills_path(path) && seen.insert(path.to_string()) {
                         paths.push(path.to_string());
+                    }
+                }
+            }
+        }
+
+        // 路径 2：扫描 System/Human 消息中的 [Skill: path] 标记
+        let text = match msg {
+            BaseMessage::System { content, .. } | BaseMessage::Human { content, .. } => {
+                content.text_content()
+            }
+            _ => continue,
+        };
+        for line in text.lines() {
+            if let Some(rest) = line.strip_prefix("[Skill: ") {
+                if let Some(path) = rest.strip_suffix(']') {
+                    let trimmed = path.trim();
+                    if is_skills_path(trimmed) && seen.insert(trimmed.to_string()) {
+                        paths.push(trimmed.to_string());
                     }
                 }
             }
@@ -381,6 +405,61 @@ mod tests {
         let msgs = vec![ai_plain("no tools")];
         let paths = extract_skills_paths(&msgs);
         assert!(paths.is_empty());
+    }
+
+    #[test]
+    fn test_extract_skills_paths_from_human_message() {
+        // Arrange
+        let content = "[Skill: /home/.claude/skills/commit/SKILL.md]\n---\nname: commit\n---\n\nCommit content.";
+        let msgs = vec![BaseMessage::human(content)];
+
+        // Act
+        let paths = extract_skills_paths(&msgs);
+
+        // Assert
+        assert_eq!(paths.len(), 1);
+        assert_eq!(paths[0], "/home/.claude/skills/commit/SKILL.md");
+    }
+
+    #[test]
+    fn test_extract_skills_paths_multiple_in_human_message() {
+        // Arrange
+        let content = "[Skill: /home/.claude/skills/a/SKILL.md]\ncontent a\n\n[Skill: /home/.claude/skills/b/SKILL.md]\ncontent b";
+        let msgs = vec![BaseMessage::human(content)];
+
+        // Act
+        let paths = extract_skills_paths(&msgs);
+
+        // Assert
+        assert_eq!(paths.len(), 2);
+    }
+
+    #[test]
+    fn test_extract_skills_paths_dedup_across_formats() {
+        // Arrange：旧格式 tool_calls + Human 消息包含同一路径
+        let msgs = vec![
+            BaseMessage::human("[Skill: /skills/x/SKILL.md]\nskill content"),
+            ai_skill_preload(0, "/skills/x/SKILL.md"),
+        ];
+
+        // Act
+        let paths = extract_skills_paths(&msgs);
+
+        // Assert
+        assert_eq!(paths.len(), 1, "跨格式同一路径应去重");
+    }
+
+    #[test]
+    fn test_extract_skills_paths_human_message_non_skill_path() {
+        // Arrange：Human 消息包含 [Skill: ...] 但路径不是 skills 目录
+        let content = "[Skill: /src/main.rs]\nfile content";
+        let msgs = vec![BaseMessage::human(content)];
+
+        // Act
+        let paths = extract_skills_paths(&msgs);
+
+        // Assert
+        assert!(paths.is_empty(), "非 skills 路径应被过滤");
     }
 
     // truncate_to_budget tests

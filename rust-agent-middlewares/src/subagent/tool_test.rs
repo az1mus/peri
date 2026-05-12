@@ -509,7 +509,7 @@ async fn test_skill_preload_registered() {
         )
         .unwrap();
 
-    // LLM searches all messages for "preloaded skill file" keyword
+    // LLM searches all messages for skill content in tool results
     struct SkillPreloadCheckLLM;
     #[async_trait::async_trait]
     impl ReactLLM for SkillPreloadCheckLLM {
@@ -518,9 +518,7 @@ async fn test_skill_preload_registered() {
             messages: &[BaseMessage],
             _tools: &[&dyn BaseTool],
         ) -> rust_create_agent::error::AgentResult<Reasoning> {
-            let found = messages
-                .iter()
-                .any(|m| m.content().contains("Preloading skill files"));
+            let found = messages.iter().any(|m| m.content().contains("Test Skill"));
             Ok(Reasoning::with_answer(
                 "",
                 if found {
