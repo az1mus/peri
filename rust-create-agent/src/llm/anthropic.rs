@@ -249,20 +249,58 @@ impl ChatAnthropic {
         (result, system_text)
     }
 
-    /// 对 messages 列表中最后一条消息的最后一个 content block 追加 cache_control
+    /// 对 messages 列表中的 user 消息追加 cache_control 断点
     ///
     /// Anthropic Prompt Caching 要求在需要缓存的边界位置加 `cache_control: { type: "ephemeral" }`。
+    /// 最多允许 4 个断点（system 占 1 个，messages 中最多 3 个）。
     ///
-    /// **缓存策略**：在第一条 user 消息上加 cache_control 标记。
-    /// 原因：system 消息已单独缓存（见 invoke 方法），第一条 user 消息及其之前的所有内容
-    /// 构成一个稳定的缓存段，后续轮次的 user 消息不会失效此缓存。
-    /// 若缓存在最后一条 user 消息上，则每次对话轮次变更时缓存都会失效。
+    /// **缓存策略**（3 断点）：
+    /// 1. **第一条 user 消息**：system + 首条 user 构成稳定缓存段，后续轮次不会失效。
+    /// 2. **倒数第二条 user 消息**：多轮对话中，上一轮的 user+assistant+tool 整段可被缓存。
+    /// 3. **最后一条 user 消息**：当前轮次的完整前缀可被缓存（同一轮内多次工具调用间复用）。
+    ///
+    /// 当 user 消息不足 3 条时，按实际数量设置断点（不会重复）。
     fn apply_cache_to_messages(messages: &mut [Value]) {
-        // Anthropic 只允许在 user 消息上添加 cache_control，跳过 assistant 消息
-        // 使用第一条 user 消息作为缓存边界（稳定），而非最后一条（每轮变化）
-        let first_msg = messages.iter_mut().find(|m| m["role"] == "user");
-        if let Some(first_msg) = first_msg {
-            if let Some(content) = first_msg.get_mut("content") {
+        // 收集所有 user 消息的索引
+        let user_indices: Vec<usize> = messages
+            .iter()
+            .enumerate()
+            .filter(|(_, m)| m["role"] == "user")
+            .map(|(i, _)| i)
+            .collect();
+
+        if user_indices.is_empty() {
+            return;
+        }
+
+        // 确定要加断点的位置：第一条 + 倒数第二条 + 最后一条（去重）
+        let mut target_indices: Vec<usize> = Vec::new();
+        // 第一条
+        target_indices.push(user_indices[0]);
+        // 最后一条（如果不同于第一条）
+        if let Some(&last) = user_indices.last() {
+            if last != user_indices[0] {
+                target_indices.push(last);
+            }
+        }
+        // 倒数第二条（如果存在且不同于已选的）
+        if user_indices.len() >= 3 {
+            let second_to_last = user_indices[user_indices.len() - 2];
+            if !target_indices.contains(&second_to_last) {
+                // 插入到正确位置以保持顺序（第一条 < 倒数第二条 < 最后一条）
+                if second_to_last < target_indices[0] {
+                    target_indices.insert(0, second_to_last);
+                } else if second_to_last > target_indices[target_indices.len() - 1] {
+                    target_indices.push(second_to_last);
+                } else {
+                    target_indices.insert(1, second_to_last);
+                }
+            }
+        }
+
+        for idx in target_indices {
+            let msg = &mut messages[idx];
+            if let Some(content) = msg.get_mut("content") {
                 match content {
                     Value::Array(blocks) => {
                         if let Some(last_block) = blocks.last_mut() {
@@ -541,6 +579,7 @@ impl BaseModel for ChatAnthropic {
             input_tokens = resp_json["usage"]["input_tokens"].as_u64().unwrap_or(0),
             output_tokens = resp_json["usage"]["output_tokens"].as_u64().unwrap_or(0),
             cache_read = resp_json["usage"]["cache_read_input_tokens"].as_u64().unwrap_or(0),
+            cache_creation = resp_json["usage"]["cache_creation_input_tokens"].as_u64().unwrap_or(0),
             "LLM invoke completed"
         );
 
@@ -704,9 +743,9 @@ impl ReactLLM for ChatAnthropic {
 mod tests {
     use super::*;
 
-    /// 验证 cache_control 放在第一条 user 消息上（稳定缓存边界）
+    /// 验证 cache_control 放在第一条和最后一条 user 消息上（3 断点策略）
     #[test]
-    fn test_cache_control_on_first_user_message() {
+    fn test_cache_control_on_first_and_last_user_messages() {
         let mut messages = vec![
             json!({"role": "user", "content": "first question"}),
             json!({"role": "assistant", "content": "first answer"}),
@@ -723,9 +762,41 @@ mod tests {
         );
         assert_eq!(first_block["text"], "first question");
 
-        // 第二条 user 消息（index 2）不应有 cache_control
-        let content2 = messages[2]["content"].as_str();
-        assert!(content2.is_some(), "第二条 user 消息仍为纯文本（未转换）");
+        // 第二条 user 消息（index 2）也应有 cache_control（3 断点策略：最后一条）
+        let content2 = messages[2]["content"].as_array().unwrap();
+        assert_eq!(
+            content2[0]["cache_control"]["type"], "ephemeral",
+            "最后一条 user 消息应有 cache_control"
+        );
+    }
+
+    /// 验证 3 条及以上 user 消息时，倒数第二条也加断点
+    #[test]
+    fn test_cache_control_three_user_messages_gets_second_to_last() {
+        let mut messages = vec![
+            json!({"role": "user", "content": "q1"}),
+            json!({"role": "assistant", "content": "a1"}),
+            json!({"role": "user", "content": "q2"}),
+            json!({"role": "assistant", "content": "a2"}),
+            json!({"role": "user", "content": "q3"}),
+        ];
+        ChatAnthropic::apply_cache_to_messages(&mut messages);
+
+        // index 0 (q1): 第一条 → 有断点
+        assert_eq!(
+            messages[0]["content"].as_array().unwrap()[0]["cache_control"]["type"],
+            "ephemeral"
+        );
+        // index 2 (q2): 倒数第二条 → 有断点
+        assert_eq!(
+            messages[2]["content"].as_array().unwrap()[0]["cache_control"]["type"],
+            "ephemeral"
+        );
+        // index 4 (q3): 最后一条 → 有断点
+        assert_eq!(
+            messages[4]["content"].as_array().unwrap()[0]["cache_control"]["type"],
+            "ephemeral"
+        );
     }
 
     /// 验证 assistant 消息被跳过，从不设置 cache_control
