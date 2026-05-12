@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -937,7 +938,7 @@ impl BaseTool for SubAgentTool {
 /// Format sub-agent execution result as a summary string returned to the parent agent.
 ///
 /// Summary format:
-/// - If tool calls exist, list tool names (excluding intermediate results to avoid token bloat)
+/// - If tool calls exist, aggregate tool calls by name with count (e.g., "Glob 5 times, Read 20 times")
 /// - Preserve final answer text
 ///
 /// **注意**：输出格式被 TUI (`message_view.rs`) 解析以提取工具调用次数。
@@ -947,10 +948,20 @@ fn format_subagent_result(output: &rust_create_agent::agent::react::AgentOutput)
         return output.text.clone();
     }
 
-    let tool_summary = output
-        .tool_calls
-        .iter()
-        .map(|(call, _result)| call.name.as_str())
+    // 统计各工具调用次数
+    let mut tool_counts: HashMap<&str, usize> = HashMap::new();
+    for (call, _) in &output.tool_calls {
+        *tool_counts.entry(call.name.as_str()).or_insert(0) += 1;
+    }
+
+    // 按调用次数降序排序
+    let mut tools: Vec<_> = tool_counts.into_iter().collect();
+    tools.sort_by(|a, b| b.1.cmp(&a.1));
+
+    // 格式化为 "Glob 5 times, Grep 12 times, Read 74 times"
+    let tool_summary = tools
+        .into_iter()
+        .map(|(name, count)| format!("{} {} times", name, count))
         .collect::<Vec<_>>()
         .join(", ");
 
