@@ -221,6 +221,16 @@ impl<L: ReactLLM, S: State> ReActAgent<L, S> {
             all_tools.values().copied().collect()
         };
 
+        tracing::debug!(
+            total_tools = all_tools.len(),
+            middleware_tools = tool_arcs.len(),
+            registered_tools = self.tools.len(),
+            visible_tools = tool_refs.len(),
+            tool_names = ?tool_refs.iter().map(|t| t.name()).collect::<Vec<_>>(),
+            has_filter = self.tool_filter.is_some(),
+            "agent: final tool set after collect"
+        );
+
         self.chain.run_before_agent(state).await?;
 
         // 固定 system prompt：在所有中间件 before_agent 之后 prepend，无顺序约束

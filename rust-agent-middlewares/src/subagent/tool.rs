@@ -474,6 +474,16 @@ impl SubAgentTool {
             &agent_def.frontmatter.disallowed_tools,
         );
 
+        tracing::debug!(
+            agent_id = %agent_id,
+            parent_count = self.parent_tools.len(),
+            filtered_count = filtered_tools.len(),
+            filtered_names = ?filtered_tools.iter().map(|t| t.name()).collect::<Vec<_>>(),
+            allowed = ?agent_def.frontmatter.tools,
+            disallowed = ?agent_def.frontmatter.disallowed_tools,
+            "background agent: tool filter results"
+        );
+
         let agent_name = agent_id.clone();
         let prompt_summary: String = prompt.chars().take(100).collect();
 
