@@ -22,7 +22,6 @@ pub struct AgentAssembleConfig {
     pub broker: Arc<dyn UserInteractionBroker>,
     pub permission_mode: Arc<SharedPermissionMode>,
     pub peri_config: Arc<PeriConfig>,
-    pub preload_skills: Vec<String>,
     pub event_handler: Arc<dyn AgentEventHandler>,
     pub cancel: AgentCancellationToken,
     pub cron_scheduler:
@@ -41,7 +40,6 @@ pub fn assemble_agent(
         broker,
         permission_mode,
         peri_config,
-        preload_skills,
         event_handler,
         cancel,
         cron_scheduler,
@@ -145,7 +143,6 @@ pub fn assemble_agent(
         .add_middleware(Box::new(AgentsMdMiddleware::new()))
         .add_middleware(Box::new(AgentDefineMiddleware::new()))
         .add_middleware(Box::new(SkillsMiddleware::new()))
-        .add_middleware(Box::new(SkillPreloadMiddleware::new(preload_skills, &cwd)))
         .add_middleware(Box::new(FilesystemMiddleware::new()))
         .add_middleware(Box::new(TerminalMiddleware::new()))
         .add_middleware(Box::new(TodoMiddleware::new(todo_tx)))

@@ -27,7 +27,6 @@ pub struct AgentRunConfig {
     pub langfuse_tracer: Option<Arc<parking_lot::Mutex<crate::langfuse::LangfuseTracer>>>,
     pub thread_store: Arc<dyn rust_create_agent::thread::ThreadStore>,
     pub thread_id: rust_create_agent::thread::ThreadId,
-    pub preload_skills: Vec<String>,
     pub config: Arc<crate::config::PeriConfig>,
     pub cron_scheduler:
         Option<Arc<parking_lot::Mutex<rust_agent_middlewares::cron::CronScheduler>>>,
@@ -70,7 +69,6 @@ pub async fn run_universal_agent(cfg: AgentRunConfig) {
         langfuse_tracer,
         thread_store,
         thread_id,
-        preload_skills,
         config: peri_config,
         cron_scheduler,
         permission_mode,
@@ -322,7 +320,6 @@ pub async fn run_universal_agent(cfg: AgentRunConfig) {
         .add_middleware(Box::new(
             SkillsMiddleware::new().with_extra_dirs(plugin_skill_dirs),
         ))
-        .add_middleware(Box::new(SkillPreloadMiddleware::new(preload_skills, &cwd)))
         .add_middleware(Box::new(FilesystemMiddleware::new()))
         .add_middleware(Box::new(TerminalMiddleware::new()))
         .add_middleware(Box::new(WebMiddleware::new()))

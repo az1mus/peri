@@ -1,21 +1,6 @@
 use super::message_pipeline::PipelineAction;
 use super::*;
 
-/// 从输入文本中提取 `/skill-name` 格式的 token（字母、数字、连字符、下划线）
-fn extract_skill_tokens(input: &str) -> Vec<String> {
-    input
-        .split_whitespace()
-        .filter(|token| token.starts_with('/') && token.len() > 1)
-        .map(|token| {
-            let name = token.trim_start_matches('/');
-            name.chars()
-                .take_while(|c| c.is_alphanumeric() || *c == '-' || *c == '_')
-                .collect::<String>()
-        })
-        .filter(|s| !s.is_empty())
-        .collect()
-}
-
 impl App {
     pub fn submit_message(&mut self, input: String) {
         if input.trim().is_empty() {
@@ -198,9 +183,6 @@ impl App {
             AgentInput::blocks(MessageContent::blocks(blocks))
         };
 
-        // 解析消息中的 /skill-name（字母、数字、连字符、下划线）
-        let preload_skills = extract_skill_tokens(&input);
-
         // 确保当前 thread 存在
         let thread_id = self.ensure_thread_id();
 
@@ -349,7 +331,6 @@ impl App {
                     langfuse_tracer,
                     thread_store,
                     thread_id: thread_id_for_agent,
-                    preload_skills,
                     config: peri_config_for_agent,
                     cron_scheduler,
                     permission_mode,
@@ -384,40 +365,5 @@ impl App {
                 .remove(0);
             self.submit_message(msg);
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_preload_skills_extracts_slash_prefix() {
-        let result = extract_skill_tokens("请使用 /commit 提交");
-        assert_eq!(result, vec!["commit"]);
-    }
-
-    #[test]
-    fn test_preload_skills_extracts_multiple_skills() {
-        let result = extract_skill_tokens("/review /refactor");
-        assert_eq!(result, vec!["review", "refactor"]);
-    }
-
-    #[test]
-    fn test_preload_skills_ignores_hash_prefix() {
-        let result = extract_skill_tokens("#old-skill /new-skill");
-        assert_eq!(result, vec!["new-skill"], "# 前缀不再匹配");
-    }
-
-    #[test]
-    fn test_preload_skills_empty_for_no_skills() {
-        let result = extract_skill_tokens("普通消息没有 skill 引用");
-        assert!(result.is_empty());
-    }
-
-    #[test]
-    fn test_preload_skills_truncates_on_invalid_char() {
-        let result = extract_skill_tokens("/skill-name!suffix");
-        assert_eq!(result, vec!["skill-name"], "遇到 ! 截断");
     }
 }

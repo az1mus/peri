@@ -388,7 +388,6 @@ pub async fn handle_prompt(
             broker,
             permission_mode: session_permission_mode,
             peri_config: mgr_peri_config,
-            preload_skills: vec![],
             event_handler: handler,
             cancel: cancel.clone(),
             cron_scheduler: None,

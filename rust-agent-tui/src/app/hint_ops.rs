@@ -161,23 +161,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_candidates_count_hash_prefix_returns_zero() {
-        let (mut app, _handle) = crate::app::App::new_headless(80, 24).await;
-        app.session_mgr.sessions[app.session_mgr.active].ui.textarea = build_textarea(false);
-        app.session_mgr.sessions[app.session_mgr.active]
-            .ui
-            .textarea
-            .insert_str("#skill");
-        app.session_mgr.sessions[app.session_mgr.active]
-            .commands
-            .skills
-            .push(make_skill("skill"));
-
-        let count = app.hint_candidates_count();
-        assert_eq!(count, 0, "# 前缀不再产生候选");
-    }
-
-    #[tokio::test]
     async fn test_candidates_count_no_prefix_returns_zero() {
         let (mut app, _handle) = crate::app::App::new_headless(80, 24).await;
         app.session_mgr.sessions[app.session_mgr.active].ui.textarea = build_textarea(false);
