@@ -264,23 +264,8 @@ impl<L: ReactLLM, S: State> ReActAgent<L, S> {
                 )
                 .await;
 
-                // micro_compact：工具调用后检查上下文用量，压缩旧工具结果释放空间
-                if let Some(ref config) = self.compact_config {
-                    if let Some(ref budget) = self.context_budget {
-                        if budget.should_warn(state.token_tracker()) {
-                            let cleared = crate::agent::compact::micro_compact_enhanced(
-                                config,
-                                state.messages_mut(),
-                            );
-                            if cleared > 0 {
-                                tracing::info!(
-                                    cleared,
-                                    "micro-compact: cleared stale tool results in ReAct loop"
-                                );
-                            }
-                        }
-                    }
-                }
+                // micro-compact 由 TUI 侧在 ContextWarning (0.70 阈值) 时统一触发
+                // 此处不再重复执行，避免同一条消息被压缩两次
             } else {
                 // 最终回答
                 let output = self::final_answer::handle_final_answer(
