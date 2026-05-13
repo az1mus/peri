@@ -587,6 +587,8 @@ impl BaseModel for ChatOpenAI {
 
         let message = Self::parse_assistant_message(assistant_msg, &stop_reason);
 
+        let request_id = resp_json["id"].as_str().map(|s| s.to_string());
+
         let usage = {
             let input = resp_json["usage"]["prompt_tokens"]
                 .as_u64()
@@ -603,6 +605,7 @@ impl BaseModel for ChatOpenAI {
                     output_tokens: o,
                     cache_creation_input_tokens: None,
                     cache_read_input_tokens: cache_read,
+                    request_id: request_id.clone(),
                 }),
                 _ => None,
             }
@@ -611,6 +614,7 @@ impl BaseModel for ChatOpenAI {
             message,
             stop_reason,
             usage,
+            request_id,
         })
     }
 

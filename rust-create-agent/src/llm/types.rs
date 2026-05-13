@@ -48,6 +48,8 @@ pub struct TokenUsage {
     pub cache_creation_input_tokens: Option<u32>,
     /// 从缓存读取的 token 数（Anthropic/OpenAI 均有，某些模型为 None）
     pub cache_read_input_tokens: Option<u32>,
+    /// API 提供商返回的请求 ID
+    pub request_id: Option<String>,
 }
 
 /// LLM 响应
@@ -57,6 +59,8 @@ pub struct LlmResponse {
     pub stop_reason: StopReason,
     /// Token 使用量（可选，不支持的 LLM 为 None）
     pub usage: Option<TokenUsage>,
+    /// API 提供商返回的请求 ID
+    pub request_id: Option<String>,
 }
 
 /// 停止原因

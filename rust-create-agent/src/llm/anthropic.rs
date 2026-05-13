@@ -556,6 +556,11 @@ impl BaseModel for ChatAnthropic {
         })?;
 
         let status = resp.status();
+        let request_id = resp
+            .headers()
+            .get("x-request-id")
+            .and_then(|v| v.to_str().ok())
+            .map(|s| s.to_string());
         let resp_text = resp.text().await.map_err(|e| {
             tracing::error!(
                 provider = "anthropic",
@@ -694,6 +699,7 @@ impl BaseModel for ChatAnthropic {
                     output_tokens: o,
                     cache_creation_input_tokens: Some(cache_creation),
                     cache_read_input_tokens: Some(cache_read),
+                    request_id: request_id.clone(),
                 }),
                 _ => None,
             }
@@ -702,6 +708,7 @@ impl BaseModel for ChatAnthropic {
             message,
             stop_reason,
             usage,
+            request_id,
         })
     }
 

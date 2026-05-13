@@ -740,6 +740,7 @@ async fn test_context_budget_wiring() {
                 output_tokens: self.output_tokens,
                 cache_creation_input_tokens: None,
                 cache_read_input_tokens: None,
+                request_id: None,
             });
             Ok(r)
         }
@@ -782,6 +783,7 @@ async fn test_no_context_budget_fallback() {
                 output_tokens: 5,
                 cache_creation_input_tokens: None,
                 cache_read_input_tokens: None,
+                request_id: None,
             });
             Ok(r)
         }
@@ -819,6 +821,7 @@ async fn test_context_budget_emits_warning_event() {
                 output_tokens: self.output_tokens,
                 cache_creation_input_tokens: None,
                 cache_read_input_tokens: None,
+                request_id: None,
             });
             Ok(r)
         }
@@ -885,6 +888,7 @@ async fn test_fallback_path_emits_warning_event() {
                 output_tokens: 80000,
                 cache_creation_input_tokens: None,
                 cache_read_input_tokens: None,
+                request_id: None,
             });
             Ok(r)
         }
@@ -947,6 +951,7 @@ async fn test_low_usage_no_warning_event() {
                 output_tokens: 50,
                 cache_creation_input_tokens: None,
                 cache_read_input_tokens: None,
+                request_id: None,
             });
             Ok(r)
         }

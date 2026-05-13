@@ -15,6 +15,8 @@ pub struct TokenTracker {
     pub last_usage: Option<TokenUsage>,
     /// 已完成的 LLM 调用次数
     pub llm_call_count: u32,
+    /// 最近一次 LLM 响应的 API request ID
+    pub last_request_id: Option<String>,
 }
 
 impl TokenTracker {
@@ -33,6 +35,7 @@ impl TokenTracker {
             self.last_usage = Some(usage.clone());
         }
         self.llm_call_count += 1;
+        self.last_request_id = usage.request_id.clone();
     }
 
     pub fn estimated_context_tokens(&self) -> Option<u64> {
@@ -134,6 +137,7 @@ mod tests {
             output_tokens: output,
             cache_creation_input_tokens: cache_creation,
             cache_read_input_tokens: cache_read,
+            request_id: None,
         }
     }
 
@@ -437,5 +441,70 @@ mod tests {
             pct.is_some(),
             "should return Some even with 0 context window"
         );
+    }
+
+    #[test]
+    fn test_accumulate_records_request_id() {
+        let mut tracker = TokenTracker::default();
+        let usage = TokenUsage {
+            input_tokens: 100,
+            output_tokens: 50,
+            cache_creation_input_tokens: None,
+            cache_read_input_tokens: None,
+            request_id: Some("req_01ABC".to_string()),
+        };
+        tracker.accumulate(&usage);
+        assert_eq!(tracker.last_request_id.as_deref(), Some("req_01ABC"));
+    }
+
+    #[test]
+    fn test_accumulate_overwrites_request_id() {
+        let mut tracker = TokenTracker::default();
+        let usage1 = TokenUsage {
+            input_tokens: 100,
+            output_tokens: 50,
+            cache_creation_input_tokens: None,
+            cache_read_input_tokens: None,
+            request_id: Some("req_01ABC".to_string()),
+        };
+        tracker.accumulate(&usage1);
+        let usage2 = TokenUsage {
+            input_tokens: 200,
+            output_tokens: 80,
+            cache_creation_input_tokens: None,
+            cache_read_input_tokens: None,
+            request_id: Some("req_02DEF".to_string()),
+        };
+        tracker.accumulate(&usage2);
+        assert_eq!(tracker.last_request_id.as_deref(), Some("req_02DEF"));
+    }
+
+    #[test]
+    fn test_accumulate_none_request_id() {
+        let mut tracker = TokenTracker::default();
+        let usage = TokenUsage {
+            input_tokens: 100,
+            output_tokens: 50,
+            cache_creation_input_tokens: None,
+            cache_read_input_tokens: None,
+            request_id: None,
+        };
+        tracker.accumulate(&usage);
+        assert!(tracker.last_request_id.is_none());
+    }
+
+    #[test]
+    fn test_reset_clears_request_id() {
+        let mut tracker = TokenTracker::default();
+        let usage = TokenUsage {
+            input_tokens: 100,
+            output_tokens: 50,
+            cache_creation_input_tokens: None,
+            cache_read_input_tokens: None,
+            request_id: Some("req_01ABC".to_string()),
+        };
+        tracker.accumulate(&usage);
+        tracker.reset();
+        assert!(tracker.last_request_id.is_none());
     }
 }

@@ -327,6 +327,7 @@ mod tests {
                 message: BaseMessage::ai(self.response.clone()),
                 stop_reason: StopReason::EndTurn,
                 usage: None,
+                request_id: None,
             })
         }
         fn provider_name(&self) -> &str {
