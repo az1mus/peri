@@ -1,6 +1,6 @@
 # Skill Preload 注入消息到历史最前面导致首轮 Prompt Cache 失效
 
-**状态**：Fixed
+**状态**：Fixed + Verify
 **优先级**：高
 **创建日期**：2026-05-12
 
@@ -40,19 +40,28 @@
 
 ## 修复方案
 
-将 fake Human/Ai/Tool 序列替换为单条 Human 消息，使用 `add_message` 追加到用户消息之后（executor 在 `before_agent` 之前已将用户消息 `add_message` 到 state）。
+保持 Ai[ToolUse] → Tool[ToolResult] 消息序列不变，将 `prepend_message` 改为 `add_message`，使工具调用追加到用户消息之后（executor 在 `before_agent` 之前已将用户消息 `add_message` 到 state）。
 
 ```
+修复前 messages 数组：
+  [System "系统提示词"]  ← prepend
+  [Human "(System: Preloading...")  ← cache_control 落这里，每次变化
+  [Ai]    [ToolUse{Read, call_{uuid}}]
+  [Tool]  ToolResult{skill 全文}
+  [Human "用户消息"]
+
 修复后 messages 数组：
   [System "系统提示词"]  ← prepend，独立缓存
   [...历史消息...]
   [N-1] Human "用户消息"  ← cache_control 放这里，前缀稳定
-  [N]   Human "[Skill: /path/SKILL.md]\nskill 全文内容"  ← add_message 追加
+  [N]   Ai [ToolUse{Read, call_{uuid}}]  ← add_message 追加
+  [N+1] Tool ToolResult{skill 全文}
+  ...
 ```
 
-- 第一条 user 消息是真实用户输入，cache_control 缓存段稳定
-- Skill 内容作为普通 Human 消息追加，不影响缓存边界
-- `extract_skills_paths()` 同时扫描旧格式（tool_calls）和新格式（`[Skill: path]` 标记），兼容历史 session
+- 第一条 user 消息始终是真实用户输入，cache_control 缓存段稳定
+- 工具调用追加在用户消息之后，不影响缓存边界
+- `extract_skills_paths()` 新增 System/Human 消息 `[Skill: path]` 扫描，兼容中间迭代格式的 session
 
 ## 复现条件
 
@@ -65,6 +74,7 @@
 
 ## 修改文件
 
-- `rust-agent-middlewares/src/subagent/skill_preload.rs` — fake 序列改为单条 Human 消息 + `add_message`
-- `rust-create-agent/src/agent/compact/re_inject.rs` — `extract_skills_paths()` 新增 Human/System 消息 `[Skill: path]` 扫描
+- `rust-agent-middlewares/src/subagent/skill_preload.rs` — `prepend_message` 改为 `add_message`
+- `rust-create-agent/src/agent/compact/re_inject.rs` — `extract_skills_paths()` 新增 System/Human 消息 `[Skill: path]` 扫描
 - `rust-agent-middlewares/src/subagent/tool_test.rs` — 测试适配新格式
+- `rust-create-agent/src/llm/anthropic.rs` — 移除错误的占位 thinking block 注入逻辑
