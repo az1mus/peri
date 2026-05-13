@@ -112,6 +112,19 @@ MCP HTTP 请求 → 401 + WWW-Authenticate
 **归档:** [链接](../../archive/feature_20260503_F001_mcp-oauth-auth/)
 **归档日期:** 2026-05-04
 
+### feature_20260507_F001_plugin-mcp-injection
+
+**摘要:** 插件 MCP 环境变量 per-plugin 展开，pluginSource 旁路表
+**关键决策:**
+
+- MCP env 展开时机：per-plugin 独立展开，先展开后合并（避免合并后同名 key 冲突）
+- pluginSource 旁路表：`McpClientPool.plugin_sources: HashMap<String, String>` 记录 `"plugin@{marketplace}"` 来源
+- load_merged_config() 重排：step 2 中每个 plugin server 先独立展开，step 6 仅处理 project/global
+- 去重 hash 基于展开后的实际值（更准确）
+- 零 breaking change：不改 `McpServerConfig` / `ConfigSource` / `LoadedPlugin`
+**归档:** [链接](../../archive/feature_20260507_F001_plugin-mcp-injection/)
+**归档日期:** 2026-05-13
+
 ---
 
 ## 相关 Feature

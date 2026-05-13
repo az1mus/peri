@@ -12,6 +12,15 @@
 
 | Feature ID | 摘要 | 领域 | 归档日期 |
 |-----------|------|------|----------|
+| [feature_20260512_F001_subagent-display-colors](../archive/feature_20260512_F001_subagent-display-colors/) | SubAgent 显示颜色区分前台/后台，格式改为 Agent(type) | tui | 2026-05-13 |
+| [feature_20260510_F001_simple-compat-features](../archive/feature_20260510_F001_simple-compat-features/) | 4 项配置系统补全（CLAUDE.local.md/@import/excludes）+ 3 个 TUI 命令 | tui | 2026-05-13 |
+| [feature_20260509_F001_tool-search](../archive/feature_20260509_F001_tool-search/) | 工具延迟加载：Core 工具始终加载，Deferred 按需发现 | agent | 2026-05-13 |
+| [feature_20260508_F002_app-layer-refactor](../archive/feature_20260508_F002_app-layer-refactor/) | App 分层重构：ServiceRegistry/SessionManager/UiState/MessageState | tui | 2026-05-13 |
+| [feature_20260508_F001_panel-component-architecture](../archive/feature_20260508_F001_panel-component-architecture/) | 面板组件化：PanelManager/PanelComponent trait 统一面板生命周期 | tui | 2026-05-13 |
+| [feature_20260507_F002_plugin-hook-support](../archive/feature_20260507_F002_plugin-hook-support/) | 插件 Hooks 系统：4 种执行类型（command/prompt/http/agent）+ 13 个事件 | plugin | 2026-05-13 |
+| [feature_20260507_F001_plugin-mcp-injection](../archive/feature_20260507_F001_plugin-mcp-injection/) | 插件 MCP 环境变量 per-plugin 展开，pluginSource 旁路表 | mcp | 2026-05-13 |
+| [feature_20260506_F001_plugin-marketplace-compat](../archive/feature_20260506_F001_plugin-marketplace-compat/) | Claude Code 插件生态兼容：发现/安装/加载 commands/skills/MCP | plugin | 2026-05-13 |
+| [feature_20260505_F001_web-tools](../archive/feature_20260505_F001_web-tools/) | Web 工具中间件：WebFetch（HTML→Markdown）+ WebSearch（Exa API） | agent | 2026-05-13 |
 | [feature_20260503_F002_multi-agent-design](../archive/feature_20260503_F002_multi-agent-design/) | Fork 路径继承父 agent 上下文 + Agent prompt 指导扩写 | agent | 2026-05-04 |
 | [feature_20260503_F001_mcp-oauth-auth](../archive/feature_20260503_F001_mcp-oauth-auth/) | MCP HTTP 传输层集成 OAuth 2.0（PKCE + Token 持久化 + 混合回调） | mcp | 2026-05-04 |
 | [feature_20260503_F001_cc-commands-alignment](../archive/feature_20260503_F001_cc-commands-alignment/) | 新增 /config /cost /context /memory 四个命令 + Command alias 机制 | tui | 2026-05-04 |
@@ -102,9 +111,10 @@
 ## 领域索引
 
 - [storage](./domains/storage.md) — 存储基础设施（sqlx 异步数据库连接池、线程持久化）— 1 feature
-- [agent](./domains/agent.md) — Agent 核心（ReAct 执行器、消息系统、工具抽象、持久化）— 16 features
-- [tui](./domains/tui.md) — TUI 界面（渲染、交互、命令、面板）— 29 features
-- [mcp](./domains/mcp.md) — MCP 集成（Client 中间件、连接池、OAuth 2.0、运行时管理）— 3 features
+- [agent](./domains/agent.md) — Agent 核心（ReAct 执行器、消息系统、工具抽象、持久化）— 18 features
+- [tui](./domains/tui.md) — TUI 界面（渲染、交互、命令、面板）— 33 features
+- [mcp](./domains/mcp.md) — MCP 集成（Client 中间件、连接池、OAuth 2.0、运行时管理）— 4 features
+- [plugin](./domains/plugin.md) — 插件系统（Claude Code 插件生态兼容、Hooks 系统、MCP env 展开）— 3 features
 - [relay-server](./domains/relay-server.md) — Relay Server（WebSocket 中继、远程控制）— 12 features
 - [langfuse](./domains/langfuse.md) — 可观测性（Langfuse 全链路追踪、Session/Trace/Generation/Tool 层级）— 8 features
 - [model-config](./domains/model-config.md) — 模型配置（Provider 自包含模型名、/login 与 /model 分离）— 1 feature
@@ -122,4 +132,4 @@
 - [code-architecture](./domains/code-architecture.md) — 代码架构（Relay 移除等结构性变更）— 1 feature
 
 ---
-*最后更新: 2026-05-04 — 由 feature_20260504_F001_sqlx-migration 归档时更新*
+*最后更新: 2026-05-13 — 由 SDD Archive 归档时更新*

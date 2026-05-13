@@ -83,6 +83,8 @@ launch_agent 工具调用
 | 子 Agent 模型 | agent.md frontmatter model 字段（sonnet/opus/haiku/inherit），alias 解析在 TUI 层完成 |
 | 定时任务 | CronMiddleware 提供 cron_register/cron_list/cron_remove 三个工具；croner 2 解析表达式；内存任务表上限 20 |
 | 后台执行 | BackgroundTaskRegistry(max=3) + mpsc unbounded 通道；invoke_background() 不 await；结果注入为 Human 消息；Done 后保持通道存活 + 自动 continuation |
+| 工具延迟加载 | 核心工具（12 个）直接加载，非核心工具通过 SearchExtraTools 按需发现、ExecuteExtraTool 代理执行；Prompt 缓存会话级 |
+| Web 工具 | WebMiddleware 注入 WebFetch（HTML→Markdown）和 WebSearch（Tavily API），支持域名过滤和实时抓取 |
 | trait 清理 | ReactLLM trait 移除废弃方法（generate_reasoning），统一为 generate()；废弃 trait 标记 #[deprecated] |
 
 ## Feature 附录
@@ -283,6 +285,30 @@ launch_agent 工具调用
 - Read 新增 pages 参数（PDF 页范围）
 **归档:** [链接](../../archive/feature_20260430_F001_align-claude-code-tools/)
 **归档日期:** 2026-05-04
+
+### feature_20260509_F001_tool-search
+
+**摘要:** 工具延迟加载机制，核心工具直接加载，非核心工具按需发现和代理执行
+**关键决策:**
+
+- 核心工具（12 个）始终加载：Read/Write/Edit/Glob/Grep/folder_operations/Bash/WebFetch/WebSearch/Agent/AskUserQuestion/TodoWrite
+- 非核心工具通过 SearchExtraTools 按需发现，ExecuteExtraTool 代理执行
+- ToolProvider trait 动态提供工具集合，支持运行时扩展
+- Prompt 缓存优化：deferred tools 提示词会话级缓存，保证 Anthropic cache 前缀稳定
+**归档:** [链接](../../archive/feature_20260509_F001_tool-search/)
+**归档日期:** 2026-05-13
+
+### feature_20260505_F001_web-tools
+
+**摘要:** WebFetch 和 WebSearch 工具集成，支持网络请求和搜索功能
+**关键决策:**
+
+- WebMiddleware 注入 WebFetch（HTML→Markdown）和 WebSearch（Tavily API）两个工具
+- WebFetch 使用 web_reader MCP 工具抓取网页并转换为 Markdown
+- WebSearch 使用 Tavily API 进行网络搜索，返回结构化结果
+- 支持搜索结果过滤（允许/阻止域名）和实时抓取模式
+**归档:** [链接](../../archive/feature_20260505_F001_web-tools/)
+**归档日期:** 2026-05-13
 
 ---
 
