@@ -314,8 +314,14 @@ impl MessagePipeline {
                 }
             }
             AgentEvent::StateSnapshot(msgs) => {
-                self.set_completed(msgs);
-                vec![PipelineAction::None]
+                if self.in_subagent() {
+                    // 子 Agent 的 StateSnapshot 不应修改父 Agent 的 completed 列表，
+                    // 否则子 Agent 的全部内部消息会污染父 Agent 的消息历史。
+                    vec![PipelineAction::None]
+                } else {
+                    self.set_completed(msgs);
+                    vec![PipelineAction::None]
+                }
             }
             // 以下事件由 agent_ops 直接处理，Pipeline 返回 None
             AgentEvent::Error(_)

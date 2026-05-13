@@ -69,6 +69,14 @@ impl App {
                 total_tokens,
                 percentage: _,
             } => {
+                // 子 Agent 的 ContextWarning 不应触发父 Agent 的 auto-compact
+                if self.session_mgr.sessions[self.session_mgr.active]
+                    .agent
+                    .subagent_depth
+                    > 0
+                {
+                    return (true, false, false);
+                }
                 // 从核心层同步 context_window（核心层通过 model.context_window() 获取正确值）
                 let cw = total_tokens as u32;
                 if cw > 0
@@ -791,6 +799,15 @@ impl App {
                 (true, false, false)
             }
             AgentEvent::StateSnapshot(msgs) => {
+                // 子 Agent 的 StateSnapshot 不应污染父 Agent 的 agent_state_messages，
+                // 否则子 Agent 的全部内部消息会混入父 Agent 的对话历史和持久化。
+                if self.session_mgr.sessions[self.session_mgr.active]
+                    .agent
+                    .subagent_depth
+                    > 0
+                {
+                    return (true, false, false);
+                }
                 self.session_mgr.sessions[self.session_mgr.active]
                     .agent
                     .agent_state_messages
@@ -816,6 +833,14 @@ impl App {
                 delay_ms,
                 error,
             } => {
+                // 子 Agent 的 LlmRetrying 不应覆盖父 Agent 的 retry_status 显示
+                if self.session_mgr.sessions[self.session_mgr.active]
+                    .agent
+                    .subagent_depth
+                    > 0
+                {
+                    return (true, false, false);
+                }
                 self.session_mgr.sessions[self.session_mgr.active]
                     .agent
                     .retry_status = Some(super::agent_comm::RetryStatus {
