@@ -55,18 +55,18 @@ fn render_first_row(f: &mut Frame, app: &App, area: Rect) {
     }
 
     // 工作目录
-    spans.push(Span::styled(" │ ", Style::default().fg(theme::MUTED)));
+    spans.push(Span::styled(" · ", Style::default().fg(theme::MUTED)));
     let cwd_short = std::path::Path::new(&app.services.cwd)
         .file_name()
         .and_then(|n| n.to_str())
         .unwrap_or(&app.services.cwd);
     spans.push(Span::styled(
-        format!("📁 {}", cwd_short),
+        format!("{}", cwd_short),
         Style::default().fg(theme::MUTED),
     ));
 
     // 模型名（只显示 model name）
-    spans.push(Span::styled(" │ ", Style::default().fg(theme::MUTED)));
+    spans.push(Span::styled(" · ", Style::default().fg(theme::MUTED)));
     {
         let is_highlight = app
             .services
@@ -79,7 +79,29 @@ fn render_first_row(f: &mut Frame, app: &App, area: Rect) {
         spans.push(Span::styled(format!(" {}", app.services.model_name), style));
     }
 
-    // 上下文使用率 + 缓存命中率
+    // 进程内存监控
+    {
+        let mut monitor = app.services.resource_monitor.lock();
+        monitor.refresh_if_needed();
+        let mem = monitor.memory_mb();
+        drop(monitor); // 释放锁后再渲染
+
+        let mem_color = if mem > 1024 {
+            theme::ERROR
+        } else if mem > 512 {
+            theme::WARNING
+        } else {
+            theme::SAGE
+        };
+
+        spans.push(Span::styled(" · ", Style::default().fg(theme::MUTED)));
+        spans.push(Span::styled(
+            format!(" MEM {}MB", mem),
+            Style::default().fg(mem_color),
+        ));
+    }
+
+    // 上下文使用率（放最后）
     {
         let tracker = &app.session_mgr.sessions[app.session_mgr.active]
             .agent
@@ -99,116 +121,17 @@ fn render_first_row(f: &mut Frame, app: &App, area: Rect) {
             } else {
                 theme::SAGE
             };
-            spans.push(Span::styled(" │ ", Style::default().fg(theme::MUTED)));
-            // 缓存命中率（当次值，反映最近一次 LLM 调用的缓存效率）
-            let cache_str = if tracker.cache_hit_rate() > 0.0 {
-                format!(" {:.0}%", tracker.cache_hit_rate() * 100.0)
+            spans.push(Span::styled(" · ", Style::default().fg(theme::MUTED)));
+            let total_display = if total >= 1_000_000 {
+                format!("{:.0}M", total as f64 / 1_000_000.0)
             } else {
-                String::new()
+                format!("{:.0}k", total as f64 / 1000.0)
             };
             spans.push(Span::styled(
-                format!(
-                    "ctx: {:.0}% [{:.0}k]{}",
-                    pct,
-                    total as f64 / 1000.0,
-                    cache_str
-                ),
+                format!("{} {:.0}%", total_display, pct),
                 Style::default().fg(color),
             ));
         }
-    }
-
-    // 重试状态
-    if let Some(ref retry) = app.session_mgr.sessions[app.session_mgr.active]
-        .agent
-        .retry_status
-    {
-        let delay_sec = retry.delay_ms as f64 / 1000.0;
-        spans.push(Span::styled(" │ ", Style::default().fg(theme::MUTED)));
-        // 截取错误信息前 60 字符用于状态栏展示
-        let err_preview: String = retry.error.chars().take(60).collect();
-        let err_display = if retry.error.chars().count() > 60 {
-            format!("{}...", err_preview)
-        } else {
-            err_preview
-        };
-        spans.push(Span::styled(
-            format!(
-                " 重试 {}/{} ({:.1}s): {}",
-                retry.attempt, retry.max_attempts, delay_sec, err_display
-            ),
-            Style::default().fg(theme::WARNING),
-        ));
-    }
-
-    // MCP 初始化进度
-    if let Some(ref rx) = app.services.mcp_init_rx {
-        let status = rx.borrow().clone();
-        use rust_agent_middlewares::mcp::McpInitStatus;
-        match status {
-            McpInitStatus::Initializing { connected, total } => {
-                spans.push(Span::styled(" │ ", Style::default().fg(theme::MUTED)));
-                spans.push(Span::styled(
-                    format!(" [i] MCP ({}/{})...", connected, total),
-                    Style::default().fg(theme::MUTED),
-                ));
-            }
-            McpInitStatus::Ready { total } if total > 0 => {
-                // 首次检测到 Ready 时设置 3 秒显示窗口
-                if app.services.mcp_ready_shown_until.get().is_none() {
-                    app.services.mcp_ready_shown_until.set(Some(
-                        std::time::Instant::now() + std::time::Duration::from_secs(3),
-                    ));
-                }
-                if let Some(until) = app.services.mcp_ready_shown_until.get() {
-                    if std::time::Instant::now() < until {
-                        spans.push(Span::styled(" │ ", Style::default().fg(theme::MUTED)));
-                        spans.push(Span::styled(
-                            format!(" [i] MCP ready ({} servers)", total),
-                            Style::default().fg(theme::SAGE),
-                        ));
-                    }
-                }
-            }
-            McpInitStatus::Failed(ref msg) => {
-                spans.push(Span::styled(" │ ", Style::default().fg(theme::MUTED)));
-                spans.push(Span::styled(
-                    format!(" [i] MCP failed: {}", msg),
-                    Style::default().fg(theme::ERROR),
-                ));
-            }
-            McpInitStatus::Pending | McpInitStatus::Ready { .. } => {}
-        }
-    }
-
-    // 进程内存监控
-    {
-        let mut monitor = app.services.resource_monitor.lock();
-        monitor.refresh_if_needed();
-        let mem = monitor.memory_mb();
-        drop(monitor); // 释放锁后再渲染
-
-        let mem_color = if mem > 1024 {
-            theme::ERROR
-        } else if mem > 512 {
-            theme::WARNING
-        } else {
-            theme::SAGE
-        };
-
-        spans.push(Span::styled(" │ ", Style::default().fg(theme::MUTED)));
-        spans.push(Span::styled(
-            format!(" MEM {}MB", mem),
-            Style::default().fg(mem_color),
-        ));
-    }
-
-    // LSP 诊断计数
-    let agent = &app.session_mgr.sessions[app.session_mgr.active].agent;
-    if agent.lsp_errors > 0 || agent.lsp_warnings > 0 {
-        spans.push(Span::styled(" │ ", Style::default().fg(theme::MUTED)));
-        let diag = format!("diag: {}E/{}W", agent.lsp_errors, agent.lsp_warnings);
-        spans.push(Span::styled(diag, Style::default().fg(theme::MUTED)));
     }
 
     render_truncated_line(f, spans, Vec::new(), area);
@@ -241,7 +164,7 @@ fn render_second_row(f: &mut Frame, app: &App, area: Rect) {
     // 后台任务指示器
     if app.session_mgr.sessions[app.session_mgr.active].background_task_count > 0 {
         if has_content {
-            left_spans.push(Span::styled(" │ ", Style::default().fg(theme::MUTED)));
+            left_spans.push(Span::styled(" · ", Style::default().fg(theme::MUTED)));
         }
         left_spans.push(Span::styled(
             format!(
@@ -259,7 +182,7 @@ fn render_second_row(f: &mut Frame, app: &App, area: Rect) {
         .get::<AgentPanel>()
     {
         if has_content {
-            left_spans.push(Span::styled(" │ ", Style::default().fg(theme::MUTED)));
+            left_spans.push(Span::styled(" · ", Style::default().fg(theme::MUTED)));
         }
         if let Some(agent) = panel.current_agent() {
             left_spans.push(Span::styled(
@@ -271,12 +194,96 @@ fn render_second_row(f: &mut Frame, app: &App, area: Rect) {
         }
     } else if let Some(id) = app.get_agent_id() {
         if has_content {
-            left_spans.push(Span::styled(" │ ", Style::default().fg(theme::MUTED)));
+            left_spans.push(Span::styled(" · ", Style::default().fg(theme::MUTED)));
         }
         left_spans.push(Span::styled(
             format!(" {}", id),
             Style::default().fg(theme::MUTED),
         ));
+    }
+
+    // 重试状态（放在左侧）
+    if let Some(ref retry) = app.session_mgr.sessions[app.session_mgr.active]
+        .agent
+        .retry_status
+    {
+        if has_content {
+            left_spans.push(Span::styled(" · ", Style::default().fg(theme::MUTED)));
+        }
+        let delay_sec = retry.delay_ms as f64 / 1000.0;
+        let err_preview: String = retry.error.chars().take(60).collect();
+        let err_display = if retry.error.chars().count() > 60 {
+            format!("{}...", err_preview)
+        } else {
+            err_preview
+        };
+        left_spans.push(Span::styled(
+            format!(
+                " 重试 {}/{} ({:.1}s): {}",
+                retry.attempt, retry.max_attempts, delay_sec, err_display
+            ),
+            Style::default().fg(theme::WARNING),
+        ));
+    }
+
+    // MCP 初始化进度（瞬时事件）
+    if let Some(ref rx) = app.services.mcp_init_rx {
+        let status = rx.borrow().clone();
+        use rust_agent_middlewares::mcp::McpInitStatus;
+        match status {
+            McpInitStatus::Initializing { connected, total } => {
+                if has_content {
+                    left_spans.push(Span::styled(" · ", Style::default().fg(theme::MUTED)));
+                }
+                left_spans.push(Span::styled(
+                    format!(" [i] MCP ({}/{})...", connected, total),
+                    Style::default().fg(theme::MUTED),
+                ));
+                has_content = true;
+            }
+            McpInitStatus::Ready { total } if total > 0 => {
+                if app.services.mcp_ready_shown_until.get().is_none() {
+                    app.services.mcp_ready_shown_until.set(Some(
+                        std::time::Instant::now() + std::time::Duration::from_secs(3),
+                    ));
+                }
+                if let Some(until) = app.services.mcp_ready_shown_until.get() {
+                    if std::time::Instant::now() < until {
+                        if has_content {
+                            left_spans.push(Span::styled(" · ", Style::default().fg(theme::MUTED)));
+                        }
+                        left_spans.push(Span::styled(
+                            format!(" [i] MCP ready ({} servers)", total),
+                            Style::default().fg(theme::SAGE),
+                        ));
+                        has_content = true;
+                    }
+                }
+            }
+            McpInitStatus::Failed(ref msg) => {
+                if has_content {
+                    left_spans.push(Span::styled(" · ", Style::default().fg(theme::MUTED)));
+                }
+                left_spans.push(Span::styled(
+                    format!(" [i] MCP failed: {}", msg),
+                    Style::default().fg(theme::ERROR),
+                ));
+                has_content = true;
+            }
+            McpInitStatus::Pending | McpInitStatus::Ready { .. } => {}
+        }
+    }
+
+    // LSP 诊断计数（瞬时事件）
+    {
+        let agent = &app.session_mgr.sessions[app.session_mgr.active].agent;
+        if agent.lsp_errors > 0 || agent.lsp_warnings > 0 {
+            if has_content {
+                left_spans.push(Span::styled(" · ", Style::default().fg(theme::MUTED)));
+            }
+            let diag = format!("diag: {}E/{}W", agent.lsp_errors, agent.lsp_warnings);
+            left_spans.push(Span::styled(diag, Style::default().fg(theme::MUTED)));
+        }
     }
 
     // 右侧：快捷键提示（统一灰色显示）

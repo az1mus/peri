@@ -10,7 +10,9 @@ members = [
 resolver = "2"
 
 [profile.release]
-strip = true
+# NOTE: "symbols" not "true" — Apple strip doesn't behave like GNU strip.
+#       "true" on macOS only strips debug info, leaving 8MB of symbol table.
+strip = "symbols"
 opt-level = "z"
 lto = true
 codegen-units = 1
