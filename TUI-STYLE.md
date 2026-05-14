@@ -43,6 +43,8 @@
 | USER_BG | `#373737` | 用户消息底色（所有行带底色，与 sticky header 一致） |
 | POPUP_BG | `#000000` | 纯黑弹窗底色 |
 | CURSOR_BG | `#262626` | 中性暗灰（光标行背景，列表选中行） |
+| SELECTION_BG | `#264F78` | 文本选区背景色（深色主题下网页默认选中蓝的暗色版本） |
+| SUB_AGENT_BG | `#1E1E26` | SubAgent 嵌套消息背景色（比终端背景略亮，形成视觉容器） |
 
 ### 边框
 
@@ -511,6 +513,9 @@ Spinner 下方附加 Tip 行：`⎿  Tip: ...`（MUTED 色）。
 | `/status` | 状态面板（含 Cost/Context 两个 tab） |
 | `/split` | 分屏管理 |
 | `/loop` | 循环执行 |
+| `/doctor` | 诊断配置完整性 |
+| `/effort <level>` | 查看或设置推理力度（low/medium/high/xhigh/max） |
+| `/rename [name]` | 查看或修改当前会话标题 |
 | `/help` | 列出所有命令 |
 
 ### 命令匹配

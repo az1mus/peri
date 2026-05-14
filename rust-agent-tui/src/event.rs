@@ -992,7 +992,7 @@ async fn handle_event(app: &mut App, ev: Event) -> Result<Option<Action>> {
                         | Some(PanelKind::Config)
                         | Some(PanelKind::ThreadBrowser)
                 ) {
-                    with_session_panels!(app, |sp, ctx| { sp.dispatch_paste(&text, &mut ctx) });
+                    with_session_panels!(app, |sp, ctx| sp.dispatch_paste(&text, &mut ctx));
                     return Ok(Some(Action::Redraw));
                 }
 
@@ -1006,7 +1006,7 @@ async fn handle_event(app: &mut App, ev: Event) -> Result<Option<Action>> {
                         | Some(PanelKind::Cron)
                         | Some(PanelKind::Plugin)
                 ) {
-                    with_global_panels!(app, |pm, ctx| { pm.dispatch_paste(&text, &mut ctx) });
+                    with_global_panels!(app, |pm, ctx| pm.dispatch_paste(&text, &mut ctx));
                     return Ok(Some(Action::Redraw));
                 }
             }
