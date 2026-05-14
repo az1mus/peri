@@ -987,6 +987,8 @@ impl BaseModel for ChatAnthropic {
         let mut current_block_type: Option<String> = None;
 
         let mut input_tokens: u32 = 0;
+        let mut cache_creation_input_tokens: u32 = 0;
+        let mut cache_read_input_tokens: u32 = 0;
         let mut output_tokens: u32 = 0;
         let mut stop_reason_str: String = "end_turn".to_string();
         let mut stream_request_id: Option<String> = None;
@@ -1005,7 +1007,12 @@ impl BaseModel for ChatAnthropic {
                 match event {
                     "message_start" => {
                         stream_request_id = parsed["message"]["id"].as_str().map(|s| s.to_string());
-                        input_tokens = parsed["message"]["usage"]["input_tokens"]
+                        let usage_obj = &parsed["message"]["usage"];
+                        input_tokens = usage_obj["input_tokens"].as_u64().unwrap_or(0) as u32;
+                        cache_creation_input_tokens = usage_obj["cache_creation_input_tokens"]
+                            .as_u64()
+                            .unwrap_or(0) as u32;
+                        cache_read_input_tokens = usage_obj["cache_read_input_tokens"]
                             .as_u64()
                             .unwrap_or(0) as u32;
                     }
@@ -1141,13 +1148,30 @@ impl BaseModel for ChatAnthropic {
             BaseMessage::ai(MessageContent::Blocks(blocks))
         };
 
+        // 规范化 input_tokens：Anthropic 的 input_tokens 不含缓存 token，
+        // 加上 cache_creation + cache_read 使其与 OpenAI 语义一致（总输入）。
+        // 这样 estimated_context_tokens() 和 cache_hit_rate() 可用单一公式。
+        let normalized_input = input_tokens + cache_creation_input_tokens + cache_read_input_tokens;
+
         let usage = Some(crate::llm::types::TokenUsage {
-            input_tokens,
+            input_tokens: normalized_input,
             output_tokens,
-            cache_creation_input_tokens: None,
-            cache_read_input_tokens: None,
+            cache_creation_input_tokens: Some(cache_creation_input_tokens),
+            cache_read_input_tokens: Some(cache_read_input_tokens),
             request_id: stream_request_id.clone(),
         });
+
+        tracing::info!(
+            provider = "anthropic",
+            model = %self.model,
+            elapsed_ms = start.elapsed().as_millis() as u64,
+            msg_count,
+            input_tokens = normalized_input,
+            output_tokens,
+            cache_read = cache_read_input_tokens,
+            cache_creation = cache_creation_input_tokens,
+            "LLM streaming completed"
+        );
 
         Ok(LlmResponse {
             message,
