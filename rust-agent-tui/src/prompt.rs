@@ -208,7 +208,6 @@ fn os_version_string() -> String {
     }
 }
 
-
 #[cfg(test)]
 #[path = "prompt_test.rs"]
 mod tests;

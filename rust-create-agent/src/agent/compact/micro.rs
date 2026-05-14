@@ -194,7 +194,6 @@ pub fn micro_compact_enhanced(config: &CompactConfig, messages: &mut [BaseMessag
     cleared
 }
 
-
 #[cfg(test)]
 #[path = "micro_test.rs"]
 mod tests;

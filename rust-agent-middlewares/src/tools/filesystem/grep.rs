@@ -671,7 +671,6 @@ impl BaseTool for GrepTool {
     }
 }
 
-
 #[cfg(test)]
 #[path = "grep_test.rs"]
 mod tests;

@@ -1029,7 +1029,6 @@ pub fn tool_color(name: &str) -> Color {
     }
 }
 
-
 #[cfg(test)]
 #[path = "message_view_test.rs"]
 mod tests;

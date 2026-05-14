@@ -283,7 +283,6 @@ pub async fn full_compact(
     unreachable!("full_compact loop should always return within the loop body")
 }
 
-
 #[cfg(test)]
 #[path = "full_test.rs"]
 mod tests;

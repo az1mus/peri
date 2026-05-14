@@ -166,7 +166,6 @@ impl ProviderConfig {
     }
 }
 
-
 #[cfg(test)]
 #[path = "types_test.rs"]
 mod tests;

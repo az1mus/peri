@@ -154,7 +154,6 @@ impl ContextBudget {
     }
 }
 
-
 #[cfg(test)]
 #[path = "token_test.rs"]
 mod tests;

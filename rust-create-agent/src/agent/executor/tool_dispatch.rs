@@ -52,9 +52,7 @@ pub(crate) async fn dispatch_tools<L: ReactLLM, S: State>(
         .await;
     let mut modified_calls: Vec<ToolCall> = Vec::with_capacity(original_calls.len());
 
-    for (i, (tool_call, before_result)) in
-        original_calls.iter().zip(before_results).enumerate()
-    {
+    for (i, (tool_call, before_result)) in original_calls.iter().zip(before_results).enumerate() {
         // before_tool 阶段也检查取消
         if cancel.is_cancelled() {
             flush_pending_tool_errors(

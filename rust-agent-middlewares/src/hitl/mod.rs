@@ -374,7 +374,6 @@ impl<S: State> Middleware<S> for HumanInTheLoopMiddleware {
     }
 }
 
-
 #[cfg(test)]
 #[path = "mod_test.rs"]
 mod tests;
