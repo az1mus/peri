@@ -81,6 +81,17 @@ async fn handle_pending_permission(
         InteractionContext::Approval { items } => {
             let mut decisions = Vec::with_capacity(items.len());
             for item in &items {
+                // 检查 session 是否已被取消，若是则跳过后续 permission 请求
+                let session_cancelled = mgr
+                    .get_session(session_id.0.as_ref())
+                    .is_none_or(|s| s.cancel_token.is_cancelled());
+                if session_cancelled {
+                    decisions.push(ApprovalDecision::Reject {
+                        reason: "Session cancelled".into(),
+                    });
+                    continue;
+                }
+
                 // 构建 ToolCallUpdate 描述待审批的工具调用
                 let tool_update = ToolCallUpdate::new(
                     item.tool_call_id.clone(),
