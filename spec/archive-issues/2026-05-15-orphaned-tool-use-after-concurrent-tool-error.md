@@ -1,3 +1,5 @@
+> 归档于 2026-05-16，原路径 spec/issues/2026-05-15-orphaned-tool-use-after-concurrent-tool-error.md
+
 # stop_reason 与内容不一致导致孤儿 tool_use 触发 Anthropic API 400
 
 **状态**：Fixed

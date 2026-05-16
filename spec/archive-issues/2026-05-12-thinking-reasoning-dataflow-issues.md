@@ -1,3 +1,5 @@
+> 归档于 2026-05-16，原路径 spec/issues/2026-05-12-thinking-reasoning-dataflow-issues.md
+
 # Thinking/Reasoning 数据流问题：占位 thinking 缺 signature + AiReasoning 死代码
 
 **状态**：Fixed

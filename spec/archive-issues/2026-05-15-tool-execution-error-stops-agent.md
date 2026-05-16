@@ -1,3 +1,5 @@
+> 归档于 2026-05-16，原路径 spec/issues/2026-05-15-tool-execution-error-stops-agent.md
+
 # 工具调用参数错误（如 Read - Missing file_path）导致 Agent 停止而非自动重试
 
 **状态**：Fixed — 部分修复：ToolNotFound/ToolExecutionFailed 已不再设 deferred_error，但 after_tool 中间件错误（run_after_tool 返回 Err）仍设 deferred_error 导致 Agent 停止。

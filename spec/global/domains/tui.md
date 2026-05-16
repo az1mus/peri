@@ -551,6 +551,19 @@ submit_message(text)
 **涉及文件:** peri-tui/src/app/message_state.rs, peri-tui/src/ui/main_ui.rs, peri-tui/src/ui/render_thread.rs
 **CLAUDE.md 链接:** false
 
+### issue_2026-05-15-concurrent-subagent-display-delay
+
+**摘要:** 并发前台SubAgent调用时UI感知延迟，SubAgentGroup卡片不可见
+**状态:** Fixed
+**归档日期:** 2026-05-16
+**关键词:** 并发SubAgent, build_tail_vms, merge_frozen_subagents, has_snapshot_this_round
+**问题本质:** has_snapshot=true时build_tail_vms只调用merge_frozen_subagents做替换，运行中SubAgent被跳过；merge_frozen_subagents只替换不追加
+**通用模式:** 状态合并函数需同时处理替换和追加两种场景；frozen和running需分别对待
+**架构影响:** SubAgentGroup的显示需要分frozen（已完成）和running（进行中）两条路径
+**技术决策:** 在has_snapshot=true分支中追加subagent_stack中未frozen的运行中SubAgentGroup
+**涉及文件:** peri-tui/src/app/message_pipeline.rs, peri-tui/src/app/agent_ops.rs, peri-tui/src/app/agent.rs
+**CLAUDE.md 链接:** true
+
 ---
 
 ## 相关 Feature

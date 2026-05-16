@@ -392,6 +392,77 @@ launch_agent 工具调用
 **涉及文件:** peri-middlewares/src/tools/filesystem/grep.rs
 **CLAUDE.md 链接:** false
 
+### issue_2026-05-12-thinking-reasoning-dataflow-issues
+**摘要:** Thinking/Reasoning数据流：占位thinking缺signature + AiReasoning死代码
+**状态:** Fixed
+**归档日期:** 2026-05-16
+**关键词:** thinking block, reasoning_content, AiReasoning, 死代码清理
+**问题本质:** Anthropic extended thinking的占位thinking block缺少signature字段可能导致API拒绝；AiReasoning事件链路是为流式API预留的未使用代码，非流式下reasoning完全依赖StateSnapshot路径
+**通用模式:** LLM适配器中多模型兼容字段需按provider条件注入，不可凭空伪造；预留接口若长期未使用应清理或显式标记
+**架构影响:** 非流式API下reasoning通过source_message保留而非流式事件，流式路径的预留在当前架构下不必要
+**技术决策:** 删除占位thinking注入逻辑；保留AiReasoning事件定义但明确标记为预留
+**涉及文件:** peri-agent/src/llm/anthropic.rs, peri-agent/src/llm/openai.rs, peri-agent/src/agent/executor/tool_dispatch.rs, peri-agent/src/agent/executor/final_answer.rs, peri-agent/src/agent/events.rs, peri-tui/src/app/message_pipeline.rs, peri-tui/src/ui/message_view.rs
+**CLAUDE.md 链接:** true
+
+### issue_2026-05-14-deepseek-multi-turn-tool-result-duplication
+**摘要:** DeepSeek多轮对话中agent_state_messages消息重复导致API 400错误
+**状态:** Fixed
+**归档日期:** 2026-05-16
+**关键词:** prepend_message, StateSnapshot, last_message_count, 消息重复
+**问题本质:** prepend_message的insert(0)使last_message_count索引失效，StateSnapshot捕获范围扩大，旧消息被重复extend到agent_state_messages
+**通用模式:** 任何插入操作后必须补偿依赖索引的偏移量；基于计数的索引不应在插入/删除操作后继续使用
+**架构影响:** StateSnapshot的增量扩展机制对prepend敏感，长期应考虑基于消息ID的标记替代数组索引
+**技术决策:** 在prepend_message后补偿last_message_count += 1
+**涉及文件:** peri-agent/src/agent/executor/mod.rs, peri-agent/src/agent/state.rs, peri-tui/src/app/agent_ops.rs
+**CLAUDE.md 链接:** true
+
+### issue_2026-05-15-glm-anthropic-tool-result-id-attribute-error
+**摘要:** GLM Anthropic兼容端口tool_result block缺少id属性导致500错误
+**状态:** Fixed
+**归档日期:** 2026-05-16
+**关键词:** tool_result id, GLM兼容性, Anthropic适配器, 第三方API
+**问题本质:** 第三方Anthropic兼容端口对API规范实现不完整，GLM网关要求tool_result有id字段但Anthropic规范无此要求
+**通用模式:** 第三方provider的Anthropic兼容端口可能存在属性缺失或额外要求，需客户端兼容策略
+**架构影响:** Anthropic适配器需为不同provider准备兼容字段，不能假设所有provider严格遵循规范
+**技术决策:** 为tool_result添加可选id字段，BaseMessage::Tool路径用MessageId，ContentBlock路径用UUID v7
+**涉及文件:** peri-agent/src/messages/content.rs, peri-agent/src/llm/anthropic/invoke.rs, peri-agent/src/messages/adapters/anthropic.rs
+**CLAUDE.md 链接:** false
+
+### issue_2026-05-15-orphaned-tool-use-after-concurrent-tool-error
+**摘要:** stop_reason与内容不一致导致孤儿tool_use触发Anthropic API 400
+**状态:** Fixed
+**归档日期:** 2026-05-16
+**关键词:** stop_reason, tool_use, 孤儿tool_use, 延迟写入
+**问题本质:** 第三方provider的stop_reason与实际内容不一致（end_turn但含tool_use），仅依赖stop_reason路由导致工具调用误入最终回答路径
+**通用模式:** 不能仅信任API元数据字段，必须同时检查实际内容；defense-in-depth通过内容自检兜底
+**架构影响:** 延迟写入重构消除了tool_dispatch中的flush路径脆弱性（4次因此bug修复）
+**技术决策:** generate_reasoning中增加has_tool_calls()内容检查作为stop_reason的兜底
+**涉及文件:** peri-agent/src/llm/anthropic/invoke.rs, peri-agent/src/llm/react_adapter.rs, peri-agent/src/agent/executor/tool_dispatch.rs
+**CLAUDE.md 链接:** true
+
+### issue_2026-05-15-tool-execution-error-stops-agent
+**摘要:** 工具调用参数错误导致Agent停止而非自动重试
+**状态:** Fixed — 部分修复
+**归档日期:** 2026-05-16
+**关键词:** deferred_error, ToolExecutionFailed, after_tool错误, 工具错误处理
+**问题本质:** 工具执行错误和中间件错误被统一设为deferred_error导致Agent停止，应区分错误来源：工具执行错误应反馈给LLM而非终止循环
+**通用模式:** 工具执行层面的错误（参数缺失、执行失败）是正常流程的一部分，应创建error ToolResult让LLM自行修正；只有基础设施错误才应终止
+**架构影响:** deferred_error机制需要细化分类，区分tool-level error（不终止）和middleware error（可能终止）
+**技术决策:** ToolNotFound和ToolExecutionFailed不再设deferred_error；after_tool中间件错误仍设deferred_error（残留问题）
+**涉及文件:** peri-agent/src/agent/executor/tool_dispatch.rs
+**CLAUDE.md 链接:** true
+
+### issue_2026-05-15-write-tool-missing-filepath-max-tokens
+**摘要:** Write工具超长内容触发max_tokens截断导致file_path缺失
+**状态:** Fixed
+**归档日期:** 2026-05-16
+**关键词:** max_tokens, Write工具, JSON截断, file_path缺失
+**问题本质:** max_tokens不足导致流式JSON参数截断，关键字段file_path可能因为字段顺序靠后而缺失
+**通用模式:** 流式JSON生成中max_tokens截断导致字段缺失是不可恢复的错误；工具定义中关键字段需优先输出
+**架构影响:** 工具Schema中字段顺序影响截断时的完整性；超长内容应考虑分块策略
+**涉及文件:** peri-middlewares/src/tools/filesystem/write.rs, peri-agent/src/llm/anthropic/invoke.rs, peri-agent/src/llm/openai/invoke.rs
+**CLAUDE.md 链接:** false
+
 ---
 
 ## 相关 Feature

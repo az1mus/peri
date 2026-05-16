@@ -1,3 +1,5 @@
+> 归档于 2026-05-16，原路径 spec/issues/2026-05-15-glm-anthropic-tool-result-id-attribute-error.md
+
 # GLM Anthropic 兼容端口 500: tool_result block 缺少 id 属性导致多轮工具调用失败
 
 **状态**：Fixed

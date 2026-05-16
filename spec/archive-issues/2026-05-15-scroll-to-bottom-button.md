@@ -1,3 +1,5 @@
+> 归档于 2026-05-16，原路径 spec/issues/2026-05-15-scroll-to-bottom-button.md
+
 # 消息列表面板缺少「滚动到底」快捷按钮
 
 **状态**：Fixed

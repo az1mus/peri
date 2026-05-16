@@ -80,6 +80,7 @@
 
 ### 事件溢出
 - [同步子 Agent（Normal/Fork）事件溢出到主 Agent 消息流](domains/agent.md#issue_2026-05-13-sync-subagent-events-leak-to-parent) — agent
+- [并发前台SubAgent调用时UI感知延迟，SubAgentGroup卡片不可见](domains/tui.md#issue_2026-05-15-concurrent-subagent-display-delay) — tui
 
 ### map_executor_event
 - [流式渲染中 map_executor_event 丢弃中间 StateSnapshot](domains/message-pipeline.md#issue_2026-05-13-streaming-text-tool-aggregation-visual-issues) — message-pipeline
@@ -90,6 +91,7 @@
 ### agent_state_messages
 - [后台 Agent 完成后 input_history 消息重复导致 Prompt Cache 失效](domains/agent.md#issue_2026-05-13-input-history-message-duplication-after-background-tasks) — agent
 - [prepend_message 的 insert(0) 右移导致 StateSnapshot 包含 System 消息](domains/system-prompt.md#issue_2026-05-13-system-prompt-dynamic-parts-duplicated-in-consecutive-calls) — system-prompt
+- [DeepSeek多轮对话中agent_state_messages消息重复导致API 400错误](domains/agent.md#issue_2026-05-14-deepseek-multi-turn-tool-result-duplication) — agent
 
 ### tool_call_id 重复
 - [后台 Agent 完成后 input_history 消息重复导致 Prompt Cache 失效](domains/agent.md#issue_2026-05-13-input-history-message-duplication-after-background-tasks) — agent
@@ -100,6 +102,7 @@
 
 ### has_snapshot_this_round
 - [多轮对话中 AI message 和 thinking 在进行时不可见](domains/message-pipeline.md#issue_2026-05-13-ai-message-thinking-invisible-during-multi-turn) — message-pipeline
+- [并发前台SubAgent调用时UI感知延迟，SubAgentGroup卡片不可见](domains/tui.md#issue_2026-05-15-concurrent-subagent-display-delay) — tui
 
 ### 边界标记
 - [System prompt 动态内容导致 Anthropic prompt cache 频繁失效，边界标记拆分修复](domains/system-prompt.md#issue_2026-05-13-system-prompt-dynamic-cache-invalidation) — system-prompt
@@ -121,6 +124,9 @@
 
 ### register_tool
 - [Background Agent 工具继承缺失——子 agent 仅能使用 TodoWrite](domains/agent.md#issue_2026-05-11-background-agent-missing-tools) — agent
+
+### merge_frozen_subagents
+- [并发前台SubAgent调用时UI感知延迟，SubAgentGroup卡片不可见](domains/tui.md#issue_2026-05-15-concurrent-subagent-display-delay) — tui
 
 ### reasoning
 - [GLM 模型 reasoning 字段未被解析，thinking 内容跨轮次丢失](domains/agent.md#issue_2026-05-12-glm-reasoning-field-not-parsed) — agent
@@ -179,6 +185,7 @@
 
 ### thinking block
 - [SkillPreloadMiddleware 注入的伪 assistant 消息不含 thinking block，DeepSeek API 400](domains/agent.md#issue_2026-05-14-deepseek-anthropic-thinking-block-dropped) — agent
+- [Thinking/Reasoning数据流：占位thinking缺signature + AiReasoning死代码](domains/agent.md#issue_2026-05-12-thinking-reasoning-dataflow-issues) — agent
 
 ### redacted_thinking
 - [SkillPreloadMiddleware 注入的伪 assistant 消息不含 thinking block，DeepSeek API 400](domains/agent.md#issue_2026-05-14-deepseek-anthropic-thinking-block-dropped) — agent
@@ -195,11 +202,37 @@
 ### 并发工具
 - [并发工具执行中部分路径提前返回导致 tool_result 缺失](domains/agent.md#issue_2026-05-14-orphaned-tool-use-without-tool-result) — agent
 
+### 工具错误处理
+- [工具调用参数错误导致Agent停止而非自动重试](domains/agent.md#issue_2026-05-15-tool-execution-error-stops-agent) — agent
+
 ### deferred_error
 - [并发工具执行中部分路径提前返回导致 tool_result 缺失](domains/agent.md#issue_2026-05-14-orphaned-tool-use-without-tool-result) — agent
 
+### 延迟写入
+- [stop_reason与内容不一致导致孤儿tool_use触发Anthropic API 400](domains/agent.md#issue_2026-05-15-orphaned-tool-use-after-concurrent-tool-error) — agent
+
+### stop_reason
+- [stop_reason与内容不一致导致孤儿tool_use触发Anthropic API 400](domains/agent.md#issue_2026-05-15-orphaned-tool-use-after-concurrent-tool-error) — agent
+
 ### 孤儿tool_use
 - [并发工具执行中部分路径提前返回导致 tool_result 缺失](domains/agent.md#issue_2026-05-14-orphaned-tool-use-without-tool-result) — agent
+- [stop_reason与内容不一致导致孤儿tool_use触发Anthropic API 400](domains/agent.md#issue_2026-05-15-orphaned-tool-use-after-concurrent-tool-error) — agent
+
+### tool_result id
+- [GLM Anthropic兼容端口tool_result block缺少id属性导致500错误](domains/agent.md#issue_2026-05-15-glm-anthropic-tool-result-id-attribute-error) — agent
+
+### 第三方API
+- [GLM Anthropic兼容端口tool_result block缺少id属性导致500错误](domains/agent.md#issue_2026-05-15-glm-anthropic-tool-result-id-attribute-error) — agent
+- [stop_reason与内容不一致导致孤儿tool_use触发Anthropic API 400](domains/agent.md#issue_2026-05-15-orphaned-tool-use-after-concurrent-tool-error) — agent
+
+### max_tokens
+- [Write工具超长内容触发max_tokens截断导致file_path缺失](domains/agent.md#issue_2026-05-15-write-tool-missing-filepath-max-tokens) — agent
+
+### 消息重复
+- [DeepSeek多轮对话中agent_state_messages消息重复导致API 400错误](domains/agent.md#issue_2026-05-14-deepseek-multi-turn-tool-result-duplication) — agent
+
+### last_message_count
+- [DeepSeek多轮对话中agent_state_messages消息重复导致API 400错误](domains/agent.md#issue_2026-05-14-deepseek-multi-turn-tool-result-duplication) — agent
 
 ### 死代码
 - [24 处 #[allow(dead_code/unused)] 抑制了真正的死代码和未完成功能](domains/code-architecture.md#issue_2026-05-14-dead-code-unfinished-features-cleanup) — code-architecture
@@ -263,3 +296,4 @@
 - 2026-05-13: 首次创建，归档 22 个 issue，提取 14 条领域认知
 - 2026-05-14: 第二次归档，归档 12 个 issue，提取 8 条领域认知（agent 2 + message-pipeline 2 + system-prompt 4）
 - 2026-05-15: 第三次归档，归档 8 个 issue，提取 7 条领域认知（agent 3 + code-architecture 2 + message-pipeline 2 + tui 1）
+- 2026-05-16: 第四次归档，归档 11 个 issue，提取 7 条领域认知（agent 6 + tui 1）

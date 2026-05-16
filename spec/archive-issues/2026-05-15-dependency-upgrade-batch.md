@@ -1,3 +1,5 @@
+> 归档于 2026-05-16，原路径 spec/issues/2026-05-15-dependency-upgrade-batch.md
+
 # 依赖批量升级
 
 **状态**：Closed

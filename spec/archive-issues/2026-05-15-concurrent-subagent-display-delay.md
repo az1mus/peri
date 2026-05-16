@@ -1,3 +1,5 @@
+> 归档于 2026-05-16，原路径 spec/issues/2026-05-15-concurrent-subagent-display-delay.md
+
 # 并发前台 SubAgent 调用时 UI 感知延迟，SubAgentGroup 卡片不可见
 
 **状态**：Fixed

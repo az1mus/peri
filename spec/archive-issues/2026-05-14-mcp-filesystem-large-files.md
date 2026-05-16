@@ -1,3 +1,5 @@
+> 归档于 2026-05-16，原路径 spec/issues/2026-05-14-mcp-filesystem-large-files.md
+
 # MCP 中间件与文件系统工具大文件拆分：client.rs 1309 行、grep.rs 1162 行
 
 **状态**：Done（2026-05-15）

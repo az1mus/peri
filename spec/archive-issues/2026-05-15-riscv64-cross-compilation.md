@@ -1,3 +1,5 @@
+> 归档于 2026-05-16，原路径 spec/issues/2026-05-15-riscv64-cross-compilation.md
+
 # RISC-V (riscv64gc-unknown-linux-gnu) 交叉编译支持
 
 **状态**：Fixed

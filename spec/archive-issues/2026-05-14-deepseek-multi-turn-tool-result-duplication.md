@@ -1,3 +1,5 @@
+> 归档于 2026-05-16，原路径 spec/issues/2026-05-14-deepseek-multi-turn-tool-result-duplication.md
+
 # DeepSeek API 400: 多轮对话中 tool_result 消息重复导致 invalid_request_error
 
 **状态**：Fixed
