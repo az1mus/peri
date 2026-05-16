@@ -201,7 +201,7 @@ fn render_form_browse(
                 format!("[{}] ", check_char),
                 Style::default().fg(check_color),
             ),
-            Span::styled(format!("{} ", mp.provider_type.label()), name_style),
+            Span::styled(format!("{} ", mp.provider_type.label(lc)), name_style),
             Span::styled(
                 format!("({}) ", mp.provider_id),
                 Style::default().fg(theme::MUTED),
@@ -271,7 +271,7 @@ fn render_form_edit(
     let header = lc.tr_args(
         "setup-edit-title",
         &[
-            ("type".into(), mp.provider_type.label().into()),
+            ("type".into(), mp.provider_type.label(lc).into()),
             ("id".into(), mp.provider_id.clone().into()),
         ],
     );
@@ -288,9 +288,10 @@ fn render_form_edit(
     let mut lines: Vec<Line> = vec![Line::from("")];
 
     lines.push(render_field_line(
-        "Type     ",
+        &lc.tr("setup-field-type"),
+        4,
         FormField::ProviderType,
-        format!("[{}]", mp.provider_type.label()),
+        format!("[{}]", mp.provider_type.label(lc)),
         wizard.form_focus,
     ));
 
@@ -300,7 +301,8 @@ fn render_form_edit(
         wizard.form_focus == FormField::ProviderId,
     );
     lines.push(render_field_line(
-        "ID       ",
+        &lc.tr("setup-field-id"),
+        4,
         FormField::ProviderId,
         pid_display,
         wizard.form_focus,
@@ -312,7 +314,8 @@ fn render_form_edit(
         wizard.form_focus == FormField::BaseUrl,
     );
     lines.push(render_field_line(
-        "Base URL ",
+        &lc.tr("setup-field-base-url"),
+        4,
         FormField::BaseUrl,
         url_display,
         wizard.form_focus,
@@ -324,10 +327,11 @@ fn render_form_edit(
     } else if mp.api_key.is_empty() {
         String::new()
     } else {
-        "•".repeat(mp.api_key.len())
+        "•".repeat(mp.api_key.chars().count())
     };
     lines.push(render_field_line(
-        "API Key  ",
+        &lc.tr("setup-field-api-key"),
+        4,
         FormField::ApiKey,
         key_display,
         wizard.form_focus,
@@ -339,9 +343,9 @@ fn render_form_edit(
     )));
 
     let alias_labels = [
-        ("Opus  ", FormField::OpusModel, 0),
-        ("Sonnet", FormField::SonnetModel, 1),
-        ("Haiku ", FormField::HaikuModel, 2),
+        (lc.tr("setup-field-opus"), FormField::OpusModel, 0),
+        (lc.tr("setup-field-sonnet"), FormField::SonnetModel, 1),
+        (lc.tr("setup-field-haiku"), FormField::HaikuModel, 2),
     ];
     for (label, field, ai) in alias_labels {
         let model_display = edit_display(
@@ -350,7 +354,8 @@ fn render_form_edit(
             wizard.form_focus == field,
         );
         lines.push(render_field_line(
-            &format!("{} Model ", label),
+            &format!("{} {} ", label, lc.tr("setup-model-label")),
+            4,
             field,
             model_display,
             wizard.form_focus,
@@ -383,9 +388,10 @@ fn render_form_edit(
     f.render_widget(Paragraph::new(Text::from(lines)), inner);
 }
 
-/// 渲染单个字段行（带光标指示器）
+/// 渲染单个字段行（带光标指示器、标签固定宽度右对齐）
 fn render_field_line(
     label: &str,
+    label_width: usize,
     field: FormField,
     value: String,
     focus: FormField,
@@ -404,12 +410,26 @@ fn render_field_line(
     } else {
         Style::default().fg(theme::TEXT)
     };
-    let label_owned = label.to_string();
+    let padded = pad_display_columns(label, label_width);
     Line::from(vec![
         Span::styled(cursor, Style::default().fg(theme::THINKING)),
-        Span::styled(label_owned, lbl),
+        Span::styled(padded, lbl),
         Span::styled(format!(" {}", value), val),
     ])
+}
+
+/// 将字符串右对齐填充到指定 Unicode 显示列宽
+fn pad_display_columns(s: &str, target_cols: usize) -> String {
+    let cols: usize = s
+        .chars()
+        .map(|c| unicode_width::UnicodeWidthChar::width(c).unwrap_or(0))
+        .sum();
+    if cols >= target_cols {
+        s.to_string()
+    } else {
+        let padding = target_cols - cols;
+        format!("{}{}", s, " ".repeat(padding))
+    }
 }
 
 /// 编辑字段显示：活跃时显示光标 ▏，否则显示值
@@ -444,7 +464,7 @@ fn render_step_done(
         lines.push(Line::from(vec![
             Span::styled(" ● ", Style::default().fg(theme::SAGE)),
             Span::styled(
-                format!("{} ", mp.provider_type.label()),
+                format!("{} ", mp.provider_type.label(lc)),
                 Style::default().fg(theme::TEXT),
             ),
             Span::styled(
@@ -453,10 +473,17 @@ fn render_step_done(
             ),
         ]));
         lines.push(Line::from(vec![
-            Span::styled("   Key: ", Style::default().fg(theme::MUTED)),
+            Span::styled(
+                format!("   {} ", lc.tr("setup-label-key")),
+                Style::default().fg(theme::MUTED),
+            ),
             Span::styled(mask_api_key(&mp.api_key), Style::default().fg(theme::TEXT)),
         ]));
-        let alias_labels = ["Opus", "Sonnet", "Haiku"];
+        let alias_labels = [
+            lc.tr("setup-field-opus"),
+            lc.tr("setup-field-sonnet"),
+            lc.tr("setup-field-haiku"),
+        ];
         for (i, label) in alias_labels.iter().enumerate() {
             lines.push(Line::from(vec![
                 Span::styled(

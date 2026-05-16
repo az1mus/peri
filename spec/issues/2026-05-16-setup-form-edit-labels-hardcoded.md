@@ -1,8 +1,18 @@
 # Form Edit 字段标签硬编码英文，未使用 i18n
 
-**状态**：Open
+**状态**：Fixed
 **优先级**：中
 **创建日期**：2026-05-16
+**修复日期**：2026-05-16
+
+## 修复方案
+
+1. `render_field_line` 增加 `label_width` 参数，新增 `pad_display_columns` 辅助函数用 unicode-width 对齐
+2. Edit 模式所有字段标签改用 `lc.tr("setup-field-*")` 替换硬编码英文
+3. `ProviderType::label()` 改为接受 `&LcRegistry`，新增 FTL key `setup-provider-anthropic/openai`
+4. Done 步骤 "Key:" 和 alias 标签改用 i18n
+5. FTL 补全 zh-CN 翻译：字段标签、provider 类型名
+6. 同步修复 P2-8：API Key 遮罩 `mp.api_key.len()` → `mp.api_key.chars().count()`
 
 ## 问题描述
 

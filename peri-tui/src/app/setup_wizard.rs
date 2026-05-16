@@ -49,10 +49,10 @@ pub enum ProviderType {
 }
 
 impl ProviderType {
-    pub fn label(&self) -> &str {
+    pub fn label(&self, lc: &crate::i18n::LcRegistry) -> String {
         match self {
-            Self::Anthropic => "Anthropic",
-            Self::OpenAiCompatible => "OpenAI Compatible",
+            Self::Anthropic => lc.tr("setup-provider-anthropic"),
+            Self::OpenAiCompatible => lc.tr("setup-provider-openai"),
         }
     }
 
