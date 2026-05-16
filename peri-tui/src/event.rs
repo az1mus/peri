@@ -318,6 +318,26 @@ async fn handle_event(app: &mut App, ev: Event) -> Result<Option<Action>> {
 
             // Setup 向导：优先拦截所有按键事件
             if app.global_ui.setup_wizard.is_some() {
+                // Ctrl+C：退出流程（与正常模式一致）
+                if matches!(
+                    input,
+                    Input {
+                        key: Key::Char('c'),
+                        ctrl: true,
+                        ..
+                    }
+                ) {
+                    if let Some(since) = app.global_ui.quit_pending_since {
+                        if since.elapsed() < std::time::Duration::from_secs(2) {
+                            return Ok(Some(Action::Quit));
+                        } else {
+                            app.global_ui.quit_pending_since = Some(std::time::Instant::now());
+                        }
+                    } else {
+                        app.global_ui.quit_pending_since = Some(std::time::Instant::now());
+                    }
+                    return Ok(Some(Action::Redraw));
+                }
                 let input_clone = input.clone();
                 if let Some(ref mut wizard) = app.global_ui.setup_wizard {
                     if let Some(action) =
