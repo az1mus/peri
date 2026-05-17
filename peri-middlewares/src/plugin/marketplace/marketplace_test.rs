@@ -1,5 +1,8 @@
+use super::fetch::*;
 use super::*;
+use crate::plugin::types::MarketplacePlugin;
 use tempfile::tempdir;
+use tokio::sync::mpsc;
 
 #[test]
 fn test_find_marketplace_json_root() {
