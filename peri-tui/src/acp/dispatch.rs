@@ -836,11 +836,18 @@ pub async fn handle_fork_session(
     let cwd = req.cwd.to_string_lossy().to_string();
 
     // 从父 session 继承设置
-    let (model_alias, thinking) = mgr()
+    let (provider_id, model_alias, thinking) = mgr()
         .get_session(parent_id)
-        .map(|s| (s.model_alias.clone(), s.thinking.clone()))
+        .map(|s| {
+            (
+                s.provider_id.clone(),
+                s.model_alias.clone(),
+                s.thinking.clone(),
+            )
+        })
         .unwrap_or_else(|| {
             (
+                mgr().peri_config().config.active_provider_id.clone(),
                 mgr().peri_config().config.active_alias.clone(),
                 mgr().peri_config().config.thinking.clone(),
             )
@@ -848,7 +855,7 @@ pub async fn handle_fork_session(
 
     // 创建新 session
     match mgr()
-        .new_session_with_settings(&cwd, model_alias, thinking)
+        .new_session_with_settings(&cwd, provider_id, model_alias, thinking)
         .await
     {
         Ok((new_session_id, _)) => {

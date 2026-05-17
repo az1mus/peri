@@ -30,6 +30,8 @@ pub struct AcpSession {
     pub cancel_token: CancellationToken,
     pub state_messages: Vec<BaseMessage>,
     pub created_at: chrono::DateTime<Utc>,
+    /// 当前激活的 provider ID（对应 PeriConfig.config.providers 中的 id）
+    pub provider_id: String,
     /// 当前激活的模型别名（"opus"/"sonnet"/"haiku"）
     pub model_alias: String,
     /// 每会话独立的权限模式
@@ -103,10 +105,11 @@ impl SessionManager {
         Ok((session_id, thread_id))
     }
 
-    /// 创建新会话并继承指定的 model_alias 和 thinking 设置
+    /// 创建新会话并继承指定的 provider_id、model_alias 和 thinking 设置
     pub async fn new_session_with_settings(
         &self,
         cwd: &str,
+        provider_id: String,
         model_alias: String,
         thinking: Option<ThinkingConfig>,
     ) -> anyhow::Result<(String, ThreadId)> {
@@ -122,6 +125,7 @@ impl SessionManager {
             cancel_token: CancellationToken::new(),
             state_messages: Vec::new(),
             created_at: Utc::now(),
+            provider_id,
             model_alias,
             permission_mode: SharedPermissionMode::new(PermissionMode::AutoMode),
             thinking,
@@ -141,6 +145,7 @@ impl SessionManager {
             cancel_token: CancellationToken::new(),
             state_messages: Vec::new(),
             created_at: Utc::now(),
+            provider_id: self.inner.peri_config.config.active_provider_id.clone(),
             model_alias: self.inner.peri_config.config.active_alias.clone(),
             permission_mode: SharedPermissionMode::new(PermissionMode::AutoMode),
             thinking: self.inner.peri_config.config.thinking.clone(),
@@ -172,9 +177,15 @@ impl SessionManager {
     }
 
     pub fn cancel_session(&self, session_id: &str) {
-        if let Some(session) = self.inner.sessions.get(session_id) {
+        if let Some(mut session) = self.inner.sessions.get_mut(session_id) {
+            // Cancel the current token so all clones (held by link tasks,
+            // permission loops) detect cancellation. Then replace with a fresh
+            // token so subsequent prompts on the same session are not affected.
+            // CancellationToken has no reset() — once cancelled it stays cancelled.
             session.cancel_token.cancel();
-            // Also cancel all pending per-request operations so the
+            session.cancel_token = CancellationToken::new();
+
+            // Cancel all pending per-request operations so the
             // tokio::select! in the permission forwarding loop unblocks.
             let keys: Vec<RequestId> = session
                 .pending_requests
