@@ -131,6 +131,7 @@ pub(super) async fn do_invoke_streaming(
                     ctx.event_handler.on_event(AgentEvent::TextChunk {
                         message_id: ctx.message_id,
                         chunk: c.to_string(),
+                        source_agent_id: None,
                     });
                     content_text.push_str(c);
                 }

@@ -25,6 +25,65 @@ use crate::subagent::SubAgentMiddlewareConfig;
 use crate::tools::ArcToolWrapper;
 use tokio::sync::mpsc;
 
+/// 事件处理器包装器：为子 Agent 事件注入 source_agent_id
+///
+/// 当子 Agent 共享父 Agent 的 event_handler 时，事件无法区分来源。
+/// 此包装器在转发前为 ToolStart/ToolEnd/TextChunk 事件注入 source_agent_id。
+struct SourceAgentIdHandler {
+    inner: Arc<dyn AgentEventHandler>,
+    agent_id: String,
+}
+
+impl SourceAgentIdHandler {
+    fn new(inner: Arc<dyn AgentEventHandler>, agent_id: String) -> Self {
+        Self { inner, agent_id }
+    }
+}
+
+impl AgentEventHandler for SourceAgentIdHandler {
+    fn on_event(&self, event: AgentEvent) {
+        let tagged = match event {
+            AgentEvent::ToolStart {
+                message_id,
+                tool_call_id,
+                name,
+                input,
+                ..
+            } => AgentEvent::ToolStart {
+                message_id,
+                tool_call_id,
+                name,
+                input,
+                source_agent_id: Some(self.agent_id.clone()),
+            },
+            AgentEvent::ToolEnd {
+                message_id,
+                tool_call_id,
+                name,
+                output,
+                is_error,
+                ..
+            } => AgentEvent::ToolEnd {
+                message_id,
+                tool_call_id,
+                name,
+                output,
+                is_error,
+                source_agent_id: Some(self.agent_id.clone()),
+            },
+            AgentEvent::TextChunk {
+                message_id, chunk, ..
+            } => AgentEvent::TextChunk {
+                message_id,
+                chunk,
+                source_agent_id: Some(self.agent_id.clone()),
+            },
+            other => other,
+        };
+        self.inner.on_event(tagged);
+    }
+}
+
 /// 构造 SubAgent 标准中间件链
 ///
 /// 顺序: AgentsMdMiddleware -> SkillsMiddleware -> [SkillPreloadMiddleware] -> TodoMiddleware
@@ -166,9 +225,14 @@ pub struct SubAgentTool {
     /// 后台任务注册中心（run_in_background 模式使用）
     background_registry: Option<Arc<BackgroundTaskRegistry>>,
     /// 子 agent 生命周期 hook（SubagentStart/SubagentStop）。
-    /// 从父 agent 的 HookMiddleware 中提取，由 `with_registered_hooks` 注入。
+    /// 从父 agent 的 HookMiddleware 中提��，由 `with_registered_hooks` 注入。
     /// Background 路径通过 Arc clone 传入 spawn 闭包。
     registered_hooks: Arc<Vec<RegisteredHook>>,
+    /// Per-child event handler factory: takes agent_id → returns handler for that child.
+    /// When set, used instead of wrapping parent's event_handler for child agent execution,
+    /// avoiding shared Lock contention (e.g., Langfuse Mutex) in concurrent SubAgent scenarios.
+    #[allow(clippy::type_complexity)]
+    child_handler_factory: Option<Arc<dyn Fn(String) -> Arc<dyn AgentEventHandler> + Send + Sync>>,
 }
 
 impl SubAgentTool {
@@ -189,6 +253,7 @@ impl SubAgentTool {
             parent_messages: None,
             background_registry: None,
             registered_hooks: Arc::new(Vec::new()),
+            child_handler_factory: None,
         }
     }
 
@@ -224,6 +289,18 @@ impl SubAgentTool {
     /// Hooks are extracted from the parent HookMiddleware and injected here.
     pub fn with_registered_hooks(mut self, hooks: Vec<RegisteredHook>) -> Self {
         self.registered_hooks = Arc::new(hooks);
+        self
+    }
+
+    /// Set per-child event handler factory.
+    /// When set, `invoke`/`invoke_fork` uses `factory(agent_id)` instead of wrapping
+    /// the parent's event_handler, avoiding shared Lock contention in concurrent execution.
+    #[allow(clippy::type_complexity)]
+    pub fn with_child_handler_factory(
+        mut self,
+        factory: Arc<dyn Fn(String) -> Arc<dyn AgentEventHandler> + Send + Sync>,
+    ) -> Self {
+        self.child_handler_factory = Some(factory);
         self
     }
 
@@ -341,9 +418,16 @@ impl SubAgentTool {
                 .register_tool(Box::new(ArcToolWrapper(Arc::clone(tool))) as Box<dyn BaseTool>);
         }
 
-        // 7. Transparently forward parent event handler
-        if let Some(handler) = &self.event_handler {
-            agent_builder = agent_builder.with_event_handler(Arc::clone(handler));
+        // 7. Forward event handler: use dedicated child handler if factory available,
+        //    otherwise wrap parent handler with source_agent_id tagging
+        if let Some(ref factory) = self.child_handler_factory {
+            agent_builder = agent_builder.with_event_handler(factory("fork".to_string()));
+        } else if let Some(handler) = &self.event_handler {
+            let tagged = Arc::new(SourceAgentIdHandler::new(
+                Arc::clone(handler),
+                "fork".to_string(),
+            ));
+            agent_builder = agent_builder.with_event_handler(tagged);
         }
 
         // 8. Execute (input = fork directive, appended as Human message by execute())
@@ -880,9 +964,16 @@ impl BaseTool for SubAgentTool {
             agent_builder = agent_builder.register_tool(tool);
         }
 
-        // Transparently forward parent agent event handler
-        if let Some(handler) = &self.event_handler {
-            agent_builder = agent_builder.with_event_handler(Arc::clone(handler));
+        // Forward event handler: use dedicated child handler if factory available,
+        // otherwise wrap parent handler with source_agent_id tagging
+        if let Some(ref factory) = self.child_handler_factory {
+            agent_builder = agent_builder.with_event_handler(factory(agent_id.clone()));
+        } else if let Some(handler) = &self.event_handler {
+            let tagged = Arc::new(SourceAgentIdHandler::new(
+                Arc::clone(handler),
+                agent_id.clone(),
+            ));
+            agent_builder = agent_builder.with_event_handler(tagged);
         }
 
         // 7. Execute child agent

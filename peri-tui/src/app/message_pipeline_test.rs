@@ -133,12 +133,14 @@ fn test_pipeline_tool_end_no_duplicate() {
         display: "ReadFile".into(),
         args: "test.txt".into(),
         input: json!({"file_path": "/tmp/test.txt"}),
+        source_agent_id: None,
     });
     let _ = pipeline.handle_event(AgentEvent::ToolEnd {
         tool_call_id: "tc1".into(),
         name: "Read".into(),
         output: "content here".into(),
         is_error: false,
+        source_agent_id: None,
     });
 
     // tool_end 不 push 到 completed
@@ -185,7 +187,10 @@ fn test_from_base_message_backward_compat() {
 #[test]
 fn test_handle_event_assistant_chunk() {
     let mut pipeline = MessagePipeline::new("/tmp".to_string());
-    let actions = pipeline.handle_event(AgentEvent::AssistantChunk("hello".into()));
+    let actions = pipeline.handle_event(AgentEvent::AssistantChunk {
+        chunk: "hello".into(),
+        source_agent_id: None,
+    });
     assert_eq!(actions.len(), 1);
     assert!(matches!(actions[0], PipelineAction::None));
     assert_eq!(pipeline.current_ai_text, "hello");
@@ -196,7 +201,10 @@ fn test_handle_event_assistant_chunk() {
 #[test]
 fn test_handle_event_empty_chunk() {
     let mut pipeline = MessagePipeline::new("/tmp".to_string());
-    let actions = pipeline.handle_event(AgentEvent::AssistantChunk(String::new()));
+    let actions = pipeline.handle_event(AgentEvent::AssistantChunk {
+        chunk: String::new(),
+        source_agent_id: None,
+    });
     assert_eq!(actions.len(), 1);
     assert!(matches!(actions[0], PipelineAction::None));
 }
@@ -212,6 +220,7 @@ fn test_handle_event_tool_lifecycle() {
         display: "ReadFile".into(),
         args: "src/main.rs".into(),
         input: serde_json::json!({"file_path": "/tmp/src/main.rs"}),
+        source_agent_id: None,
     });
     assert_eq!(actions.len(), 1);
     assert!(matches!(actions[0], PipelineAction::None));
@@ -225,6 +234,7 @@ fn test_handle_event_tool_lifecycle() {
         name: "Read".into(),
         output: "file content".into(),
         is_error: false,
+        source_agent_id: None,
     });
     assert_eq!(actions.len(), 1);
     assert!(matches!(actions[0], PipelineAction::None));
@@ -268,6 +278,7 @@ fn test_subagent_parallel_same_tool_matches_by_call_id() {
         display: "ReadFile".into(),
         args: "a.rs".into(),
         input: serde_json::json!({"file_path": "/tmp/a.rs"}),
+        source_agent_id: None,
     });
     let _ = pipeline.handle_event(AgentEvent::ToolStart {
         tool_call_id: "tc_b".into(),
@@ -275,6 +286,7 @@ fn test_subagent_parallel_same_tool_matches_by_call_id() {
         display: "ReadFile".into(),
         args: "b.rs".into(),
         input: serde_json::json!({"file_path": "/tmp/b.rs"}),
+        source_agent_id: None,
     });
 
     // ToolEnd 按不同顺序到达（tc_b 先完成）
@@ -283,12 +295,14 @@ fn test_subagent_parallel_same_tool_matches_by_call_id() {
         name: "Read".into(),
         output: "content of b".into(),
         is_error: false,
+        source_agent_id: None,
     });
     let _ = pipeline.handle_event(AgentEvent::ToolEnd {
         tool_call_id: "tc_a".into(),
         name: "Read".into(),
         output: "content of a".into(),
         is_error: false,
+        source_agent_id: None,
     });
 
     // 验证 recent_messages 中两个 ToolBlock 被正确更新
@@ -320,6 +334,193 @@ fn test_subagent_parallel_same_tool_matches_by_call_id() {
     }
     assert!(found_a, "应找到 tc_a 的 ToolBlock");
     assert!(found_b, "应找到 tc_b 的 ToolBlock");
+}
+
+// ─── 并发 SubAgent 路由测试 ──────────────────────────────────────────────
+
+/// 测试：并发 SubAgent 通过 source_agent_id 精确路由工具调用事件
+/// 验证 ToolStart/ToolEnd/AssistantChunk 事件路由到正确的 SubAgentGroup
+#[test]
+fn test_concurrent_subagents_route_by_source_agent_id() {
+    let mut pipeline = MessagePipeline::new("/tmp".to_string());
+
+    // 启动两个并发 SubAgent
+    let _ = pipeline.handle_event(AgentEvent::SubAgentStart {
+        agent_id: "agent-a".into(),
+        task_preview: "task a".into(),
+        is_background: false,
+    });
+    let _ = pipeline.handle_event(AgentEvent::SubAgentStart {
+        agent_id: "agent-b".into(),
+        task_preview: "task b".into(),
+        is_background: false,
+    });
+
+    // Agent A 的 ToolStart → source_agent_id = Some("agent-a")
+    let _ = pipeline.handle_event(AgentEvent::ToolStart {
+        tool_call_id: "tc_a1".into(),
+        name: "Read".into(),
+        display: "Read".into(),
+        args: "a.rs".into(),
+        input: json!({"file_path": "/tmp/a.rs"}),
+        source_agent_id: Some("agent-a".into()),
+    });
+    // Agent B 的 ToolStart → source_agent_id = Some("agent-b")
+    let _ = pipeline.handle_event(AgentEvent::ToolStart {
+        tool_call_id: "tc_b1".into(),
+        name: "Grep".into(),
+        display: "Grep".into(),
+        args: "pattern".into(),
+        input: json!({"pattern": "fn main"}),
+        source_agent_id: Some("agent-b".into()),
+    });
+
+    // 验证：agent-a 的 recent_messages 有 Read，agent-b 有 Grep
+    let sub_a = pipeline
+        .subagent_stack
+        .iter()
+        .find(|s| s.agent_id == "agent-a")
+        .unwrap();
+    assert_eq!(sub_a.recent_messages.len(), 1);
+    if let MessageViewModel::ToolBlock { tool_name, .. } = &sub_a.recent_messages[0] {
+        assert_eq!(tool_name, "Read", "agent-a 应包含 Read 工具调用");
+    } else {
+        panic!("agent-a 的 recent_messages[0] 应为 ToolBlock");
+    }
+
+    let sub_b = pipeline
+        .subagent_stack
+        .iter()
+        .find(|s| s.agent_id == "agent-b")
+        .unwrap();
+    assert_eq!(sub_b.recent_messages.len(), 1);
+    if let MessageViewModel::ToolBlock { tool_name, .. } = &sub_b.recent_messages[0] {
+        assert_eq!(tool_name, "Grep", "agent-b 应包含 Grep 工具调用");
+    } else {
+        panic!("agent-b 的 recent_messages[0] 应为 ToolBlock");
+    }
+
+    // Agent A 的 ToolEnd
+    let _ = pipeline.handle_event(AgentEvent::ToolEnd {
+        tool_call_id: "tc_a1".into(),
+        name: "Read".into(),
+        output: "content of a".into(),
+        is_error: false,
+        source_agent_id: Some("agent-a".into()),
+    });
+    // Agent B 的 ToolEnd
+    let _ = pipeline.handle_event(AgentEvent::ToolEnd {
+        tool_call_id: "tc_b1".into(),
+        name: "Grep".into(),
+        output: "match in b".into(),
+        is_error: false,
+        source_agent_id: Some("agent-b".into()),
+    });
+
+    // 验证 ToolEnd 结果路由到正确的 SubAgent
+    let sub_a = pipeline
+        .subagent_stack
+        .iter()
+        .find(|s| s.agent_id == "agent-a")
+        .unwrap();
+    if let MessageViewModel::ToolBlock {
+        tool_call_id,
+        content,
+        ..
+    } = &sub_a.recent_messages[0]
+    {
+        assert_eq!(tool_call_id, "tc_a1");
+        assert_eq!(
+            content, "content of a",
+            "agent-a 的 ToolEnd 应路由到 agent-a"
+        );
+    }
+
+    let sub_b = pipeline
+        .subagent_stack
+        .iter()
+        .find(|s| s.agent_id == "agent-b")
+        .unwrap();
+    if let MessageViewModel::ToolBlock {
+        tool_call_id,
+        content,
+        ..
+    } = &sub_b.recent_messages[0]
+    {
+        assert_eq!(tool_call_id, "tc_b1");
+        assert_eq!(content, "match in b", "agent-b 的 ToolEnd 应路由到 agent-b");
+    }
+
+    // AssistantChunk 也应精确路由
+    let _ = pipeline.handle_event(AgentEvent::AssistantChunk {
+        chunk: "chunk for a".into(),
+        source_agent_id: Some("agent-a".into()),
+    });
+    let _ = pipeline.handle_event(AgentEvent::AssistantChunk {
+        chunk: "chunk for b".into(),
+        source_agent_id: Some("agent-b".into()),
+    });
+
+    let sub_a = pipeline
+        .subagent_stack
+        .iter()
+        .find(|s| s.agent_id == "agent-a")
+        .unwrap();
+    // agent-a 有 ToolBlock + AssistantBubble = 2 个
+    assert_eq!(sub_a.recent_messages.len(), 2);
+
+    let sub_b = pipeline
+        .subagent_stack
+        .iter()
+        .find(|s| s.agent_id == "agent-b")
+        .unwrap();
+    assert_eq!(sub_b.recent_messages.len(), 2);
+
+    // SubAgentEnd 带 agent_id 精确匹配
+    let _ = pipeline.handle_event(AgentEvent::SubAgentEnd {
+        agent_id: Some("agent-a".into()),
+        result: "done a".into(),
+        is_error: false,
+    });
+    let _ = pipeline.handle_event(AgentEvent::SubAgentEnd {
+        agent_id: Some("agent-b".into()),
+        result: "done b".into(),
+        is_error: false,
+    });
+
+    // 验证两个 SubAgent 都被冻结
+    assert_eq!(
+        pipeline.frozen_subagent_vms_count(),
+        2,
+        "两个 SubAgent 都应被冻结"
+    );
+}
+
+/// 测试：source_agent_id 为 None 时回退到 last_mut()（向后兼容）
+#[test]
+fn test_subagent_source_agent_id_none_fallback_to_last_mut() {
+    let mut pipeline = MessagePipeline::new("/tmp".to_string());
+
+    // 启动单个 SubAgent（模拟旧版事件流，无 source_agent_id）
+    let _ = pipeline.handle_event(AgentEvent::SubAgentStart {
+        agent_id: "legacy-agent".into(),
+        task_preview: "legacy task".into(),
+        is_background: false,
+    });
+    let _ = pipeline.handle_event(AgentEvent::ToolStart {
+        tool_call_id: "tc_legacy".into(),
+        name: "Bash".into(),
+        display: "Bash".into(),
+        args: "ls".into(),
+        input: json!({"command": "ls"}),
+        source_agent_id: None,
+    });
+
+    let sub = pipeline.subagent_stack.last().unwrap();
+    assert_eq!(sub.recent_messages.len(), 1);
+    if let MessageViewModel::ToolBlock { tool_name, .. } = &sub.recent_messages[0] {
+        assert_eq!(tool_name, "Bash");
+    }
 }
 
 // ─── build_tail_vms 测试 ──────────────────────────────────────────────────
@@ -389,13 +590,17 @@ fn test_build_tail_vms_text_visible_with_pending_tool() {
     let mut pipeline = MessagePipeline::new("/tmp".to_string());
 
     // 模拟真实事件流：AI 先输出文本，再调用工具
-    pipeline.handle_event(AgentEvent::AssistantChunk("I'll read the file".into()));
+    pipeline.handle_event(AgentEvent::AssistantChunk {
+        chunk: "I'll read the file".into(),
+        source_agent_id: None,
+    });
     pipeline.handle_event(AgentEvent::ToolStart {
         tool_call_id: "tc1".into(),
         name: "Read".into(),
         display: "ReadFile".into(),
         args: "src/main.rs".into(),
         input: json!({"file_path": "/tmp/src/main.rs"}),
+        source_agent_id: None,
     });
 
     let tail_vms = pipeline.build_tail_vms();
@@ -440,7 +645,10 @@ fn test_e2e_text_visible_between_tool_calls() {
     pipeline.begin_round();
 
     // 1. AI 输出文本
-    pipeline.handle_event(AgentEvent::AssistantChunk("Let me check the file".into()));
+    pipeline.handle_event(AgentEvent::AssistantChunk {
+        chunk: "Let me check the file".into(),
+        source_agent_id: None,
+    });
     let tail1 = pipeline.build_tail_vms();
     assert!(has_text(&tail1, "Let me check"), "步骤1: chunk 后应有文本");
 
@@ -451,6 +659,7 @@ fn test_e2e_text_visible_between_tool_calls() {
         display: "ReadFile".into(),
         args: "main.rs".into(),
         input: json!({"path": "/tmp/main.rs"}),
+        source_agent_id: None,
     });
     let tail2 = pipeline.build_tail_vms();
     assert!(
@@ -464,6 +673,7 @@ fn test_e2e_text_visible_between_tool_calls() {
         name: "Read".into(),
         output: "fn main() {}".into(),
         is_error: false,
+        source_agent_id: None,
     });
     let tail3 = pipeline.build_tail_vms();
     assert!(
@@ -497,7 +707,10 @@ fn test_e2e_text_visible_between_tool_calls() {
     );
 
     // 5. 新的 AI 文本（工具之间）
-    pipeline.handle_event(AgentEvent::AssistantChunk("Now let me write tests".into()));
+    pipeline.handle_event(AgentEvent::AssistantChunk {
+        chunk: "Now let me write tests".into(),
+        source_agent_id: None,
+    });
     let tail5 = pipeline.build_tail_vms();
     assert!(
         has_text(&tail5, "Now let me write tests"),
@@ -515,6 +728,7 @@ fn test_e2e_text_visible_between_tool_calls() {
         display: "WriteFile".into(),
         args: "test.rs".into(),
         input: json!({"path": "/tmp/test.rs"}),
+        source_agent_id: None,
     });
     let tail6 = pipeline.build_tail_vms();
     assert!(
@@ -608,6 +822,7 @@ fn test_build_tail_vms_with_pending_tools() {
         display: "ReadFile".into(),
         args: "src/main.rs".into(),
         input: serde_json::json!({"file_path": "/tmp/test.rs"}),
+        source_agent_id: None,
     });
 
     let tail_vms = pipeline.build_tail_vms();
@@ -635,6 +850,7 @@ fn test_set_completed_clears_pending_tools() {
         display: "ReadFile".into(),
         args: "src/main.rs".into(),
         input: serde_json::json!({"file_path": "/tmp/test.rs"}),
+        source_agent_id: None,
     });
     assert!(pipeline.pending_tools.contains_key("tc1"));
 
@@ -664,12 +880,14 @@ fn test_build_tail_vms_interrupted_then_done_consistency() {
         display: "ReadFile".into(),
         args: "src/main.rs".into(),
         input: serde_json::json!({"file_path": "/tmp/test.rs"}),
+        source_agent_id: None,
     });
     let _ = pipeline.handle_event(AgentEvent::ToolEnd {
         tool_call_id: "tc1".into(),
         name: "Read".into(),
         output: "file content here".into(),
         is_error: false,
+        source_agent_id: None,
     });
 
     // 模拟 StateSnapshot 填充 completed
@@ -989,10 +1207,12 @@ fn test_frozen_subagent_vms_cleared_on_begin_round() {
     pipeline.handle_event(AgentEvent::SubAgentEnd {
         result: "result sa1".into(),
         is_error: false,
+        agent_id: None,
     });
     pipeline.handle_event(AgentEvent::SubAgentEnd {
         result: "result sa2".into(),
         is_error: false,
+        agent_id: None,
     });
 
     // 验证轮次 1 的 frozen_subagent_vms 包含 2 个冻结 VM
@@ -1030,6 +1250,7 @@ fn test_frozen_subagent_vms_cleared_on_begin_round() {
     pipeline.handle_event(AgentEvent::SubAgentEnd {
         result: "result sa3".into(),
         is_error: false,
+        agent_id: None,
     });
 
     assert_eq!(

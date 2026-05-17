@@ -99,6 +99,11 @@ pub struct SubAgentMiddleware {
     background_registry: Option<Arc<BackgroundTaskRegistry>>,
     /// Registered hooks for SubagentStart/SubagentStop lifecycle events
     registered_hooks: Arc<Vec<crate::hooks::types::RegisteredHook>>,
+    /// Per-child agent event handler factory: takes agent_id → returns handler for that child.
+    /// When set, child agents use this factory instead of wrapping the parent's event_handler,
+    /// avoiding shared Lock (e.g., Langfuse Mutex) contention in concurrent execution.
+    #[allow(clippy::type_complexity)]
+    child_handler_factory: Option<Arc<dyn Fn(String) -> Arc<dyn AgentEventHandler> + Send + Sync>>,
 }
 
 impl SubAgentMiddleware {
@@ -121,6 +126,7 @@ impl SubAgentMiddleware {
             parent_messages: None,
             background_registry: None,
             registered_hooks: Arc::new(Vec::new()),
+            child_handler_factory: None,
         }
     }
 
@@ -161,6 +167,19 @@ impl SubAgentMiddleware {
         self
     }
 
+    /// Set per-child agent event handler factory.
+    /// When set, `SubAgentTool::invoke` uses `factory(agent_id)` to create a dedicated
+    /// event handler for each child agent, instead of wrapping the parent's shared handler.
+    /// This avoids Lock contention (e.g., Langfuse Mutex) when multiple SubAgents run concurrently.
+    #[allow(clippy::type_complexity)]
+    pub fn with_child_handler_factory(
+        mut self,
+        factory: Arc<dyn Fn(String) -> Arc<dyn AgentEventHandler> + Send + Sync>,
+    ) -> Self {
+        self.child_handler_factory = Some(factory);
+        self
+    }
+
     /// Build SubAgentTool instance (clone Arc fields, do not transfer ownership)
     pub fn build_tool(&self, cwd: &str) -> SubAgentTool {
         let mut tool = SubAgentTool::new(
@@ -183,6 +202,9 @@ impl SubAgentMiddleware {
         }
         if !self.registered_hooks.is_empty() {
             tool = tool.with_registered_hooks(self.registered_hooks.to_vec());
+        }
+        if let Some(ref factory) = self.child_handler_factory {
+            tool = tool.with_child_handler_factory(Arc::clone(factory));
         }
         tool
     }

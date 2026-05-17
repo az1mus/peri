@@ -194,10 +194,19 @@ impl MessagePipeline {
     /// RebuildAll 由 agent_ops 通过 `check_throttle()` 或 `build_rebuild_all()` 显式触发。
     pub fn handle_event(&mut self, event: AgentEvent) -> Vec<PipelineAction> {
         match event {
-            AgentEvent::AssistantChunk(chunk) => {
+            AgentEvent::AssistantChunk {
+                chunk,
+                source_agent_id,
+            } => {
                 if !chunk.is_empty() {
-                    if self.in_subagent() {
-                        self.subagent_push_chunk(&chunk);
+                    if let Some(ref aid) = source_agent_id {
+                        if let Some(sub) = self.find_running_subagent_mut(aid) {
+                            Self::push_chunk_to_subagent(sub, &chunk);
+                        }
+                    } else if self.in_subagent() {
+                        if let Some(sub) = self.subagent_stack.last_mut() {
+                            Self::push_chunk_to_subagent(sub, &chunk);
+                        }
                     } else {
                         self.push_chunk(&chunk);
                     }
@@ -224,6 +233,7 @@ impl MessagePipeline {
                 display: _,
                 args: _,
                 input,
+                source_agent_id,
             } => {
                 // 仅解除 throttle，不在此处触发 RebuildAll。
                 // agent_ops 中的 request_rebuild() 会以正确的 prefix_len
@@ -232,8 +242,16 @@ impl MessagePipeline {
                 // 随后 request_rebuild() 用旧的 round_start_vm_idx 做 drain 时 panic。
                 self.throttle_armed = false;
 
-                if self.in_subagent() {
-                    self.subagent_tool_start(&tool_call_id, &name, input);
+                if let Some(ref aid) = source_agent_id {
+                    let cwd = self.cwd.clone();
+                    if let Some(sub) = self.find_running_subagent_mut(aid) {
+                        Self::push_tool_start_to_subagent(sub, &tool_call_id, &name, &input, &cwd);
+                    }
+                } else if self.in_subagent() {
+                    let cwd = self.cwd.clone();
+                    if let Some(sub) = self.subagent_stack.last_mut() {
+                        Self::push_tool_start_to_subagent(sub, &tool_call_id, &name, &input, &cwd);
+                    }
                 } else {
                     self.tool_start_internal(&tool_call_id, &name, input, false);
                 }
@@ -245,26 +263,16 @@ impl MessagePipeline {
                 name,
                 output,
                 is_error,
+                source_agent_id,
             } => {
                 self.throttle_armed = false;
-                if self.in_subagent() {
-                    // 更新 recent_messages 中对应 ToolBlock 的内容
+                if let Some(ref aid) = source_agent_id {
+                    if let Some(sub) = self.find_running_subagent_mut(aid) {
+                        Self::update_tool_end_in_subagent(sub, &tool_call_id, &output, is_error);
+                    }
+                } else if self.in_subagent() {
                     if let Some(sub) = self.subagent_stack.last_mut() {
-                        for vm in sub.recent_messages.iter_mut().rev() {
-                            if let MessageViewModel::ToolBlock {
-                                tool_call_id: tc_id,
-                                content,
-                                is_error: err,
-                                ..
-                            } = vm
-                            {
-                                if tc_id == &tool_call_id {
-                                    *content = output.clone();
-                                    *err = is_error;
-                                    break;
-                                }
-                            }
-                        }
+                        Self::update_tool_end_in_subagent(sub, &tool_call_id, &output, is_error);
                     }
                 } else {
                     self.tool_end_internal(&tool_call_id, &name, &output, is_error);
@@ -282,12 +290,23 @@ impl MessagePipeline {
                 self.tool_start_internal(&tc_id, "Agent", input, is_background);
                 vec![PipelineAction::None]
             }
-            AgentEvent::SubAgentEnd { result, is_error } => {
-                let tc_id = self
-                    .subagent_stack
-                    .last()
-                    .map(|s| format!("subagent_{}", s.agent_id))
-                    .unwrap_or_else(|| "subagent_end".to_string());
+            AgentEvent::SubAgentEnd {
+                result,
+                is_error,
+                agent_id,
+            } => {
+                let tc_id = if let Some(ref aid) = agent_id {
+                    self.subagent_stack
+                        .iter()
+                        .find(|s| s.agent_id == *aid)
+                        .map(|s| format!("subagent_{}", s.agent_id))
+                        .unwrap_or_else(|| "subagent_end".to_string())
+                } else {
+                    self.subagent_stack
+                        .last()
+                        .map(|s| format!("subagent_{}", s.agent_id))
+                        .unwrap_or_else(|| "subagent_end".to_string())
+                };
                 self.tool_end_internal(&tc_id, "Agent", &result, is_error);
                 vec![PipelineAction::None]
             }
@@ -427,7 +446,13 @@ impl MessagePipeline {
             .unwrap_or(serde_json::Value::Null);
 
         if name == "Agent" {
-            if let Some(sub) = self.subagent_stack.last_mut() {
+            // 从 tool_call_id 中提取 agent_id 用于精确匹配
+            let target_agent_id = tool_call_id.strip_prefix("subagent_").unwrap_or("");
+            if let Some(sub) = self
+                .subagent_stack
+                .iter_mut()
+                .find(|s| s.agent_id == target_agent_id)
+            {
                 if sub.is_background {
                     // 后台 agent 路径：不冻结，保持 is_running=true，解析 bg_hash
                     sub.bg_hash = parse_bg_hash(output);
@@ -471,47 +496,75 @@ impl MessagePipeline {
         }
     }
 
-    /// SubAgent 内部工具调用（路由进 SubAgentGroup）
-    pub fn subagent_tool_start(
-        &mut self,
+    /// SubAgent 内部工具调用（路由进指定 SubAgentGroup）
+    fn push_tool_start_to_subagent(
+        sub: &mut SubAgentState,
         tool_call_id: &str,
         name: &str,
-        input: serde_json::Value,
+        input: &serde_json::Value,
+        cwd: &str,
     ) {
-        if let Some(sub) = self.subagent_stack.last_mut() {
-            let display = tool_display::format_tool_name(name);
-            let args = tool_display::format_tool_args(name, &input, Some(&self.cwd));
-            let vm = MessageViewModel::tool_block_with_id(
-                tool_call_id.to_string(),
-                name.to_string(),
-                display,
-                args,
-                false,
-            );
-            sub.total_steps += 1;
-            if sub.recent_messages.len() >= 4 {
-                sub.recent_messages.remove(0);
+        let display = tool_display::format_tool_name(name);
+        let args = tool_display::format_tool_args(name, input, Some(cwd));
+        let vm = MessageViewModel::tool_block_with_id(
+            tool_call_id.to_string(),
+            name.to_string(),
+            display,
+            args,
+            false,
+        );
+        sub.total_steps += 1;
+        if sub.recent_messages.len() >= 4 {
+            sub.recent_messages.remove(0);
+        }
+        sub.recent_messages.push(vm);
+    }
+
+    /// SubAgent 内部 chunk（路由进指定 SubAgentGroup）
+    fn push_chunk_to_subagent(sub: &mut SubAgentState, chunk: &str) {
+        match sub.recent_messages.last_mut() {
+            Some(m) if m.is_assistant() => m.append_chunk(chunk),
+            _ => {
+                sub.total_steps += 1;
+                if sub.recent_messages.len() >= 4 {
+                    sub.recent_messages.remove(0);
+                }
+                let mut bubble = MessageViewModel::assistant();
+                bubble.append_chunk(chunk);
+                sub.recent_messages.push(bubble);
             }
-            sub.recent_messages.push(vm);
         }
     }
 
-    /// SubAgent 内部 chunk
-    pub fn subagent_push_chunk(&mut self, chunk: &str) {
-        if let Some(sub) = self.subagent_stack.last_mut() {
-            match sub.recent_messages.last_mut() {
-                Some(m) if m.is_assistant() => m.append_chunk(chunk),
-                _ => {
-                    sub.total_steps += 1;
-                    if sub.recent_messages.len() >= 4 {
-                        sub.recent_messages.remove(0);
-                    }
-                    let mut bubble = MessageViewModel::assistant();
-                    bubble.append_chunk(chunk);
-                    sub.recent_messages.push(bubble);
+    /// SubAgent 内部 ToolEnd 更新（路由进指定 SubAgentGroup）
+    fn update_tool_end_in_subagent(
+        sub: &mut SubAgentState,
+        tool_call_id: &str,
+        output: &str,
+        is_error: bool,
+    ) {
+        for vm in sub.recent_messages.iter_mut().rev() {
+            if let MessageViewModel::ToolBlock {
+                tool_call_id: tc_id,
+                content,
+                is_error: err,
+                ..
+            } = vm
+            {
+                if tc_id == tool_call_id {
+                    *content = output.to_string();
+                    *err = is_error;
+                    break;
                 }
             }
         }
+    }
+
+    /// 根据 agent_id 查找 subagent_stack 中正在运行的 SubAgent
+    fn find_running_subagent_mut(&mut self, agent_id: &str) -> Option<&mut SubAgentState> {
+        self.subagent_stack
+            .iter_mut()
+            .find(|s| s.agent_id == agent_id && s.is_running)
     }
 
     /// 标记当前 AI 轮次结束

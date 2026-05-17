@@ -20,6 +20,7 @@ pub enum AgentEvent {
     TextChunk {
         message_id: crate::messages::MessageId,
         chunk: String,
+        source_agent_id: Option<String>,
     },
     /// 工具调用开始（工具名 + 参数），携带所属 AI 消息的 message_id
     ToolStart {
@@ -27,6 +28,7 @@ pub enum AgentEvent {
         tool_call_id: String,
         name: String,
         input: serde_json::Value,
+        source_agent_id: Option<String>,
     },
     /// 工具调用结束（结果或错误），携带所属 AI 消息的 message_id
     ToolEnd {
@@ -35,6 +37,7 @@ pub enum AgentEvent {
         name: String,
         output: String,
         is_error: bool,
+        source_agent_id: Option<String>,
     },
     /// 一轮 ReAct 步骤完成
     StepDone { step: usize },

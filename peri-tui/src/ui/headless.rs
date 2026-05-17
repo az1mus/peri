@@ -6,7 +6,7 @@
 //! 使用方式：
 //! ```rust,ignore
 //! let (mut app, mut handle) = App::new_headless(120, 30).await;
-//! app.push_agent_event(AgentEvent::AssistantChunk("Hello".into()));
+//! app.push_agent_event(AgentEvent::AssistantChunk { chunk: "Hello".into(), source_agent_id: None });
 //! app.process_pending_events();
 //! handle.wait_for_render().await;
 //! handle.terminal.draw(|f| main_ui::render(f, &mut app)).unwrap();

@@ -107,6 +107,7 @@ pub(crate) async fn handle_final_answer<L: ReactLLM, S: State>(
         agent.emit(AgentEvent::TextChunk {
             message_id: ai_msg_id,
             chunk: answer.clone(),
+            source_agent_id: None,
         });
     }
 

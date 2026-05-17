@@ -510,6 +510,7 @@ fn test_agent_event_message_id_serialization() {
     let ev = AgentEvent::TextChunk {
         message_id: mid,
         chunk: "hello".to_string(),
+        source_agent_id: None,
     };
     let json = serde_json::to_value(&ev).unwrap();
     assert!(
@@ -523,6 +524,7 @@ fn test_agent_event_message_id_serialization() {
         tool_call_id: "tc1".to_string(),
         name: "Bash".to_string(),
         input: serde_json::json!({}),
+        source_agent_id: None,
     };
     let json = serde_json::to_value(&ev).unwrap();
     assert!(
@@ -536,6 +538,7 @@ fn test_agent_event_message_id_serialization() {
         name: "Bash".to_string(),
         output: "ok".to_string(),
         is_error: false,
+        source_agent_id: None,
     };
     let json = serde_json::to_value(&ev).unwrap();
     assert!(

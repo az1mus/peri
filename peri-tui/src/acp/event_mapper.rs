@@ -11,7 +11,10 @@ use crate::app::events::AgentEvent;
 /// 将 AgentEvent 映射为 ACP SessionUpdate 列表
 pub fn map_event_to_updates(event: &AgentEvent) -> Vec<SessionUpdate> {
     match event {
-        AgentEvent::AssistantChunk(text) => {
+        AgentEvent::AssistantChunk {
+            chunk: text,
+            source_agent_id: _,
+        } => {
             vec![SessionUpdate::AgentMessageChunk(ContentChunk::new(
                 ContentBlock::Text(TextContent::new(text.clone())),
             ))]
@@ -26,6 +29,7 @@ pub fn map_event_to_updates(event: &AgentEvent) -> Vec<SessionUpdate> {
             name,
             args,
             input,
+            source_agent_id: _,
             ..
         } => {
             vec![SessionUpdate::ToolCall(
@@ -42,6 +46,7 @@ pub fn map_event_to_updates(event: &AgentEvent) -> Vec<SessionUpdate> {
             tool_call_id,
             output,
             is_error,
+            source_agent_id: _,
             ..
         } => {
             let raw_output = match serde_json::from_str::<serde_json::Value>(output) {

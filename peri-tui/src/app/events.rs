@@ -13,6 +13,7 @@ pub enum AgentEvent {
         display: String,
         args: String,
         input: serde_json::Value,
+        source_agent_id: Option<String>,
     },
     /// 工具调用结果
     ToolEnd {
@@ -20,8 +21,12 @@ pub enum AgentEvent {
         name: String,
         output: String,
         is_error: bool,
+        source_agent_id: Option<String>,
     },
-    AssistantChunk(String),
+    AssistantChunk {
+        chunk: String,
+        source_agent_id: Option<String>,
+    },
     /// AI 推理/思考内容（与文本内容分开）
     AiReasoning(String),
     Done,
@@ -62,6 +67,7 @@ pub enum AgentEvent {
     SubAgentEnd {
         result: String,
         is_error: bool,
+        agent_id: Option<String>,
     },
     /// Token 使用量更新（从核心层 LlmCallEnd 映射而来）
     TokenUsageUpdate {

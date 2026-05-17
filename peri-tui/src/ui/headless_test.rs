@@ -14,7 +14,10 @@ async fn test_assistant_chunk_renders() {
     use peri_agent::messages::BaseMessage;
 
     let (mut app, mut handle) = App::new_headless(120, 30).await;
-    app.push_agent_event(AgentEvent::AssistantChunk("Hello world".into()));
+    app.push_agent_event(AgentEvent::AssistantChunk {
+        chunk: "Hello world".into(),
+        source_agent_id: None,
+    });
     app.push_agent_event(AgentEvent::StateSnapshot(vec![
         BaseMessage::human("q"),
         BaseMessage::ai("Hello world"),
@@ -45,6 +48,7 @@ async fn test_tool_call_renders() {
         display: "ReadFile".into(),
         args: "src/main.rs".into(),
         input: serde_json::json!({"path": "src/main.rs"}),
+        source_agent_id: None,
     });
     app.process_pending_events();
     notified.await;
@@ -438,6 +442,7 @@ async fn test_subagent_group_basic() {
         display: "ReadFile".into(),
         args: "src/main.rs".into(),
         input: serde_json::json!({"path": "src/main.rs"}),
+        source_agent_id: None,
     });
     app.push_agent_event(AgentEvent::ToolStart {
         tool_call_id: "t2".into(),
@@ -445,10 +450,12 @@ async fn test_subagent_group_basic() {
         display: "Bash".into(),
         args: "cargo test".into(),
         input: serde_json::json!({"command": "cargo test"}),
+        source_agent_id: None,
     });
     app.push_agent_event(AgentEvent::SubAgentEnd {
         result: "All tests passed, no issues found".into(),
         is_error: false,
+        agent_id: None,
     });
     app.process_pending_events();
     app.flush_rebuild();
@@ -504,11 +511,13 @@ async fn test_subagent_group_sliding_window() {
             display: "ReadFile".into(),
             args: format!("file{}.rs", i),
             input: serde_json::json!({"path": format!("file{}.rs", i)}),
+            source_agent_id: None,
         });
     }
     app.push_agent_event(AgentEvent::SubAgentEnd {
         result: "analysis complete".into(),
         is_error: false,
+        agent_id: None,
     });
     app.process_pending_events();
 
@@ -545,10 +554,14 @@ async fn test_subagent_group_assistant_chunk() {
         task_preview: "write summary".into(),
         is_background: false,
     });
-    app.push_agent_event(AgentEvent::AssistantChunk("summary text here".into()));
+    app.push_agent_event(AgentEvent::AssistantChunk {
+        chunk: "summary text here".into(),
+        source_agent_id: None,
+    });
     app.push_agent_event(AgentEvent::SubAgentEnd {
         result: "Done writing".into(),
         is_error: false,
+        agent_id: None,
     });
     app.process_pending_events();
 
@@ -586,6 +599,7 @@ async fn test_tool_call_message_visible_when_toggled() {
         display: "Bash".into(),
         args: "ls".into(),
         input: serde_json::json!({"command": "ls"}),
+        source_agent_id: None,
     });
     app.process_pending_events();
     notified1.await;
@@ -618,7 +632,10 @@ async fn test_empty_assistant_chunk_no_bubble() {
     let (mut app, _handle) = App::new_headless(120, 30).await;
 
     // 发送空 chunk，不应创建 AssistantBubble
-    app.push_agent_event(AgentEvent::AssistantChunk("".into()));
+    app.push_agent_event(AgentEvent::AssistantChunk {
+        chunk: "".into(),
+        source_agent_id: None,
+    });
     app.process_pending_events();
 
     // view_messages 应为空（没有创建空白气泡）
@@ -635,8 +652,14 @@ async fn test_empty_assistant_chunk_no_bubble() {
     );
 
     // 发送多个空 chunk，仍不应创建气泡
-    app.push_agent_event(AgentEvent::AssistantChunk("".into()));
-    app.push_agent_event(AgentEvent::AssistantChunk("".into()));
+    app.push_agent_event(AgentEvent::AssistantChunk {
+        chunk: "".into(),
+        source_agent_id: None,
+    });
+    app.push_agent_event(AgentEvent::AssistantChunk {
+        chunk: "".into(),
+        source_agent_id: None,
+    });
     app.process_pending_events();
 
     assert!(
@@ -656,11 +679,17 @@ async fn test_empty_then_nonempty_assistant_chunk() {
     let (mut app, mut handle) = App::new_headless(120, 30).await;
 
     // 先发送空 chunk
-    app.push_agent_event(AgentEvent::AssistantChunk("".into()));
+    app.push_agent_event(AgentEvent::AssistantChunk {
+        chunk: "".into(),
+        source_agent_id: None,
+    });
     app.process_pending_events();
 
     // 再发送非空 chunk
-    app.push_agent_event(AgentEvent::AssistantChunk("Hello".into()));
+    app.push_agent_event(AgentEvent::AssistantChunk {
+        chunk: "Hello".into(),
+        source_agent_id: None,
+    });
     app.push_agent_event(AgentEvent::StateSnapshot(vec![
         BaseMessage::human("q"),
         BaseMessage::ai("Hello"),
@@ -707,6 +736,7 @@ async fn test_tool_call_without_assistant_chunk_no_bubble() {
         display: "Bash".into(),
         args: "ls".into(),
         input: serde_json::json!({"command": "ls"}),
+        source_agent_id: None,
     });
     app.process_pending_events();
     notified.await;
@@ -762,7 +792,10 @@ async fn test_welcome_card_hidden_after_message() {
     use peri_agent::messages::BaseMessage;
 
     let (mut app, mut handle) = App::new_headless(120, 30).await;
-    app.push_agent_event(AgentEvent::AssistantChunk("Hello from agent".into()));
+    app.push_agent_event(AgentEvent::AssistantChunk {
+        chunk: "Hello from agent".into(),
+        source_agent_id: None,
+    });
     app.push_agent_event(AgentEvent::StateSnapshot(vec![
         BaseMessage::human("q"),
         BaseMessage::ai("Hello from agent"),
@@ -1739,7 +1772,10 @@ async fn test_user_message_survives_assistant_chunk() {
         .push(user_vm);
     app.render_rebuild();
 
-    app.push_agent_event(AgentEvent::AssistantChunk("AI answer".into()));
+    app.push_agent_event(AgentEvent::AssistantChunk {
+        chunk: "AI answer".into(),
+        source_agent_id: None,
+    });
     app.push_agent_event(AgentEvent::StateSnapshot(vec![
         BaseMessage::human("my question"),
         BaseMessage::ai("AI answer"),
@@ -1801,7 +1837,10 @@ async fn test_messages_accumulate_across_turns() {
         .push(user1);
     app.render_rebuild();
 
-    app.push_agent_event(AgentEvent::AssistantChunk("answer1".into()));
+    app.push_agent_event(AgentEvent::AssistantChunk {
+        chunk: "answer1".into(),
+        source_agent_id: None,
+    });
     app.push_agent_event(AgentEvent::StateSnapshot(vec![
         BaseMessage::human("turn1"),
         BaseMessage::ai("answer1"),
@@ -1826,7 +1865,10 @@ async fn test_messages_accumulate_across_turns() {
         .push(user2);
     app.render_rebuild();
 
-    app.push_agent_event(AgentEvent::AssistantChunk("answer2".into()));
+    app.push_agent_event(AgentEvent::AssistantChunk {
+        chunk: "answer2".into(),
+        source_agent_id: None,
+    });
     app.push_agent_event(AgentEvent::StateSnapshot(vec![
         BaseMessage::human("turn1"),
         BaseMessage::ai("answer1"),
@@ -1868,7 +1910,10 @@ async fn test_done_does_not_duplicate_ai_message() {
     let (mut app, _handle) = App::new_headless(120, 30).await;
 
     // 模拟 StateSnapshot（增量）+ Done 序列
-    app.push_agent_event(AgentEvent::AssistantChunk("unique text".into()));
+    app.push_agent_event(AgentEvent::AssistantChunk {
+        chunk: "unique text".into(),
+        source_agent_id: None,
+    });
     app.push_agent_event(AgentEvent::StateSnapshot(vec![
         BaseMessage::human("q"),
         BaseMessage::ai("unique text"),
@@ -1930,8 +1975,12 @@ async fn test_tool_then_text_preserves_tool_block() {
         display: "Shell".into(),
         args: "ls".into(),
         input: serde_json::json!({"command": "ls"}),
+        source_agent_id: None,
     });
-    app.push_agent_event(AgentEvent::AssistantChunk("result is here".into()));
+    app.push_agent_event(AgentEvent::AssistantChunk {
+        chunk: "result is here".into(),
+        source_agent_id: None,
+    });
     app.process_pending_events();
     app.flush_rebuild();
     tokio::time::sleep(Duration::from_millis(50)).await;
@@ -2892,7 +2941,10 @@ async fn test_subagent_group_preserved_after_done_reconcile() {
 
     // 1. 模拟 AI 文本
     let n = handle.render_notify.notified();
-    app.push_agent_event(AgentEvent::AssistantChunk("I'll use a sub-agent".into()));
+    app.push_agent_event(AgentEvent::AssistantChunk {
+        chunk: "I'll use a sub-agent".into(),
+        source_agent_id: None,
+    });
     app.process_pending_events();
     let _ = n;
 
@@ -2914,6 +2966,7 @@ async fn test_subagent_group_preserved_after_done_reconcile() {
         display: "Read".into(),
         args: "file.rs".into(),
         input: serde_json::json!({"file_path": "/tmp/file.rs"}),
+        source_agent_id: None,
     });
     app.process_pending_events();
     let _ = n1;
@@ -2924,6 +2977,7 @@ async fn test_subagent_group_preserved_after_done_reconcile() {
         name: "Read".into(),
         output: "file content".into(),
         is_error: false,
+        source_agent_id: None,
     });
     app.process_pending_events();
     let _ = n2;
@@ -2933,6 +2987,7 @@ async fn test_subagent_group_preserved_after_done_reconcile() {
     app.push_agent_event(AgentEvent::SubAgentEnd {
         result: "review complete".into(),
         is_error: false,
+        agent_id: None,
     });
     app.process_pending_events();
     let _ = n;
@@ -3303,6 +3358,7 @@ async fn test_diagnostic_bg_subagent_group_disappears() {
     app.push_agent_event(AgentEvent::SubAgentEnd {
         result: "Background task bg-abc123 started.".into(),
         is_error: false,
+        agent_id: None,
     });
     app.process_pending_events();
     bg_diag_print_vms(&app, "Step 3: After SubAgentEnd");
@@ -3502,6 +3558,7 @@ async fn test_diagnostic_fork_plus_background_subagent_group() {
     app.push_agent_event(AgentEvent::SubAgentEnd {
         result: "[Sub-agent executed 3 tool calls: Read, Bash, Grep]\n\nDone.".into(),
         is_error: false,
+        agent_id: None,
     });
     app.process_pending_events();
     bg_diag_print_vms(
@@ -3654,12 +3711,14 @@ async fn test_thinking_mode_user_message_survives_rebuild() {
     );
 
     // 3. AI 开始输出文本（AssistantChunk → 创建 AssistantBubble）
-    app.push_agent_event(AgentEvent::AssistantChunk(
-        "Recursion is a technique where ".into(),
-    ));
-    app.push_agent_event(AgentEvent::AssistantChunk(
-        "a function calls itself.".into(),
-    ));
+    app.push_agent_event(AgentEvent::AssistantChunk {
+        chunk: "Recursion is a technique where ".into(),
+        source_agent_id: None,
+    });
+    app.push_agent_event(AgentEvent::AssistantChunk {
+        chunk: "a function calls itself.".into(),
+        source_agent_id: None,
+    });
     // StateSnapshot 包含 Human + Ai（含 reasoning）
     app.push_agent_event(AgentEvent::StateSnapshot(vec![
         BaseMessage::human("explain recursion"),
@@ -3727,6 +3786,7 @@ async fn test_thinking_toolcall_text_rebuild_preserves_user() {
         display: "ReadFile".into(),
         args: "src/main.rs".into(),
         input: serde_json::json!({"path": "src/main.rs"}),
+        source_agent_id: None,
     });
     app.process_pending_events();
     n1.await;
@@ -3738,15 +3798,17 @@ async fn test_thinking_toolcall_text_rebuild_preserves_user() {
         name: "Read".into(),
         output: "fn main() { println!(\"hello\"); }".into(),
         is_error: false,
+        source_agent_id: None,
     });
     app.process_pending_events();
     n2.await;
 
     // 5. 更多 thinking + 文本回复
     app.push_agent_event(AgentEvent::AiReasoning("Now I can explain...".into()));
-    app.push_agent_event(AgentEvent::AssistantChunk(
-        "Here is the content of main.rs:".into(),
-    ));
+    app.push_agent_event(AgentEvent::AssistantChunk {
+        chunk: "Here is the content of main.rs:".into(),
+        source_agent_id: None,
+    });
     // StateSnapshot: Human + Ai(tool_call) + Tool + Ai(text)
     let ai_with_tool = BaseMessage::ai_from_blocks(vec![ContentBlock::tool_use(
         "tc_read",

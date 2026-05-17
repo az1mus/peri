@@ -35,6 +35,7 @@ pub(crate) async fn dispatch_tools<L: ReactLLM, S: State>(
         agent.emit(AgentEvent::TextChunk {
             message_id: ai_msg_id,
             chunk: reasoning.thought.clone(),
+            source_agent_id: None,
         });
     }
 
@@ -122,6 +123,7 @@ async fn collect_tool_results<L: ReactLLM, S: State>(
                     name: tc.name.clone(),
                     output: "interrupted by user".to_string(),
                     is_error: true,
+                    source_agent_id: None,
                 });
             }
             return Err(AgentError::Interrupted);
@@ -133,6 +135,7 @@ async fn collect_tool_results<L: ReactLLM, S: State>(
                     tool_call_id: modified_call.id.clone(),
                     name: modified_call.name.clone(),
                     input: modified_call.input.clone(),
+                    source_agent_id: None,
                 });
                 ready_calls.push(modified_call);
             }
@@ -144,6 +147,7 @@ async fn collect_tool_results<L: ReactLLM, S: State>(
                     tool_call_id: tool_call.id.clone(),
                     name: tool_call.name.clone(),
                     input: tool_call.input.clone(),
+                    source_agent_id: None,
                 });
                 agent.emit(AgentEvent::ToolEnd {
                     message_id: ai_msg_id,
@@ -151,6 +155,7 @@ async fn collect_tool_results<L: ReactLLM, S: State>(
                     name: tool_call.name.clone(),
                     output: rejection_result.output.clone(),
                     is_error: true,
+                    source_agent_id: None,
                 });
                 settled_results.push((tool_call.clone(), rejection_result));
             }
@@ -164,6 +169,7 @@ async fn collect_tool_results<L: ReactLLM, S: State>(
                         name: tc.name.clone(),
                         output: e.to_string(),
                         is_error: true,
+                        source_agent_id: None,
                     });
                 }
                 return Err(e);
@@ -256,6 +262,7 @@ async fn collect_tool_results<L: ReactLLM, S: State>(
             name: modified_call.name.clone(),
             output: result.output.clone(),
             is_error: result.is_error,
+            source_agent_id: None,
         });
 
         if let Err(e) = agent

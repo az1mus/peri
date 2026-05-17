@@ -65,7 +65,11 @@ impl App {
                 self.request_rebuild();
                 (true, false, false)
             }
-            AgentEvent::SubAgentEnd { result, is_error } => {
+            AgentEvent::SubAgentEnd {
+                result,
+                is_error,
+                agent_id,
+            } => {
                 self.session_mgr.sessions[self.session_mgr.active]
                     .agent
                     .subagent_depth = self.session_mgr.sessions[self.session_mgr.active]
@@ -83,7 +87,11 @@ impl App {
                 let actions = self.session_mgr.sessions[self.session_mgr.active]
                     .messages
                     .pipeline
-                    .handle_event(AgentEvent::SubAgentEnd { result, is_error });
+                    .handle_event(AgentEvent::SubAgentEnd {
+                        result,
+                        is_error,
+                        agent_id,
+                    });
                 for action in actions {
                     self.apply_pipeline_action(action);
                 }
@@ -258,6 +266,7 @@ impl App {
                 display,
                 args,
                 input,
+                source_agent_id,
             } => {
                 self.session_mgr.sessions[self.session_mgr.active]
                     .agent
@@ -291,6 +300,7 @@ impl App {
                         display,
                         args,
                         input,
+                        source_agent_id,
                     });
                 for action in actions {
                     self.apply_pipeline_action(action);
@@ -303,6 +313,7 @@ impl App {
                 name,
                 output,
                 is_error,
+                source_agent_id,
             } => {
                 let actions = self.session_mgr.sessions[self.session_mgr.active]
                     .messages
@@ -312,6 +323,7 @@ impl App {
                         name,
                         output,
                         is_error,
+                        source_agent_id,
                     });
                 for action in actions {
                     self.apply_pipeline_action(action);
@@ -319,7 +331,10 @@ impl App {
                 self.request_rebuild();
                 (true, false, false)
             }
-            AgentEvent::AssistantChunk(chunk) => {
+            AgentEvent::AssistantChunk {
+                chunk,
+                source_agent_id,
+            } => {
                 self.session_mgr.sessions[self.session_mgr.active]
                     .agent
                     .retry_status = None;
@@ -334,7 +349,10 @@ impl App {
                 let actions = self.session_mgr.sessions[self.session_mgr.active]
                     .messages
                     .pipeline
-                    .handle_event(AgentEvent::AssistantChunk(chunk));
+                    .handle_event(AgentEvent::AssistantChunk {
+                        chunk,
+                        source_agent_id,
+                    });
                 for action in actions {
                     self.apply_pipeline_action(action);
                 }
