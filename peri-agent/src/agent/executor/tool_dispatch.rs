@@ -177,25 +177,43 @@ async fn collect_tool_results<L: ReactLLM, S: State>(
         }
     }
 
-    // 阶段二：并发执行所有工具；取消时每个工具以 error 收尾
+    // 阶段二：执行所有工具。
+    // Agent 工具（SubAgent）顺序执行以避免共享 event_handler 中的锁竞争（如 Langfuse Mutex）
+    // 导致的死锁；其他工具仍然并发执行以保持性能。
     let tool_results: Vec<Result<String, AgentError>> = {
-        let futures: Vec<_> = ready_calls
-            .iter()
-            .map(|call| {
-                let tool_name = call.name.clone();
-                let call_id = call.id.clone();
-                let input = call.input.clone();
-                let tool = all_tools.get(&call.name).copied();
-                let cancel = cancel.clone();
-                async move {
-                    let span = tracing::info_span!(
-                        "agent.tool_call",
-                        tool.name = %tool_name,
-                        tool.call_id = %call_id,
-                    );
-                    let _enter = span.enter();
-                    let invoke_fut =
-                        async {
+        // 分离 Agent 调用和非 Agent 调用的索引
+        let mut agent_indices: Vec<usize> = Vec::new();
+        let mut other_indices: Vec<usize> = Vec::new();
+        for (i, call) in ready_calls.iter().enumerate() {
+            if call.name == "Agent" {
+                agent_indices.push(i);
+            } else {
+                other_indices.push(i);
+            }
+        }
+
+        let mut results: Vec<Option<Result<String, AgentError>>> =
+            (0..ready_calls.len()).map(|_| None).collect();
+
+        // 非工具调用：并发执行
+        if !other_indices.is_empty() {
+            let other_futures: Vec<_> = other_indices
+                .iter()
+                .map(|&i| {
+                    let call = &ready_calls[i];
+                    let tool_name = call.name.clone();
+                    let call_id = call.id.clone();
+                    let input = call.input.clone();
+                    let tool = all_tools.get(&call.name).copied();
+                    let cancel = cancel.clone();
+                    async move {
+                        let span = tracing::info_span!(
+                            "agent.tool_call",
+                            tool.name = %tool_name,
+                            tool.call_id = %call_id,
+                        );
+                        let _enter = span.enter();
+                        let invoke_fut = async {
                             match tool {
                                 Some(t) => t.invoke(input).await.map_err(|e| {
                                     AgentError::ToolExecutionFailed {
@@ -206,20 +224,68 @@ async fn collect_tool_results<L: ReactLLM, S: State>(
                                 None => Err(AgentError::ToolNotFound(tool_name.clone())),
                             }
                         };
-                    tokio::select! {
-                        biased;
-                        _ = cancel.cancelled() => {
-                            Err(AgentError::ToolExecutionFailed {
-                                tool: tool_name,
-                                reason: "interrupted by user".to_string(),
-                            })
+                        tokio::select! {
+                            biased;
+                            _ = cancel.cancelled() => {
+                                Err(AgentError::ToolExecutionFailed {
+                                    tool: tool_name,
+                                    reason: "interrupted by user".to_string(),
+                                })
+                            }
+                            result = invoke_fut => result,
                         }
-                        result = invoke_fut => result,
                     }
+                })
+                .collect();
+            let other_results = futures::future::join_all(other_futures).await;
+            let mut other_results_iter = other_results.into_iter();
+            for &i in &other_indices {
+                results[i] = other_results_iter.next();
+            }
+        }
+
+        // Agent 调用：顺序执行（避免并发 SubAgent 死锁）
+        for &i in &agent_indices {
+            if cancel.is_cancelled() {
+                let call = &ready_calls[i];
+                results[i] = Some(Err(AgentError::ToolExecutionFailed {
+                    tool: call.name.clone(),
+                    reason: "interrupted by user".to_string(),
+                }));
+                continue;
+            }
+            let call = &ready_calls[i];
+            let tool = all_tools.get(&call.name).copied();
+            let tool_name = call.name.clone();
+            let input = call.input.clone();
+            let cancel_clone = cancel.clone();
+            let invoke_fut = async {
+                match tool {
+                    Some(t) => t
+                        .invoke(input)
+                        .await
+                        .map_err(|e| AgentError::ToolExecutionFailed {
+                            tool: tool_name.clone(),
+                            reason: e.to_string(),
+                        }),
+                    None => Err(AgentError::ToolNotFound(tool_name)),
                 }
-            })
-            .collect();
-        futures::future::join_all(futures).await
+            };
+            let result = tokio::select! {
+                biased;
+                _ = cancel_clone.cancelled() => {
+                    Err(AgentError::ToolExecutionFailed {
+                        tool: ready_calls[i].name.clone(),
+                        reason: "interrupted by user".to_string(),
+                    })
+                }
+                r = invoke_fut => r,
+            };
+            results[i] = Some(result);
+        }
+
+        // 将 Option<Result> 转为 Result（所有槽位都已填充）
+        results.into_iter().map(|r| r.unwrap()).collect()
     };
 
     let was_cancelled = cancel.is_cancelled();
