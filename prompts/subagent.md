@@ -6,7 +6,7 @@
 
 > 验证 agent 树状聚合
 
-请直接派出三个 hello agent say hello
+请直接派出三个同步非 bg 的 hello agent say hello
 
 > 验证 bg fork agent 消息回调触发会话
 
