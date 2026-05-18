@@ -73,13 +73,13 @@ impl TableBuilder {
         let available_width = max_width.saturating_sub(border_width);
 
         // 计算每列的最小和理想宽度
-        let _min_col_widths = self.calculate_min_col_widths(num_cols);
+        let min_col_widths = self.calculate_min_col_widths(num_cols);
         let ideal_col_widths = self.calculate_ideal_col_widths(num_cols);
 
         // 如果总宽度超过可用宽度，按比例缩小
         let total_ideal: usize = ideal_col_widths.iter().sum();
         let col_widths = if total_ideal > available_width {
-            self.scale_col_widths(&ideal_col_widths, available_width)
+            self.distribute_col_widths(&min_col_widths, &ideal_col_widths, available_width)
         } else {
             ideal_col_widths
         };
@@ -127,28 +127,56 @@ impl TableBuilder {
         ideal_widths
     }
 
-    /// 按比例缩放列宽度以适应可用宽度
-    fn scale_col_widths(&self, ideal_widths: &[usize], available_width: usize) -> Vec<usize> {
-        let total: usize = ideal_widths.iter().sum();
-        if total == 0 {
-            return ideal_widths.to_vec();
+    /// 保证最小宽度后按比例分配剩余空间
+    ///
+    /// 每列先拿到最小宽度（`calculate_min_col_widths` 的值，上限 10），
+    /// 剩余空间按 `ideal - min` 的比例分配。这保证 CJK 列至少
+    /// 有 ~4-10 显示列宽，不会出现每行仅 1-2 个中文字的情况。
+    fn distribute_col_widths(
+        &self,
+        min_widths: &[usize],
+        ideal_widths: &[usize],
+        available_width: usize,
+    ) -> Vec<usize> {
+        let n = ideal_widths.len();
+        let min_sum: usize = min_widths.iter().sum();
+
+        // 如果最小宽度之和已超可用宽度，按比例从最小值压缩
+        if min_sum >= available_width {
+            return min_widths
+                .iter()
+                .map(|&m| {
+                    let scaled = (m as f64 * available_width as f64 / min_sum as f64) as usize;
+                    scaled.max(2) // 至少保证 2 列宽，防零宽列
+                })
+                .collect();
         }
 
-        let mut scaled = Vec::with_capacity(ideal_widths.len());
-        let mut remaining = available_width;
+        let mut remaining = available_width - min_sum;
 
-        for (i, &ideal) in ideal_widths.iter().enumerate() {
-            if i == ideal_widths.len() - 1 {
-                // 最后一列取剩余宽度
-                scaled.push(remaining);
+        // 计算各列需要的额外宽度：ideal - min（理想超过最小的部分）
+        let extras: Vec<usize> = ideal_widths
+            .iter()
+            .zip(min_widths.iter())
+            .map(|(&ideal, &min)| ideal.saturating_sub(min))
+            .collect();
+        let total_extra: usize = extras.iter().sum();
+
+        let mut widths = Vec::with_capacity(n);
+        for (i, (&min, &extra)) in min_widths.iter().zip(extras.iter()).enumerate() {
+            if i == n - 1 {
+                // 最后一列取剩余
+                widths.push(min + remaining);
+            } else if total_extra == 0 {
+                widths.push(min);
             } else {
-                let scaled_width = (ideal * available_width) / total;
-                scaled.push(scaled_width.max(1)); // 至少为1
-                remaining = remaining.saturating_sub(scaled_width.max(1));
+                let extra_share = (extra * remaining) / total_extra;
+                widths.push(min + extra_share);
+                remaining = remaining.saturating_sub(extra_share);
             }
         }
 
-        scaled
+        widths
     }
 
     /// 渲染表格，支持自动换行

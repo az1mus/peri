@@ -1,3 +1,5 @@
+use unicode_width::UnicodeWidthStr;
+
 use super::*;
 use ratatui::style::Modifier;
 
@@ -186,6 +188,67 @@ fn parse_table_with_wrap() {
         40, // 限制宽度以触发换行
     );
     assert!(text.lines.len() >= 4, "Table should wrap long content");
+}
+
+/// 复现 Issue #2026-05-18：4 列表格，第一列 CJK 被比例缩放压到极窄
+///
+/// 场景：Col 2 有很长字符串（如 URL），比例缩放后 Col 2 占大头，
+/// Col 1 (CJK) 只剩 ~4 显示列，每行仅 2 个中文字，不可读。
+#[test]
+fn parse_table_cjk_first_column_too_narrow() {
+    // 4 列: CJK 列 + 长路径列 + 2 短列
+    let md = "| 中文列 | 文件路径 | 状态 | 大小 |\n| --- | --- | --- | --- |\n| 这是一个需要测试的中文内容 | /very/long/path/that/takes/all/the/width/proportionally/and/squeezes/other/columns | OK | 1K |";
+    let text = parse_markdown(&md, &default_theme(), 50);
+    assert!(text.lines.len() >= 3, "Table should render");
+
+    // 计算第一列的视觉宽度（取数据行中第一列的行宽）
+    // 渲染内容中识别 CJK 数据
+    let first_col_content: Vec<String> = text
+        .lines
+        .iter()
+        .flat_map(|l| {
+            l.spans
+                .iter()
+                .filter(|s| s.content.contains("中文") || s.content.contains("需要测试"))
+                .map(|s| s.content.to_string())
+        })
+        .collect();
+    assert!(
+        !first_col_content.is_empty(),
+        "CJK content should appear in output"
+    );
+
+    // 关键断言：第一列应当有足够宽度，不应被压缩到每行仅 1-2 个 CJK 字符
+    // 如果第一列宽度 ≤ 6 显示列，CJK 每行 ≤ 3 字（CJK=2 列宽），不可读
+    // 收集第一列数据行的 Span 并检查其视觉宽度
+    for line in &text.lines {
+        let mut in_first_col = false;
+        let mut col_width = 0usize;
+        for span in &line.spans {
+            if span.content == "│" {
+                if !in_first_col {
+                    in_first_col = true;
+                } else {
+                    // 遇到第二个 │，第一列结束
+                    break;
+                }
+            } else if in_first_col && span.content != " " {
+                col_width += span.content.width();
+            }
+        }
+        if col_width > 0 {
+            // 第一列至少需要 10 显示列才有基本可读性（CJK 每行 ≥ 5 字）
+            assert!(
+                col_width >= 10,
+                "First CJK column width is {} (display cols), should be >= 10. Rendered lines: {:#?}",
+                col_width,
+                text.lines.iter().map(|l| {
+                    l.spans.iter().map(|s| s.content.clone()).collect::<String>()
+                }).collect::<Vec<_>>()
+            );
+            break; // 只检查第一行有内容的行
+        }
+    }
 }
 
 #[test]
