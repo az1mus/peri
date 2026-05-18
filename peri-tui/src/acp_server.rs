@@ -26,6 +26,11 @@ use agent_client_protocol::schema::{
     AgentCapabilities, InitializeResponse, NewSessionResponse, PromptResponse, ProtocolVersion,
     SessionId, StopReason,
 };
+use agent_client_protocol_schema::{
+    ModelId, ModelInfo, SessionConfigId, SessionConfigOption, SessionConfigOptionCategory,
+    SessionConfigSelectOption, SessionConfigSelectOptions, SessionConfigValueId, SessionMode,
+    SessionModeId, SessionModeState, SessionModelState,
+};
 
 use crate::app::agent::LlmProvider;
 use crate::config::PeriConfig;
@@ -140,7 +145,10 @@ async fn handle_request(
                 },
             );
             info!(session_id = %session_id, "ACP session created");
-            let resp = NewSessionResponse::new(SessionId::new(&*session_id));
+            let resp = NewSessionResponse::new(SessionId::new(&*session_id))
+                .modes(build_mode_state(&cfg.permission_mode))
+                .models(build_model_state(&cfg.provider, &cfg.peri_config))
+                .config_options(build_config_options(&cfg.peri_config));
             serde_json::to_value(resp)
                 .map_err(|e| AcpError::new(-32603, format!("Serialize failed: {e}")))
         }
@@ -337,21 +345,29 @@ async fn handle_request(
         }
 
         "session/set_model" => {
-            let alias = params.get("model").and_then(|v| v.as_str()).unwrap_or("");
+            // ACP standard: { sessionId, modelId }
+            let model_id = params
+                .get("modelId")
+                .and_then(|v| v.as_str())
+                .or_else(|| params.get("model").and_then(|v| v.as_str()))
+                .unwrap_or("");
             let mut provider = cfg.provider.write();
-            let new_provider = LlmProvider::from_config_for_alias(&cfg.peri_config.read(), alias)
-                .unwrap_or_else(|| provider.clone());
-            info!(alias = %alias, model = %new_provider.model_name(), "Model changed");
+            let new_provider =
+                LlmProvider::from_config_for_alias(&cfg.peri_config.read(), model_id)
+                    .unwrap_or_else(|| provider.clone());
+            info!(model_id = %model_id, model = %new_provider.model_name(), "Model changed");
             *provider = new_provider;
             Ok(json!({ "status": "ok" }))
         }
 
         "session/set_mode" => {
-            let mode_str = params
-                .get("mode")
+            // ACP standard: { sessionId, modeId }
+            let mode_id = params
+                .get("modeId")
                 .and_then(|v| v.as_str())
+                .or_else(|| params.get("mode").and_then(|v| v.as_str()))
                 .unwrap_or("default");
-            let mode = match mode_str {
+            let mode = match mode_id {
                 "dont_ask" => PermissionMode::DontAsk,
                 "accept_edit" => PermissionMode::AcceptEdit,
                 "auto" => PermissionMode::AutoMode,
@@ -359,7 +375,36 @@ async fn handle_request(
                 _ => PermissionMode::Default,
             };
             cfg.permission_mode.store(mode);
-            info!(mode = %mode_str, "Permission mode changed");
+            info!(mode_id = %mode_id, "Permission mode changed");
+            Ok(json!({ "status": "ok" }))
+        }
+
+        "session/setConfigOption" => {
+            // ACP standard: { sessionId, configId, value }
+            let config_id = params
+                .get("configId")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            let value = params.get("value").and_then(|v| v.as_str()).unwrap_or("");
+            match config_id {
+                "thinking_effort" => {
+                    let mut cfg_guard = cfg.peri_config.write();
+                    let thinking = cfg_guard.config.thinking.get_or_insert_with(|| {
+                        crate::config::ThinkingConfig {
+                            enabled: true,
+                            budget_tokens: 8000,
+                            effort: "medium".to_string(),
+                            max_tokens: 32000,
+                        }
+                    });
+                    thinking.enabled = true;
+                    thinking.effort = value.to_string();
+                    info!(effort = %value, "Thinking effort changed via configOption");
+                }
+                _ => {
+                    debug!(config_id = %config_id, "Unknown config option");
+                }
+            }
             Ok(json!({ "status": "ok" }))
         }
 
@@ -510,4 +555,91 @@ fn convert_provider(p: &LlmProvider) -> peri_acp::provider::LlmProvider {
             thinking: convert_thinking(thinking),
         },
     }
+}
+
+// ── ACP standard state builders ────────────────────────────────────────────────
+
+fn build_mode_state(pm: &SharedPermissionMode) -> SessionModeState {
+    let current = pm.load();
+    let current_id = match current {
+        PermissionMode::Default => "default",
+        PermissionMode::DontAsk => "dont_ask",
+        PermissionMode::AcceptEdit => "accept_edit",
+        PermissionMode::AutoMode => "auto",
+        PermissionMode::Bypass => "bypass",
+    };
+    let all_modes = vec![
+        SessionMode::new(SessionModeId::new("default"), "Default")
+            .description("All sensitive tools require approval"),
+        SessionMode::new(SessionModeId::new("dont_ask"), "Don't Ask")
+            .description("Default deny all bash"),
+        SessionMode::new(SessionModeId::new("accept_edit"), "Accept Edit")
+            .description("Allow filesystem edits"),
+        SessionMode::new(SessionModeId::new("auto"), "Auto Mode")
+            .description("LLM decides approval"),
+        SessionMode::new(SessionModeId::new("bypass"), "Bypass").description("Allow everything"),
+    ];
+    SessionModeState::new(SessionModeId::new(current_id), all_modes)
+}
+
+fn build_model_state(
+    provider: &RwLock<LlmProvider>,
+    peri_config: &RwLock<PeriConfig>,
+) -> SessionModelState {
+    let p = provider.read();
+    let cfg = peri_config.read();
+    let active_alias = cfg.config.active_alias.clone();
+
+    // Find the active provider's models
+    let active_provider = cfg.config.providers.iter().find(|prov| {
+        prov.id == cfg.config.active_provider_id || cfg.config.active_provider_id.is_empty()
+    });
+
+    let mut available = Vec::new();
+    if let Some(prov) = active_provider {
+        for alias in ["opus", "sonnet", "haiku"] {
+            if let Some(model_name) = prov.models.get_model(alias) {
+                if !model_name.is_empty() {
+                    available.push(ModelInfo::new(
+                        ModelId::new(alias.to_string()),
+                        format!("{} ({})", alias, model_name),
+                    ));
+                }
+            }
+        }
+    }
+    if available.is_empty() {
+        available.push(ModelInfo::new(
+            ModelId::new("current".to_string()),
+            p.model_name().to_string(),
+        ));
+    }
+
+    SessionModelState::new(ModelId::new(active_alias), available)
+}
+
+fn build_config_options(peri_config: &RwLock<PeriConfig>) -> Vec<SessionConfigOption> {
+    let cfg = peri_config.read();
+    let effort = cfg
+        .config
+        .thinking
+        .as_ref()
+        .map(|t| t.effort.as_str())
+        .unwrap_or("medium");
+
+    let thinking_options = vec![
+        SessionConfigSelectOption::new(SessionConfigValueId::new("low"), "Low".to_string()),
+        SessionConfigSelectOption::new(SessionConfigValueId::new("medium"), "Medium".to_string()),
+        SessionConfigSelectOption::new(SessionConfigValueId::new("high"), "High".to_string()),
+        SessionConfigSelectOption::new(SessionConfigValueId::new("xhigh"), "XHigh".to_string()),
+        SessionConfigSelectOption::new(SessionConfigValueId::new("max"), "Max".to_string()),
+    ];
+
+    vec![SessionConfigOption::select(
+        SessionConfigId::new("thinking_effort"),
+        "Thinking Effort",
+        SessionConfigValueId::new(effort),
+        SessionConfigSelectOptions::Ungrouped(thinking_options),
+    )
+    .category(SessionConfigOptionCategory::ThoughtLevel)]
 }
