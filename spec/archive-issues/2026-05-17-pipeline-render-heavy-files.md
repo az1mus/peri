@@ -1,3 +1,5 @@
+> 归档于 2026-05-18，原路径 spec/issues/2026-05-17-pipeline-render-heavy-files.md
+
 # Pipeline/渲染层大文件拆分：message_pipeline.rs + message_view.rs
 
 **状态**：Fixed

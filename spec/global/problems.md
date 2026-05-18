@@ -513,6 +513,7 @@
 
 ### SubAgent 并发
 - [并发 SubAgent 工具调用路由错误 + 死锁修复](domains/agent.md#issue_2026-05-16-concurrent-subagent-tool-call-routing-and-background) — agent
+- [多 Agent 工具调用串行执行而非并发](domains/agent.md#issue_2026-05-18-agent-tool-calls-execute-serially) — agent
 
 ### 通道容量
 - [并发 SubAgent 工具调用路由错误 + 死锁修复](domains/agent.md#issue_2026-05-16-concurrent-subagent-tool-call-routing-and-background) — agent
@@ -547,6 +548,156 @@
 ### 竞态条件
 - [Background task 完成后未触发 agent continuation（竞态条件）：pre_done_bg_completions 缓冲乱序到达](domains/agent.md#issue_2026-05-13-background-task-completion-race-condition) — agent
 
+### child_handler_factory
+- [多 Agent 工具调用串行执行而非并发](domains/agent.md#issue_2026-05-18-agent-tool-calls-execute-serially) — agent
+
+### tool_dispatch
+- [多 Agent 工具调用串行执行而非并发](domains/agent.md#issue_2026-05-18-agent-tool-calls-execute-serially) — agent
+
+### join_all
+- [多 Agent 工具调用串行执行而非并发](domains/agent.md#issue_2026-05-18-agent-tool-calls-execute-serially) — agent
+
+### session index 竞态
+- [分屏模式下非活跃 Session 命令浮层显示异常](domains/tui.md#issue_2026-05-12-split-session-command-hint-only-shows-active) — tui
+
+### 分屏
+- [分屏模式下非活跃 Session 命令浮层显示异常](domains/tui.md#issue_2026-05-12-split-session-command-hint-only-shows-active) — tui
+
+### 指示符号统一
+- [TUI 指示符号 ⏺ 与 ● 不统一，滚动条在部分终端有空隙](domains/tui.md#issue_2026-05-18-tui-dot-and-scrollbar-rendering) — tui
+
+### 滚动条 track
+- [TUI 指示符号 ⏺ 与 ● 不统一，滚动条在部分终端有空隙](domains/tui.md#issue_2026-05-18-tui-dot-and-scrollbar-rendering) — tui
+
+### box-drawing 字符
+- [TUI 指示符号 ⏺ 与 ● 不统一，滚动条在部分终端有空隙](domains/tui.md#issue_2026-05-18-tui-dot-and-scrollbar-rendering) — tui
+
+### mod.rs 内聚
+- [Mod.rs 子模块内聚度问题](domains/code-architecture.md#issue_2026-05-17-mod-rs-cohesion) — code-architecture
+
+### command 分组
+- [Mod.rs 子模块内聚度问题](domains/code-architecture.md#issue_2026-05-17-mod-rs-cohesion) — code-architecture
+
+### 插件懒初始化
+- [~/.claude 目录不存在时插件面板无法使用](domains/plugin.md#issue_2026-05-18-claude-dir-missing-plugin-panel-empty) — plugin
+
+### ~/.claude 自动创建
+- [~/.claude 目录不存在时插件面板无法使用](domains/plugin.md#issue_2026-05-18-claude-dir-missing-plugin-panel-empty) — plugin
+
+### marketplace 首次刷新
+- [~/.claude 目录不存在时插件面板无法使用](domains/plugin.md#issue_2026-05-18-claude-dir-missing-plugin-panel-empty) — plugin
+
+### std::mem::take
+- [分屏模式下非活跃 Session 命令浮层显示异常](domains/tui.md#issue_2026-05-12-split-session-command-hint-only-shows-active) — tui
+
+### ACP dispatch 拆分
+- [ACP dispatch.rs 请求分发逻辑过度集中（1044 行）](domains/acp.md#issue_2026-05-17-acp-dispatch-heavy-file) — acp
+
+### box-drawing 字符
+- [TUI 指示符号 ⏺ 与 ● 不统一，滚动条在部分终端有空隙](domains/tui.md#issue_2026-05-18-tui-dot-and-scrollbar-rendering) — tui
+
+### child_handler_factory
+- [多 Agent 工具调用串行执行而非并发](domains/agent.md#issue_2026-05-18-agent-tool-calls-execute-serially) — agent
+
+### command 分组
+- [Mod.rs 子模块内聚度问题：command/mod.rs + sync/mod.rs + panels/mod.rs + mcp/mod.rs](domains/code-architecture.md#issue_2026-05-17-mod-rs-cohesion) — code-architecture
+
+### CommandRegistry
+- [分屏模式下非活跃 Session 命令浮层显示异常](domains/tui.md#issue_2026-05-12-split-session-command-hint-only-shows-active) — tui
+
+### core/panel/session 组织
+- [Mod.rs 子模块内聚度问题：command/mod.rs + sync/mod.rs + panels/mod.rs + mcp/mod.rs](domains/code-architecture.md#issue_2026-05-17-mod-rs-cohesion) — code-architecture
+
+### GPU 终端兼容
+- [TUI 指示符号 ⏺ 与 ● 不统一，滚动条在部分终端有空隙](domains/tui.md#issue_2026-05-18-tui-dot-and-scrollbar-rendering) — tui
+
+### handler 分组
+- [ACP dispatch.rs 请求分发逻辑过度集中（1044 行）](domains/acp.md#issue_2026-05-17-acp-dispatch-heavy-file) — acp
+
+### initialize/session/prompt/permission
+- [ACP dispatch.rs 请求分发逻辑过度集中（1044 行）](domains/acp.md#issue_2026-05-17-acp-dispatch-heavy-file) — acp
+
+### join_all
+- [多 Agent 工具调用串行执行而非并发](domains/agent.md#issue_2026-05-18-agent-tool-calls-execute-serially) — agent
+
+### langfuse types 拆分
+- [langfuse-client/src/types.rs 所有类型定义集中（1008 行）](domains/langfuse.md#issue_2026-05-17-langfuse-types-monolithic) — langfuse
+
+### layout/event_handler 分离
+- [peri-tui/src/ui/main_ui.rs 主 UI 布局逻辑集中（852 行）](domains/tui.md#issue_2026-05-17-main-ui-heavy-file) — tui
+
+### marketplace 首次刷新
+- [~/.claude 目录不存在时插件面板 Discover/Marketplaces 视图无法使用](domains/plugin.md#issue_2026-05-18-claude-dir-missing-plugin-panel-empty) — plugin
+
+### message_pipeline 拆分
+- [Pipeline/渲染层大文件拆分：message_pipeline.rs + message_view.rs](domains/message-pipeline.md#issue_2026-05-17-pipeline-render-heavy-files) — message-pipeline
+
+### message_view 布局分离
+- [Pipeline/渲染层大文件拆分：message_pipeline.rs + message_view.rs](domains/message-pipeline.md#issue_2026-05-17-pipeline-render-heavy-files) — message-pipeline
+
+### middleware 拆分
+- [Middleware 层大文件：subagent/tool.rs + plugin/installer.rs + plugin/marketplace.rs](domains/code-architecture.md#issue_2026-05-17-middleware-heavy-files) — code-architecture
+
+### mod.rs 内聚
+- [Mod.rs 子模块内聚度问题：command/mod.rs + sync/mod.rs + panels/mod.rs + mcp/mod.rs](domains/code-architecture.md#issue_2026-05-17-mod-rs-cohesion) — code-architecture
+
+### PanelComponent
+- [Panel 文件过度肥大：mcp_panel.rs + login_panel.rs + setup_wizard.rs](domains/tui.md#issue_2026-05-17-panel-heavy-files) — tui
+
+### plugin/installer
+- [Middleware 层大文件：subagent/tool.rs + plugin/installer.rs + plugin/marketplace.rs](domains/code-architecture.md#issue_2026-05-17-middleware-heavy-files) — code-architecture
+
+### plugin/marketplace
+- [Middleware 层大文件：subagent/tool.rs + plugin/installer.rs + plugin/marketplace.rs](domains/code-architecture.md#issue_2026-05-17-middleware-heavy-files) — code-architecture
+
+### reconcile
+- [Pipeline/渲染层大文件拆分：message_pipeline.rs + message_view.rs](domains/message-pipeline.md#issue_2026-05-17-pipeline-render-heavy-files) — message-pipeline
+
+### session index 竞态
+- [分屏模式下非活跃 Session 命令浮层显示异常](domains/tui.md#issue_2026-05-12-split-session-command-hint-only-shows-active) — tui
+
+### state/ops/ui 三层分离
+- [Panel 文件过度肥大：mcp_panel.rs + login_panel.rs + setup_wizard.rs](domains/tui.md#issue_2026-05-17-panel-heavy-files) — tui
+
+### subagent/tool
+- [Middleware 层大文件：subagent/tool.rs + plugin/installer.rs + plugin/marketplace.rs](domains/code-architecture.md#issue_2026-05-17-middleware-heavy-files) — code-architecture
+
+### tool_dispatch
+- [多 Agent 工具调用串行执行而非并发](domains/agent.md#issue_2026-05-18-agent-tool-calls-execute-serially) — agent
+
+### trace/span/generation/score
+- [langfuse-client/src/types.rs 所有类型定义集中（1008 行）](domains/langfuse.md#issue_2026-05-17-langfuse-types-monolithic) — langfuse
+
+### view_model
+- [Pipeline/渲染层大文件拆分：message_pipeline.rs + message_view.rs](domains/message-pipeline.md#issue_2026-05-17-pipeline-render-heavy-files) — message-pipeline
+
+### ~/.claude 自动创建
+- [~/.claude 目录不存在时插件面板 Discover/Marketplaces 视图无法使用](domains/plugin.md#issue_2026-05-18-claude-dir-missing-plugin-panel-empty) — plugin
+
+### 主 UI 拆分
+- [peri-tui/src/ui/main_ui.rs 主 UI 布局逻辑集中（852 行）](domains/tui.md#issue_2026-05-17-main-ui-heavy-file) — tui
+
+### 分屏
+- [分屏模式下非活跃 Session 命令浮层显示异常](domains/tui.md#issue_2026-05-12-split-session-command-hint-only-shows-active) — tui
+
+### 命令浮层
+- [分屏模式下非活跃 Session 命令浮层显示异常](domains/tui.md#issue_2026-05-12-split-session-command-hint-only-shows-active) — tui
+
+### 插件懒初始化
+- [~/.claude 目录不存在时插件面板 Discover/Marketplaces 视图无法使用](domains/plugin.md#issue_2026-05-18-claude-dir-missing-plugin-panel-empty) — plugin
+
+### 指示符号统一
+- [TUI 指示符号 ⏺ 与 ● 不统一，滚动条在部分终端有空隙](domains/tui.md#issue_2026-05-18-tui-dot-and-scrollbar-rendering) — tui
+
+### 滚动条 track
+- [TUI 指示符号 ⏺ 与 ● 不统一，滚动条在部分终端有空隙](domains/tui.md#issue_2026-05-18-tui-dot-and-scrollbar-rendering) — tui
+
+### 面板拆分
+- [Panel 文件过度肥大：mcp_panel.rs + login_panel.rs + setup_wizard.rs](domains/tui.md#issue_2026-05-17-panel-heavy-files) — tui
+
+### 领域类型分离
+- [langfuse-client/src/types.rs 所有类型定义集中（1008 行）](domains/langfuse.md#issue_2026-05-17-langfuse-types-monolithic) — langfuse
+
 ## 更新记录
 
 - 2026-05-13: 首次创建，归档 22 个 issue，提取 14 条领域认知
@@ -554,5 +705,7 @@
 - 2026-05-15: 第三次归档，归档 8 个 issue，提取 7 条领域认知（agent 3 + code-architecture 2 + message-pipeline 2 + tui 1）
 - 2026-05-16: 第四次归档，归档 11 个 issue，提取 7 条领域认知（agent 6 + tui 1）
 - 2026-05-16: 第五次归档，归档 13 个 issue，提取 11 条领域认知（tui 10 + message-pipeline 1 + cli 1 + tools 1）
+- 2026-05-18: 归档 11 个 issue，新增 36 个新关键词条目（agent/tui/message-pipeline/acp/langfuse/code-architecture/plugin）
 - 2026-05-17: 归档 12 个 issue，新增 ACP 领域，22 个新关键词条目
 - 2026-05-17: 补充归档 2 个 Fixed issue（LLM 适配器模块化 + 后台任务竞态）
+- 2026-05-18: 归档 11 个 Fixed issue（agent 1 + tui 4 + acp 1 + langfuse 1 + message-pipeline 1 + plugin 1 + code-architecture 2），13 个新关键词条目

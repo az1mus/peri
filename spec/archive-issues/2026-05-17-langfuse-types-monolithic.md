@@ -1,3 +1,5 @@
+> 归档于 2026-05-18，原路径 spec/issues/2026-05-17-langfuse-types-monolithic.md
+
 # langfuse-client/src/types.rs 所有类型定义集中（1008 行）
 
 **状态**：Fixed

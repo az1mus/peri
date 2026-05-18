@@ -719,6 +719,48 @@ submit_message(text)
 **涉及文件:** peri-tui/src/app/setup_wizard.rs, peri-tui/src/ui/main_ui/popups/setup_wizard.rs, peri-tui/src/app/mod.rs
 **CLAUDE.md 链接:** false
 
+### issue_2026-05-12-split-session-command-hint-only-shows-active
+
+**摘要:** 分屏模式下非活跃 Session 命令浮层显示异常
+**状态:** Fixed
+**归档日期:** 2026-05-18
+**关键词:** std::mem::take, session index 竞态, 分屏, CommandRegistry, 命令浮层
+**问题本质:** `/split` 命令在 `dispatch` 期间改变了 `app.session_mgr.active`，导致 `std::mem::take` 归还模式将 CommandRegistry 归还到错误的 session。叠加渲染层 `if is_active` 守卫导致非活跃 session 完全不显示命令浮层。
+**通用模式:** 任何在 `dispatch` 期间可能改变 `app.session_mgr.active` 的命令都存在 session index 竞态风险。核心原则：在 take 前保存 index，归还时使用保存值。Hint 类渲染应无条件执行——数据隔离依赖 `render_session_column` 的临时 active 切换，视觉区分依赖 `is_active` 传参处理边框/光标。
+**涉及文件:** peri-tui/src/event.rs, peri-tui/src/ui/main_ui.rs
+**CLAUDE.md 链接:** true
+
+### issue_2026-05-18-tui-dot-and-scrollbar-rendering
+
+**摘要:** TUI 指示符号 ⏺ 与 ● 不统一，滚动条在部分终端有空隙
+**状态:** Fixed
+**归档日期:** 2026-05-18
+**关键词:** 指示符号统一, 滚动条 track, box-drawing 字符, GPU 终端兼容
+**问题本质:** ⏺ (U+23FA) 是录像按钮符号而非纯圆点，与 ● (U+25CF) 视觉不匹配。║ (U+2551) 在部分 GPU 终端的字体渲染中字符高度不足以完全填满字符格，导致滚动条 track 出现行列间空隙。
+**通用模式:** 终端渲染符号选择应优先使用语义精确的字符（纯圆点用 ● 而非构图混合符号），滚动条 track 用 █ (FULL BLOCK) 避免 box-drawing 字符的跨终端间距问题。
+**涉及文件:** peri-tui/src/ui/message_render.rs, peri-widgets/src/scrollable.rs
+**CLAUDE.md 链接:** false
+
+### issue_2026-05-17-panel-heavy-files
+
+**摘要:** Panel 文件过度肥大：mcp_panel.rs + login_panel.rs + setup_wizard.rs
+**状态:** Fixed
+**归档日期:** 2026-05-18
+**关键词:** 面板拆分, PanelComponent, state/ops/ui 三层分离
+**问题本质:** 纯代码组织优化，无深度技术认知
+**涉及文件:** peri-tui/src/app/mcp_panel.rs, peri-tui/src/app/setup_wizard.rs, peri-tui/src/app/login_panel.rs
+**CLAUDE.md 链接:** false
+
+### issue_2026-05-17-main-ui-heavy-file
+
+**摘要:** peri-tui/src/ui/main_ui.rs 主 UI 布局逻辑集中（852 行）
+**状态:** Fixed
+**归档日期:** 2026-05-18
+**关键词:** 主 UI 拆分, layout/event_handler 分离
+**问题本质:** 纯代码组织优化，无深度技术认知
+**涉及文件:** peri-tui/src/ui/main_ui.rs
+**CLAUDE.md 链接:** false
+
 ---
 
 ## 相关 Feature

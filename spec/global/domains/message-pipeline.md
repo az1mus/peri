@@ -164,6 +164,14 @@ reconcile_tail(round_start_vm_idx)
 **涉及文件:** peri-tui/src/app/message_pipeline.rs, peri-tui/src/app/message_pipeline_test.rs
 **CLAUDE.md 链接:** true
 
+### issue_2026-05-17-pipeline-render-heavy-files
+
+**摘要:** message_pipeline.rs（1067 行）和 message_view.rs（1061 行）拆分为子模块，Pipeline 按 transform/reconcile/view_model 分离，渲染层按 render/layout/scroll 分离
+**状态:** Fixed
+**归档日期:** 2026-05-18
+**涉及文件:** peri-tui/src/app/message_pipeline.rs, peri-tui/src/ui/message_view.rs
+**说明:** 纯代码组织优化（注意 TRAP 约束：Ephemeral VM 锚点机制、prefix_len vs round_start_vm_idx 维度区分、RebuildAll 只能在非 Pipeline 层触发），无领域认知提炼。
+
 ---
 
 ## 相关 Feature

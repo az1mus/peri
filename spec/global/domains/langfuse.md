@@ -133,6 +133,16 @@ new_thread() / open_thread():
 **归档:** [链接](../../archive/feature_20260330_F004_langfuse-client/)
 **归档日期:** 2026-04-27
 
+## Issue 经验附录
+
+### issue_2026-05-17-langfuse-types-monolithic
+
+**摘要:** langfuse-client/src/types.rs 所有类型定义集中在一个文件（1008 行），按领域拆分为 event/trace/span/generation/score/common
+**状态:** Fixed
+**归档日期:** 2026-05-18
+**涉及文件:** langfuse-client/src/types.rs, langfuse-client/src/lib.rs
+**说明:** 纯代码组织优化，无领域认知提炼。
+
 ---
 
 ## 相关 Feature

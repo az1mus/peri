@@ -1,3 +1,5 @@
+> 归档于 2026-05-18，原路径 spec/issues/2026-05-17-mod-rs-cohesion.md
+
 # Mod.rs 子模块内聚度问题：command/mod.rs + sync/mod.rs + panels/mod.rs + mcp/mod.rs
 
 **状态**：Fixed

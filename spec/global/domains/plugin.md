@@ -161,6 +161,21 @@ load_merged_config()
 **归档:** [链接](../../archive/feature_20260506_F001_plugin-marketplace-compat/)
 **归档日期:** 2026-05-13
 
+## Issue 经验附录
+
+### issue_2026-05-18-claude-dir-missing-plugin-panel-empty
+
+**摘要:** ~/.claude 目录不存在时插件面板 Discover/Marketplaces 视图无法使用
+**状态:** Fixed
+**归档日期:** 2026-05-18
+**关键词:** plugin, marketplace, 首次使用, 目录初始化, 容错
+**问题本质:** 当 ~/.claude 目录不存在时，marketplace 缓存目录不存在导致 try_load_cache() 返回 None，Discover 视图显示 "No plugins available"。虽然读取路径都返回默认值不崩溃，但终端用户首次使用时无法自然进入插件发现流程。
+**通用模式:** 懒加载目录结构时，需要在首次访问时主动创建必要子目录并触发初始数据拉取，而不能仅依赖读取路径的 None 容错。用户可见的"空面板"在语义上是误导性的——它暗示"系统正常但无数据"，而实际是"系统尚未初始化"。
+**架构影响:** 打开面板时自动创建 ~/.claude/plugins/ 必要子目录，为 official marketplace 触发首次后台刷新。
+**技术决策:** panel_ops.rs 的 open_plugin_panel() 中在加载缓存前检查并创建目录结构；首次加载时对官方 marketplace 自动触发 refresh。
+**涉及文件:** peri-middlewares/src/plugin/config.rs, peri-tui/src/app/panel_ops.rs, peri-tui/src/ui/main_ui/panels/plugin.rs, peri-middlewares/src/plugin/marketplace/manager.rs
+**CLAUDE.md 链接:** false
+
 ---
 
 ## 相关 Feature

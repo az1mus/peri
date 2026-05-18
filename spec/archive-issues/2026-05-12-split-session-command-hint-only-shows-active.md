@@ -1,3 +1,5 @@
+> 归档于 2026-05-18，原路径 spec/issues/2026-05-12-split-session-command-hint-only-shows-active.md
+
 # 分屏模式下非活跃 Session 命令浮层显示异常
 
 **状态**：Fixed

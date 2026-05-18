@@ -1,3 +1,5 @@
+> 归档于 2026-05-18，原路径 spec/issues/2026-05-17-main-ui-heavy-file.md
+
 # peri-tui/src/ui/main_ui.rs 主 UI 布局逻辑集中（852 行）
 
 **状态**：Fixed

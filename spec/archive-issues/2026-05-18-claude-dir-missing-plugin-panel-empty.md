@@ -1,3 +1,5 @@
+> 归档于 2026-05-18，原路径 spec/issues/2026-05-18-claude-dir-missing-plugin-panel-empty.md
+
 # ~/.claude 目录不存在时插件面板 Discover/Marketplaces 视图无法使用
 
 **状态**：Fixed

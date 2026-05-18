@@ -78,6 +78,27 @@
 **涉及文件:** 152 个 *_test.rs 文件，152 个源文件
 **CLAUDE.md 链接:** false
 
+### issue_2026-05-17-middleware-heavy-files
+
+**摘要:** peri-middlewares 下 3 个大文件拆分：subagent/tool.rs（1091 行→define/invoke/schema）、plugin/installer.rs（756 行→download/extract）、plugin/marketplace.rs（728 行→api/types）
+**状态:** Fixed
+**归档日期:** 2026-05-18
+**涉及文件:** peri-middlewares/src/subagent/tool.rs, peri-middlewares/src/plugin/installer.rs, peri-middlewares/src/plugin/marketplace.rs
+**说明:** 纯代码组织优化，无领域认知提炼。
+
+### issue_2026-05-17-mod-rs-cohesion
+
+**摘要:** 4 个 mod.rs 子模块数量超标，command/mod.rs 最严重（25 子模块）
+**状态:** Fixed
+**归档日期:** 2026-05-18
+**关键词:** mod.rs, 内聚度, 分组目录, command
+**问题本质:** command/mod.rs 25 子模块平铺，sync/mod.rs(13)、panels/mod.rs(11)、mcp/mod.rs(12) 接近阈值。子模块过多表明文件职责边界不清晰。
+**通用模式:** 子模块超过 15 个时考虑按功能维度分组到子目录（core/panel/session），降低单文件认知负担。mod.rs 应仅作为路由入口 + 公共导出，不应承载领域逻辑。
+**架构影响:** command/ 重组为 command/core/（基础命令）+ command/panel/（面板命令）+ command/session/（会话命令）三组。
+**技术决策:** 优先处理 command/mod.rs；其余 3 个暂未突破严重阈值，等需求驱动时再调整。
+**涉及文件:** peri-tui/src/command/mod.rs, peri-tui/src/sync/mod.rs, peri-tui/src/ui/main_ui/panels/mod.rs, peri-middlewares/src/mcp/mod.rs
+**CLAUDE.md 链接:** false
+
 ---
 
 ## 相关 Feature

@@ -1,3 +1,5 @@
+> 归档于 2026-05-18，原路径 spec/issues/2026-05-18-tui-dot-and-scrollbar-rendering.md
+
 # TUI 指示符号 ⏺ 与 ● 不统一，滚动条在部分终端有空隙
 
 **状态**：Fixed

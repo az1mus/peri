@@ -1,3 +1,5 @@
+> 归档于 2026-05-18，原路径 spec/issues/2026-05-17-panel-heavy-files.md
+
 # Panel 文件过度肥大：mcp_panel.rs + login_panel.rs + setup_wizard.rs
 
 **状态**：Fixed

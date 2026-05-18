@@ -45,6 +45,14 @@ ACP Client (IDE) → stdio → handle_initialize/session/new/load...
 **涉及文件:** peri-tui/src/acp/dispatch.rs
 **CLAUDE.md 链接:** false
 
+### issue_2026-05-17-acp-dispatch-heavy-file
+
+**摘要:** ACP dispatch.rs 请求分发逻辑过度集中（1044 行），14 个 pub 函数和所有 handler 实现集中在一个文件
+**状态:** Fixed
+**归档日期:** 2026-05-18
+**涉及文件:** peri-tui/src/acp/dispatch.rs
+**说明:** 纯代码组织优化——按 handler 分组拆分为子目录（initialize/session/prompt/permission/helpers），无领域认知提炼。
+
 ---
 
 ## 相关 Feature

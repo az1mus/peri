@@ -1,6 +1,8 @@
+> 归档于 2026-05-18，原路径 spec/issues/2026-05-18-agent-tool-calls-execute-serially.md
+
 # 多 Agent 工具调用串行执行而非并发
 
-**状态**：Open
+**状态**：Fixed
 **优先级**：中
 **创建日期**：2026-05-18
 **类型**：Bug
@@ -31,3 +33,15 @@
 
 - `peri-agent/src/agent/executor/tool_dispatch.rs`（L204-268）—— 工具执行调度逻辑，对 Agent 工具硬编码了串行 for 循环，未根据 `child_handler_factory` 是否存在判断是否可并发
 - `peri-middlewares/src/subagent/tool/define.rs`（L173-181）—— `with_child_handler_factory` 已提供每子 Agent 独立 event handler 的能力，意图就是消除锁竞争以支持并发，但调度层未感知此配置
+
+## 解决方案
+
+**提交**：`6de639b` — fix: restore concurrent Agent tool execution with per-child event handlers
+
+**根本原因**：提交 `c00335f` 为防止并发 SubAgent 死锁引入了串行执行。在三个死锁根因被独立修复后（LLM 流式取消支持 `tokio::select!`、4096 事件通道缓冲、`source_agent_id` 精确路由），串行限制不再必要。
+
+**具体变更**：
+
+1. **tool_dispatch.rs** — 移除 Agent 工具专门的串行执行路径，阶段二统一使用 `futures::future::join_all` 并发执行所有 ready_calls
+2. **TUI agent.rs** — 恢复 `child_handler_factory`，从 `child_event_tx` 构建工厂函数，传递给 `subagent.with_child_handler_factory()`
+3. **SubAgentTool::invoke** — 优先通过 `child_handler_factory(agent_id)` 创建 per-child event handler，避免共享 Langfuse Mutex 的锁竞争

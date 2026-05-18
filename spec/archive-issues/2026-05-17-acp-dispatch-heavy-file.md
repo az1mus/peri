@@ -1,3 +1,5 @@
+> 归档于 2026-05-18，原路径 spec/issues/2026-05-17-acp-dispatch-heavy-file.md
+
 # ACP dispatch.rs 请求分发逻辑过度集中（1044 行）
 
 **状态**：Fixed

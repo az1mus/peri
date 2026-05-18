@@ -1,3 +1,5 @@
+> 归档于 2026-05-18，原路径 spec/issues/2026-05-17-middleware-heavy-files.md
+
 # Middleware 层大文件：subagent/tool.rs + plugin/installer.rs + plugin/marketplace.rs
 
 **状态**：Fixed

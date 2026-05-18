@@ -500,6 +500,18 @@ launch_agent 工具调用
 **涉及文件:** peri-tui/src/app/agent_comm.rs, peri-tui/src/app/agent_events_bg.rs, peri-tui/src/app/agent_ops.rs, peri-tui/src/app/agent_submit.rs, peri-tui/src/app/agent_compact.rs, peri-tui/src/ui/headless_test.rs
 **CLAUDE.md 链接:** false
 
+### issue_2026-05-18-agent-tool-calls-execute-serially
+
+**摘要:** 多 Agent 工具调用串行执行而非并发
+**状态:** Fixed
+**归档日期:** 2026-05-18
+**关键词:** SubAgent 并发, child_handler_factory, tool_dispatch, join_all
+**问题本质:** 为防止并发 SubAgent 死锁而硬编码了 Agent 工具的串行执行循环。但在三个死锁根因（LLM 流式取消 tokio::select!、4096 事件通道缓冲、source_agent_id 精确路由）被独立修复后，串行限制不再必要。
+**通用模式:** 临时安全措施（串行化/锁）应有明确的前置条件检查和回退计划。当安全措施引入性能退化时，应追踪其依赖的前置条件修复进度，条件满足后立即移除。
+**架构影响:** child_handler_factory 模式使每个 SubAgent 获得独立 event handler，消除共享 Mutex 竞争，是实现多 SubAgent 真正并发的关键抽象。tool_dispatch 的统一 join_all 路径避免了对特定工具类型的特殊处理。
+**涉及文件:** peri-agent/src/agent/executor/tool_dispatch.rs, peri-middlewares/src/subagent/tool/define.rs, peri-tui/src/app/agent.rs
+**CLAUDE.md 链接:** true
+
 ---
 
 ## 相关 Feature
