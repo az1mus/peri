@@ -3065,6 +3065,7 @@ dependencies = [
  "aes-gcm",
  "agent-client-protocol",
  "agent-client-protocol-schema",
+ "agent-client-protocol-tokio",
  "anyhow",
  "arboard",
  "async-trait",

@@ -1,9 +1,8 @@
-//! ACP Server — spawned as a tokio task in main.rs === Step 6-a.
+//! ACP Server — transport-agnostic request handler.
 //!
-//! Receives prompt requests via [`MpscServerTransport`], builds and executes
-//! ReAct agents, and pushes [`SessionUpdate`] notifications back through the
-//! transport. Replaces the direct `run_universal_agent()` call from
-//! `agent_submit.rs`.
+//! Accepts any [`AcpTransport`] implementation (mpsc for TUI, stdio for IDE),
+//! builds and executes ReAct agents, and pushes [`SessionUpdate`] notifications
+//! back through the transport.
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -13,17 +12,20 @@ use serde_json::{json, Value};
 use tracing::{error, info, warn};
 
 use peri_acp::broker::AcpTransportBroker;
-use peri_acp::event::map_executor_to_updates;
+use peri_acp::event::{map_executor_to_peri_notifications, map_executor_to_updates};
 use peri_acp::prompt::{build_system_prompt, PromptFeatures};
-use peri_acp::transport::mpsc::MpscServerTransport;
 use peri_acp::transport::types::{AcpError, IncomingMessage};
-use peri_acp::transport::AcpTransport as _;
 use peri_agent::agent::events::{AgentEvent as ExecutorEvent, AgentEventHandler, FnEventHandler};
 use peri_agent::agent::react::AgentInput;
 use peri_agent::agent::state::AgentState;
 use peri_agent::agent::AgentCancellationToken;
 use peri_agent::messages::BaseMessage;
 use peri_middlewares::prelude::*;
+
+use agent_client_protocol::schema::{
+    AgentCapabilities, InitializeResponse, NewSessionResponse, PromptResponse, ProtocolVersion,
+    SessionId, StopReason,
+};
 
 use crate::app::agent::LlmProvider;
 use crate::config::PeriConfig;
@@ -57,9 +59,11 @@ pub struct AcpServerConfig {
     pub thread_store: Arc<dyn peri_agent::thread::ThreadStore>,
 }
 
-/// Main ACP server loop. Spawned via `tokio::spawn` in `run_app()`.
-pub async fn run_acp_server(transport: MpscServerTransport, cfg: AcpServerConfig) {
-    let transport = Arc::new(transport);
+/// Main ACP server loop. Accepts any `AcpTransport` (mpsc for TUI, stdio for IDE).
+pub async fn run_acp_server(
+    transport: Arc<dyn peri_acp::transport::AcpTransport>,
+    cfg: AcpServerConfig,
+) {
     let mut sessions: HashMap<String, SessionState> = HashMap::new();
     let mut session_counter: u64 = 0;
 
@@ -103,9 +107,21 @@ async fn handle_request(
     cfg: &AcpServerConfig,
     sessions: &mut HashMap<String, SessionState>,
     counter: &mut u64,
-    transport: &Arc<MpscServerTransport>,
+    transport: &Arc<dyn peri_acp::transport::AcpTransport>,
 ) -> Result<Value, AcpError> {
     match method {
+        "initialize" => {
+            let version = params
+                .get("protocolVersion")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(1);
+            info!(protocol_version = %version, "ACP initialize");
+            let resp = InitializeResponse::new(ProtocolVersion::V1)
+                .agent_capabilities(AgentCapabilities::new());
+            serde_json::to_value(resp)
+                .map_err(|e| AcpError::new(-32603, format!("Serialize failed: {e}")))
+        }
+
         "session/new" => {
             let cwd = params
                 .get("cwd")
@@ -124,7 +140,9 @@ async fn handle_request(
                 },
             );
             info!(session_id = %session_id, "ACP session created");
-            Ok(json!({ "session_id": session_id }))
+            let resp = NewSessionResponse::new(SessionId::new(&*session_id));
+            serde_json::to_value(resp)
+                .map_err(|e| AcpError::new(-32603, format!("Serialize failed: {e}")))
         }
 
         "session/prompt" => {
@@ -208,25 +226,41 @@ async fn handle_request(
                 warn!(session_id = %sid, "ACP pump: started");
                 while let Some(exec_event) = event_rx.recv().await {
                     event_count += 1;
-                    let event_value = match serde_json::to_value(&exec_event) {
-                        Ok(v) => v,
-                        Err(e) => {
-                            error!(event_count = event_count, error = %e, "ACP pump: serialize failed");
-                            continue;
+
+                    // 检查是否有 peri/* 自定义通知映射
+                    let peri_notifs = map_executor_to_peri_notifications(&exec_event);
+
+                    // 仅不含 peri/* 映射的事件才发送 notifications/agent_event（向后兼容）
+                    if peri_notifs.is_empty() {
+                        let event_value = match serde_json::to_value(&exec_event) {
+                            Ok(v) => v,
+                            Err(e) => {
+                                error!(event_count = event_count, error = %e, "ACP pump: serialize failed");
+                                continue;
+                            }
+                        };
+                        let agent_event_params = json!({
+                            "session_id": sid,
+                            "event": event_value,
+                        });
+                        if let Err(e) = transport_clone
+                            .send_notification("notifications/agent_event", agent_event_params)
+                            .await
+                        {
+                            error!(event_count = event_count, error = %e, "ACP pump: send agent_event failed");
+                            break;
                         }
-                    };
-                    let agent_event_params = json!({
-                        "session_id": sid,
-                        "event": event_value,
-                    });
-                    if let Err(e) = transport_clone
-                        .send_notification("notifications/agent_event", agent_event_params)
-                        .await
-                    {
-                        error!(event_count = event_count, error = %e, "ACP pump: send agent_event failed");
-                        break;
                     }
 
+                    // 发送 peri/* 自定义通知
+                    for (method, mut payload) in peri_notifs {
+                        if let serde_json::Value::Object(ref mut map) = payload {
+                            map.insert("session_id".to_string(), json!(sid));
+                        }
+                        let _ = transport_clone.send_notification(method, payload).await;
+                    }
+
+                    // 标准 ACP SessionUpdate（所有事件共用）
                     let updates = map_executor_to_updates(&exec_event, context_window_u32);
                     for update in updates {
                         let payload = match serde_json::to_value(&update) {
@@ -295,7 +329,9 @@ async fn handle_request(
                 Err(e) => error!(session_id = %session_id, error = %e, "Agent execution failed"),
             }
 
-            Ok(json!({ "status": "completed" }))
+            let resp = PromptResponse::new(StopReason::EndTurn);
+            serde_json::to_value(resp)
+                .map_err(|e| AcpError::new(-32603, format!("Serialize failed: {e}")))
         }
 
         "session/set_model" => {
@@ -344,7 +380,7 @@ async fn handle_notification(
 // ── Bridge: convert TUI types → peri-acp types for build_agent ───────────────
 
 #[allow(clippy::too_many_arguments)]
-fn build_agent_bridge(
+pub fn build_agent_bridge(
     provider: &LlmProvider,
     cwd: &str,
     system_prompt: String,

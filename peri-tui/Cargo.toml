@@ -42,6 +42,7 @@ peri-widgets = { path = "../peri-widgets", features = ["markdown-highlight"] }
 peri-acp = { path = "../peri-acp" }
 agent-client-protocol = { version = "0.11", features = ["unstable"] }
 agent-client-protocol-schema = { version = "0.12", features = ["unstable_elicitation"] }
+agent-client-protocol-tokio = "0.11"
 unicode-width = "0.2"
 unicode-segmentation = "1"
 reqwest.workspace = true

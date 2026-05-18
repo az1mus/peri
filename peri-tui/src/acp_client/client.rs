@@ -29,6 +29,12 @@ pub enum AcpNotification {
     Other { msg: String },
     /// Agent execution completed (synthetic notification from ACP server).
     AgentDone { session_id: String },
+    /// A `notifications/peri/*` custom notification (SubAgent, Compact, LSP, etc.)
+    Peri {
+        session_id: String,
+        method: String,
+        params: Value,
+    },
 }
 
 /// TUI-side client that owns the ACP transport and routes notifications.
@@ -137,12 +143,28 @@ impl AcpTuiClient {
                             .and_then(|v| v.as_str())
                             .unwrap_or("")
                             .to_string();
-                        debug!(
+                        warn!(
                             session_id = %session_id,
                             total_events = event_count,
-                            "ACP client pump: received agent_event_done"
+                            "ACP client pump: received agent_event_done — sending AgentDone"
                         );
-                        let _ = notification_tx.send(AcpNotification::AgentDone { session_id });
+                        let send_result =
+                            notification_tx.send(AcpNotification::AgentDone { session_id });
+                        warn!(
+                            send_ok = send_result.is_ok(),
+                            "ACP client pump: AgentDone sent to notification_tx"
+                        );
+                    } else if method.starts_with("notifications/peri/") {
+                        let session_id = params
+                            .get("session_id")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("")
+                            .to_string();
+                        let _ = notification_tx.send(AcpNotification::Peri {
+                            session_id,
+                            method,
+                            params,
+                        });
                     } else {
                         let _ = notification_tx.send(AcpNotification::Other {
                             msg: format!("notification: {method}"),

@@ -1,13 +1,15 @@
-//! Event mapping from ExecutorEvent to ACP SessionUpdate.
+//! Event mapping from ExecutorEvent to ACP SessionUpdate and peri/* custom notifications.
 //!
 //! Translates peri-agent executor events into standard ACP session notifications
-//! for consumption by TUI or other frontends.
+//! for consumption by TUI or other frontends, plus peri/* custom notifications
+//! for SubAgent, Compact, LSP, Background tasks, and Session lifecycle events.
 
 use agent_client_protocol::schema::{
     Content, ContentBlock, ContentChunk, SessionInfoUpdate, SessionUpdate, TextContent, ToolCall,
     ToolCallContent, ToolCallStatus, ToolCallUpdate, ToolCallUpdateFields, ToolKind, UsageUpdate,
 };
 use peri_agent::agent::events::AgentEvent as ExecutorEvent;
+use serde_json::json;
 
 /// 直接将 ExecutorEvent 映射为 ACP SessionUpdate（ACP 模式专用，无 TUI 依赖）
 ///
@@ -116,5 +118,87 @@ fn truncate_str(s: &str, max_len: usize) -> String {
     } else {
         let boundary = s.floor_char_boundary(max_len);
         format!("{}...", &s[..boundary])
+    }
+}
+
+// ── peri/* custom notification mapping ────────────────────────────────────────────
+
+/// 将 ExecutorEvent 映射为 `peri/*` 自定义通知列表。
+///
+/// 每元素为 `(&str, serde_json::Value)`，method 形如 `"notifications/peri/subagent/start"`。
+/// `session_id` 由调用方在发送前注入，不包含在此映射中。
+///
+/// 以下事件映射到 peri/*：
+/// - SubagentStarted → `notifications/peri/subagent/start`
+/// - SubagentStopped → `notifications/peri/subagent/end`
+/// - BackgroundTaskCompleted → `notifications/peri/background/completed`
+/// - CompactStarted → `notifications/peri/compact/start`
+/// - CompactCompleted → `notifications/peri/compact/end`
+/// - LspDiagnostics → `notifications/peri/lsp/diagnostics`
+/// - SessionEnded → `notifications/peri/session/ended`
+///
+/// 其余事件返回空 vec。
+pub fn map_executor_to_peri_notifications(
+    event: &ExecutorEvent,
+) -> Vec<(&'static str, serde_json::Value)> {
+    match event {
+        ExecutorEvent::SubagentStarted { agent_name } => {
+            vec![(
+                "notifications/peri/subagent/start",
+                json!({ "agent_name": agent_name }),
+            )]
+        }
+        ExecutorEvent::SubagentStopped {
+            agent_name,
+            result,
+            is_error,
+        } => {
+            vec![(
+                "notifications/peri/subagent/end",
+                json!({
+                    "agent_name": agent_name,
+                    "result": truncate_str(result, 500),
+                    "is_error": is_error,
+                }),
+            )]
+        }
+        ExecutorEvent::BackgroundTaskCompleted(r) => {
+            vec![(
+                "notifications/peri/background/completed",
+                json!({
+                    "task_id": r.task_id,
+                    "agent_name": r.agent_name,
+                    "prompt_summary": r.prompt_summary,
+                    "success": r.success,
+                    "output": r.output,
+                    "tool_calls_count": r.tool_calls_count,
+                    "duration_ms": r.duration_ms,
+                }),
+            )]
+        }
+        ExecutorEvent::CompactStarted => {
+            vec![("notifications/peri/compact/start", json!({}))]
+        }
+        ExecutorEvent::CompactCompleted => {
+            vec![("notifications/peri/compact/end", json!({}))]
+        }
+        ExecutorEvent::LspDiagnostics {
+            errors,
+            warnings,
+            files_with_errors,
+        } => {
+            vec![(
+                "notifications/peri/lsp/diagnostics",
+                json!({
+                    "errors": errors,
+                    "warnings": warnings,
+                    "files_with_errors": files_with_errors,
+                }),
+            )]
+        }
+        ExecutorEvent::SessionEnded => {
+            vec![("notifications/peri/session/ended", json!({}))]
+        }
+        _ => vec![],
     }
 }
