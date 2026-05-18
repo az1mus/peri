@@ -1,4 +1,5 @@
-use crate::plugin::config::{load_installed_plugins, load_plugin_manifest, save_installed_plugins};
+#[cfg(test)]
+use crate::plugin::config::{load_installed_plugins, save_installed_plugins};
 use crate::plugin::marketplace::read_manifest_from_path;
 #[allow(unused_imports)]
 use crate::plugin::types::{InstallScope, InstalledPlugin, InstalledPlugins};
