@@ -233,29 +233,28 @@ async fn handle_request(
                 while let Some(exec_event) = event_rx.recv().await {
                     event_count += 1;
 
-                    let peri_notifs = map_executor_to_peri_notifications(&exec_event);
-
-                    if peri_notifs.is_empty() {
-                        let event_value = match serde_json::to_value(&exec_event) {
-                            Ok(v) => v,
-                            Err(e) => {
-                                error!(event_count = event_count, error = %e, "ACP pump: serialize failed");
-                                continue;
-                            }
-                        };
-                        let agent_event_params = json!({
-                            "session_id": sid,
-                            "event": event_value,
-                        });
-                        if let Err(e) = transport_clone
-                            .send_notification("notifications/agent_event", agent_event_params)
-                            .await
-                        {
-                            error!(event_count = event_count, error = %e, "ACP pump: send agent_event failed");
-                            break;
+                    // All events go through agent_event path for TUI consumption
+                    let event_value = match serde_json::to_value(&exec_event) {
+                        Ok(v) => v,
+                        Err(e) => {
+                            error!(event_count = event_count, error = %e, "ACP pump: serialize failed");
+                            continue;
                         }
+                    };
+                    let agent_event_params = json!({
+                        "session_id": sid,
+                        "event": event_value,
+                    });
+                    if let Err(e) = transport_clone
+                        .send_notification("notifications/agent_event", agent_event_params)
+                        .await
+                    {
+                        error!(event_count = event_count, error = %e, "ACP pump: send agent_event failed");
+                        break;
                     }
 
+                    // peri/* notifications for auxiliary events (Compact, SessionEnded) — sent in addition
+                    let peri_notifs = map_executor_to_peri_notifications(&exec_event);
                     for (method, mut payload) in peri_notifs {
                         if let serde_json::Value::Object(ref mut map) = payload {
                             map.insert("session_id".to_string(), json!(sid));
