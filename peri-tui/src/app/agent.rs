@@ -330,6 +330,13 @@ pub(crate) fn build_bare_agent(cfg: BareAgentConfig) -> BareAgentOutput {
         .with_auto_compact_threshold(compact_config.auto_compact_threshold)
         .with_warning_threshold(compact_config.micro_compact_threshold);
 
+    // 将 Git Attribution 追加到系统提示词末尾（动态区域，不影响缓存前缀）
+    let attribution = peri_middlewares::GitAttributionMiddleware::attribution_text(&model_name);
+    let system_prompt = format!(
+        "{}\n\n## Git Attribution\n\nWhen creating git commits, append the following line to the commit message:\n\n```\n{}\n```\n\nThis tracks AI contributions and should always be included in commit messages for code you authored.",
+        system_prompt, attribution
+    );
+
     // 构建 ReActAgent
     let executor = ReActAgent::new(model)
         .max_iterations(500)

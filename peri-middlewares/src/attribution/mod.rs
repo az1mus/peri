@@ -1,7 +1,7 @@
 //! Git attribution 中间件。
 //!
-//! 追踪 Write/Edit 工具修改的文件，在 agent 执行前注入 Co-Authored-By 指令，
-//! 引导模型在 git commit 时自动追加署名 trailer。
+//! 追踪 Write/Edit 工具修改的文件，累积贡献字符数。
+//! Co-Authored-By 指令在 system prompt 构建时注入（`build_bare_agent`）。
 //!
 //! ## 钩子流程
 //!
@@ -9,7 +9,6 @@
 //! before_tool (Write/Edit) → 读取旧文件内容 → 存入 pending
 //!   → [工具执行]
 //! after_tool  (Write/Edit) → 读取新文件内容 → track_change()
-//! before_agent              → 注入 Co-Authored-By System 消息（仅首次）
 //! ```
 
 mod model_email;
@@ -25,14 +24,13 @@ use async_trait::async_trait;
 use peri_agent::agent::react::{ToolCall, ToolResult};
 use peri_agent::agent::state::State;
 use peri_agent::error::AgentResult;
-use peri_agent::messages::BaseMessage;
 use peri_agent::middleware::Middleware;
 
 /// Git 留名中间件
 ///
 /// 注册在 `FilesystemMiddleware` 之后，hook 其 Write/Edit 工具调用。
 /// `before_tool` 暂存旧文件内容，`after_tool` 计算贡献字符数。
-/// `before_agent` 注入 Co-Authored-By 指令到消息历史。
+/// Co-Authored-By 指令由 `build_bare_agent` 在 system prompt 中注入。
 pub struct GitAttributionMiddleware {
     state: Arc<Mutex<AttributionState>>,
     pending_old_content: Arc<Mutex<HashMap<String, String>>>,
@@ -46,8 +44,13 @@ impl GitAttributionMiddleware {
         }
     }
 
+    /// 生成 attribution 文本（静态方法，供 system prompt 构建使用）。
+    pub fn attribution_text(model_name: &str) -> String {
+        AttributionState::new(model_name.to_string()).co_authored_by()
+    }
+
     /// 获取当前 attribution text（用于调试）
-    pub fn attribution_text(&self) -> String {
+    pub fn current_attribution_text(&self) -> String {
         self.state.lock().unwrap().co_authored_by()
     }
 }
@@ -106,23 +109,8 @@ impl<S: State> Middleware<S> for GitAttributionMiddleware {
         Ok(())
     }
 
-    async fn before_agent(&self, state: &mut S) -> AgentResult<()> {
-        let attr_text = self.attribution_text();
-        let text = format!(
-            "## Git Attribution\n\nWhen creating git commits, append the following line to the commit message:\n\n```\n{}\n```\n\nThis tracks AI contributions and should always be included in commit messages for code you authored.",
-            attr_text
-        );
-
-        // 避免跨轮次重复注入：检查消息历史中是否已包含相同 System 消息
-        let already_injected = state.messages().iter().any(|m| {
-            m.is_system()
-                && m.content_blocks()
-                    .iter()
-                    .any(|b| matches!(b, peri_agent::messages::ContentBlock::Text { text } if text.contains("## Git Attribution")))
-        });
-        if !already_injected {
-            state.add_message(BaseMessage::system(text));
-        }
+    async fn before_agent(&self, _state: &mut S) -> AgentResult<()> {
+        // Attribution 指令已在 system prompt 中注入，无需再向消息历史写入。
         Ok(())
     }
 }
