@@ -443,7 +443,7 @@ async fn test_subagent_group_basic() {
         display: "ReadFile".into(),
         args: "src/main.rs".into(),
         input: serde_json::json!({"path": "src/main.rs"}),
-        source_agent_id: Some("code-reviewer".into()),
+        source_agent_id: Some("test-instance".into()),
     });
     app.push_agent_event(AgentEvent::ToolStart {
         tool_call_id: "t2".into(),
@@ -451,13 +451,13 @@ async fn test_subagent_group_basic() {
         display: "Bash".into(),
         args: "cargo test".into(),
         input: serde_json::json!({"command": "cargo test"}),
-        source_agent_id: Some("code-reviewer".into()),
+        source_agent_id: Some("test-instance".into()),
     });
     app.push_agent_event(AgentEvent::SubAgentEnd {
         result: "All tests passed, no issues found".into(),
         is_error: false,
         agent_id: Some("code-reviewer".into()),
-        instance_id: None,
+        instance_id: Some("test-instance".into()),
     });
     app.process_pending_events();
     app.flush_rebuild();
@@ -514,14 +514,14 @@ async fn test_subagent_group_sliding_window() {
             display: "ReadFile".into(),
             args: format!("file{}.rs", i),
             input: serde_json::json!({"path": format!("file{}.rs", i)}),
-            source_agent_id: Some("analyzer".into()),
+            source_agent_id: Some("test-instance".into()),
         });
     }
     app.push_agent_event(AgentEvent::SubAgentEnd {
         result: "analysis complete".into(),
         is_error: false,
         agent_id: Some("analyzer".into()),
-        instance_id: None,
+        instance_id: Some("test-instance".into()),
     });
     app.process_pending_events();
 
@@ -561,13 +561,13 @@ async fn test_subagent_group_assistant_chunk() {
     });
     app.push_agent_event(AgentEvent::AssistantChunk {
         chunk: "summary text here".into(),
-        source_agent_id: Some("writer".into()),
+        source_agent_id: Some("test-instance".into()),
     });
     app.push_agent_event(AgentEvent::SubAgentEnd {
         result: "Done writing".into(),
         is_error: false,
         agent_id: Some("writer".into()),
-        instance_id: None,
+        instance_id: Some("test-instance".into()),
     });
     app.process_pending_events();
 
@@ -2986,7 +2986,7 @@ async fn test_subagent_group_preserved_after_done_reconcile() {
         display: "Read".into(),
         args: "file.rs".into(),
         input: serde_json::json!({"file_path": "/tmp/file.rs"}),
-        source_agent_id: Some("code-reviewer".into()),
+        source_agent_id: Some("test-instance".into()),
     });
     app.process_pending_events();
     let _ = n1;
@@ -2997,7 +2997,7 @@ async fn test_subagent_group_preserved_after_done_reconcile() {
         name: "Read".into(),
         output: "file content".into(),
         is_error: false,
-        source_agent_id: Some("code-reviewer".into()),
+        source_agent_id: Some("test-instance".into()),
     });
     app.process_pending_events();
     let _ = n2;
@@ -3008,7 +3008,7 @@ async fn test_subagent_group_preserved_after_done_reconcile() {
         result: "review complete".into(),
         is_error: false,
         agent_id: Some("code-reviewer".into()),
-        instance_id: None,
+        instance_id: Some("test-instance".into()),
     });
     app.process_pending_events();
     let _ = n;

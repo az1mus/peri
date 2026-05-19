@@ -279,7 +279,7 @@ fn test_subagent_parallel_same_tool_matches_by_call_id() {
         display: "ReadFile".into(),
         args: "a.rs".into(),
         input: serde_json::json!({"file_path": "/tmp/a.rs"}),
-        source_agent_id: Some("test-agent".into()),
+        source_agent_id: Some("test-instance".into()),
     });
     let _ = pipeline.handle_event(AgentEvent::ToolStart {
         tool_call_id: "tc_b".into(),
@@ -287,7 +287,7 @@ fn test_subagent_parallel_same_tool_matches_by_call_id() {
         display: "ReadFile".into(),
         args: "b.rs".into(),
         input: serde_json::json!({"file_path": "/tmp/b.rs"}),
-        source_agent_id: Some("test-agent".into()),
+        source_agent_id: Some("test-instance".into()),
     });
 
     // ToolEnd 按不同顺序到达（tc_b 先完成）
@@ -296,14 +296,14 @@ fn test_subagent_parallel_same_tool_matches_by_call_id() {
         name: "Read".into(),
         output: "content of b".into(),
         is_error: false,
-        source_agent_id: Some("test-agent".into()),
+        source_agent_id: Some("test-instance".into()),
     });
     let _ = pipeline.handle_event(AgentEvent::ToolEnd {
         tool_call_id: "tc_a".into(),
         name: "Read".into(),
         output: "content of a".into(),
         is_error: false,
-        source_agent_id: Some("test-agent".into()),
+        source_agent_id: Some("test-instance".into()),
     });
 
     // 验证 recent_messages 中两个 ToolBlock 被正确更新
@@ -348,34 +348,34 @@ fn test_concurrent_subagents_route_by_source_agent_id() {
     // 启动两个并发 SubAgent
     let _ = pipeline.handle_event(AgentEvent::SubAgentStart {
         agent_id: "agent-a".into(),
-        instance_id: "test-instance".into(),
+        instance_id: "inst-a".into(),
         task_preview: "task a".into(),
         is_background: false,
     });
     let _ = pipeline.handle_event(AgentEvent::SubAgentStart {
         agent_id: "agent-b".into(),
-        instance_id: "test-instance".into(),
+        instance_id: "inst-b".into(),
         task_preview: "task b".into(),
         is_background: false,
     });
 
-    // Agent A 的 ToolStart → source_agent_id = Some("agent-a")
+    // Agent A 的 ToolStart → source_agent_id = instance_id
     let _ = pipeline.handle_event(AgentEvent::ToolStart {
         tool_call_id: "tc_a1".into(),
         name: "Read".into(),
         display: "Read".into(),
         args: "a.rs".into(),
         input: json!({"file_path": "/tmp/a.rs"}),
-        source_agent_id: Some("agent-a".into()),
+        source_agent_id: Some("inst-a".into()),
     });
-    // Agent B 的 ToolStart → source_agent_id = Some("agent-b")
+    // Agent B 的 ToolStart → source_agent_id = instance_id
     let _ = pipeline.handle_event(AgentEvent::ToolStart {
         tool_call_id: "tc_b1".into(),
         name: "Grep".into(),
         display: "Grep".into(),
         args: "pattern".into(),
         input: json!({"pattern": "fn main"}),
-        source_agent_id: Some("agent-b".into()),
+        source_agent_id: Some("inst-b".into()),
     });
 
     // 验证：agent-a 的 recent_messages 有 Read，agent-b 有 Grep
@@ -409,7 +409,7 @@ fn test_concurrent_subagents_route_by_source_agent_id() {
         name: "Read".into(),
         output: "content of a".into(),
         is_error: false,
-        source_agent_id: Some("agent-a".into()),
+        source_agent_id: Some("inst-a".into()),
     });
     // Agent B 的 ToolEnd
     let _ = pipeline.handle_event(AgentEvent::ToolEnd {
@@ -417,7 +417,7 @@ fn test_concurrent_subagents_route_by_source_agent_id() {
         name: "Grep".into(),
         output: "match in b".into(),
         is_error: false,
-        source_agent_id: Some("agent-b".into()),
+        source_agent_id: Some("inst-b".into()),
     });
 
     // 验证 ToolEnd 结果路由到正确的 SubAgent
@@ -457,17 +457,17 @@ fn test_concurrent_subagents_route_by_source_agent_id() {
     // AssistantChunk 也应精确路由
     let _ = pipeline.handle_event(AgentEvent::AssistantChunk {
         chunk: "chunk for a".into(),
-        source_agent_id: Some("agent-a".into()),
+        source_agent_id: Some("inst-a".into()),
     });
     let _ = pipeline.handle_event(AgentEvent::AssistantChunk {
         chunk: "chunk for b".into(),
-        source_agent_id: Some("agent-b".into()),
+        source_agent_id: Some("inst-b".into()),
     });
 
     let sub_a = pipeline
         .subagent_stack
         .iter()
-        .find(|s| s.agent_id == "agent-a")
+        .find(|s| s.instance_id == "inst-a")
         .unwrap();
     // agent-a 有 ToolBlock + AssistantBubble = 2 个
     assert_eq!(sub_a.recent_messages.len(), 2);
@@ -475,20 +475,20 @@ fn test_concurrent_subagents_route_by_source_agent_id() {
     let sub_b = pipeline
         .subagent_stack
         .iter()
-        .find(|s| s.agent_id == "agent-b")
+        .find(|s| s.instance_id == "inst-b")
         .unwrap();
     assert_eq!(sub_b.recent_messages.len(), 2);
 
-    // SubAgentEnd 带 agent_id 精确匹配
+    // SubAgentEnd 带 instance_id 精确匹配
     let _ = pipeline.handle_event(AgentEvent::SubAgentEnd {
         agent_id: Some("agent-a".into()),
-        instance_id: None,
+        instance_id: Some("inst-a".into()),
         result: "done a".into(),
         is_error: false,
     });
     let _ = pipeline.handle_event(AgentEvent::SubAgentEnd {
         agent_id: Some("agent-b".into()),
-        instance_id: None,
+        instance_id: Some("inst-b".into()),
         result: "done b".into(),
         is_error: false,
     });

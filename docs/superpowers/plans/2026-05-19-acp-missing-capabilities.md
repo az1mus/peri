@@ -48,12 +48,10 @@
 
 ```rust
 use agent_client_protocol::schema::{
-    AgentCapabilities, InitializeResponse, NewSessionResponse, PromptResponse, ProtocolVersion,
-    SessionCloseCapabilities, SessionForkCapabilities, SessionListCapabilities,
-    SessionResumeCapabilities, SessionId, SessionCapabilities,
-    SetSessionConfigOptionResponse, SetSessionModeResponse, SetSessionModelResponse,
-    StopReason, LoadSessionResponse, CloseSessionResponse, ResumeSessionResponse,
-    ListSessionsResponse, ForkSessionResponse, ListSessionEntry, SessionStatus,
+    AgentCapabilities, InitializeResponse, LoadSessionResponse, CloseSessionResponse,
+    ResumeSessionResponse, ListSessionsResponse, ForkSessionResponse, ProtocolVersion,
+    SessionCapabilities, SessionCloseCapabilities, SessionForkCapabilities,
+    SessionListCapabilities, SessionResumeCapabilities, SessionInfo,
 };
 ```
 
@@ -98,9 +96,6 @@ Co-Authored-By: deepseek-v4-pro <deepseek-ai@claude-code-best.win>"
         .get("cwd")
         .and_then(|v| v.as_str())
         .unwrap_or(".");
-
-    // 检查 session 是否已存在（幂等性）
-    let existing = sessions.contains_key(req_session_id);
 
     // 从 ThreadStore 加载历史消息
     let history = match cfg
@@ -183,6 +178,9 @@ Co-Authored-By: deepseek-v4-pro <deepseek-ai@claude-code-best.win>"
 - [ ] **Step 1: 添加 session/list 处理分支**
 
 ```rust
+use std::path::PathBuf;
+// ...
+
 "session/list" => {
     let threads = cfg
         .thread_store
@@ -195,7 +193,7 @@ Co-Authored-By: deepseek-v4-pro <deepseek-ai@claude-code-best.win>"
         .get("cwd")
         .and_then(|v| v.as_str());
 
-    let entries: Vec<ListSessionEntry> = threads
+    let entries: Vec<SessionInfo> = threads
         .into_iter()
         .filter(|t| {
             if let Some(cwd) = cwd_filter {
@@ -205,13 +203,12 @@ Co-Authored-By: deepseek-v4-pro <deepseek-ai@claude-code-best.win>"
             }
         })
         .map(|t| {
-            ListSessionEntry::new(
+            SessionInfo::new(
                 SessionId::new(t.id.clone()),
-                t.cwd.clone(),
-                t.title.as_deref().unwrap_or("Untitled"),
-                t.updated_at.to_rfc3339(),
+                PathBuf::from(t.cwd.clone()),
             )
-            .status(SessionStatus::Active)
+            .title(t.title.clone())
+            .updated_at(t.updated_at.to_rfc3339())
         })
         .collect();
 
@@ -440,42 +437,32 @@ Co-Authored-By: deepseek-v4-pro <deepseek-ai@claude-code-best.win>"
 
 ---
 
-### Task 7: UserMessageChunk 通知变体映射
+### Task 7: UserMessageChunk / AvailableCommandsUpdate — 低优先级通知变体
 
-**Files:**
-- Modify: `peri-acp/src/event/mapper.rs:7-12` (imports)、`:18` (match 函数开头)
+**Files:** 本期不修改代码，仅更新 issue 文档
 
-- [ ] **Step 1: 在 mapper.rs 中添加 UserMessageChunk 映射**
+- [ ] **Step 1: 分析实现前提**
 
-在 `map_executor_to_updates()` 函数的 match 块最前面插入新分支：
+`UserMessageChunk` 的用途是在 `session/load` 时将历史消息逐条流式发送给 Client，以模拟实时对话回放。本期 Task 2 的 `session/load` 仅将消息加载到内存中的 `SessionState.history`，未实现通知重放机制。
 
-```rust
-use agent_client_protocol::schema::{
-    ...
-    UserMessageChunk, ContentChunk, ...
-};
+`AvailableCommandsUpdate` 用于通知 Client 可用命令列表变更。本期无命令变更事件源，留待后续命令系统增强时实现。
+
+- [ ] **Step 2: 更新 issue 说明**
+
+在 `spec/issues/2026-05-19-acp-missing-capabilities.md` 底部追加：
+
+```
+> **2026-05-19 更新**: 核心 5 个 session 路由已在本期完成后实现。`UserMessageChunk` 依赖 session/load 通知重放机制，`AvailableCommandsUpdate` 依赖命令变更事件源，两项均属低优先级增强，留待后续。
 ```
 
-然后在 match 中添加（在 `TextChunk` 和 `AiReasoning` 之前插入）：
+- [ ] **Step 3: Commit（可选）**
 
-```rust
-// No-op for now. UserMessageChunk is sent during session/load history replay,
-// which is handled by the session/load route directly, not via ExecutorEvent.
+```bash
+git add spec/issues/2026-05-19-acp-missing-capabilities.md
+git commit -m "docs: clarify UserMessageChunk/AvailableCommandsUpdate deferred status
+
+Co-Authored-By: deepseek-v4-pro <deepseek-ai@claude-code-best.win>"
 ```
-
-实际上，`UserMessageChunk` 的映射不需要 ExecutorEvent 作为输入——它在 session/load 的历史重放过程中由服务器直接生成。但为了完整性，我们在 mapper 中保留一个占位符注释，确保未来如果需要从事件映射到 UserMessageChunk，可以在这里添加。
-
-**当前不需要修改 mapper.rs**——`session/load` 路由直接通过 `transport.send_notification()` 发送 `UserMessageChunk` 通知。但在 session/load 实现中需要注意：ACP 规范要求 session/load 必须流式发送整个对话历史，通过 `UserMessageChunk` 和 `AgentMessageChunk` 通知变体。
-
-- [ ] **Step 2: 在 session/load 路由中添加历史消息重放逻辑**
-
-修改 Task 2 中 `session/load` 分支，在返回响应前插入消息重放（伪代码）：
-
-实际上，用现有 `acp_server.rs` 架构不方便在 `handle_request` 中发送通知（`handle_request` 没有 transport 引用）。对于 session/load，当前阶段仅加载消息并返回响应，**消息重放留待后续 session/load 重放通知机制完善后实现**。
-
-- [ ] **Step 3: 更新 issue 状态**
-
-Task 7 完成后在 `spec/issues/2026-05-19-acp-missing-capabilities.md` 的 `available_commands_update` 后添加说明：`UserMessageChunk` 和 `AvailableCommandsUpdate` 属低优先级增强，当前阶段仅完成核心 5 个 session 路由。
 
 ### Task 8: 构建验证与清理
 
@@ -519,8 +506,8 @@ lefthook run pre-commit
 - `session/list` ✅ Task 3
 - `session/fork` ✅ Task 6
 - 能力声明缺失 ✅ Task 1
-- `user_message_chunk` ✅ Task 7 (占位 — 需 session/load 通知机制完善后实现)
-- `available_commands_update` ✅ Task 7 (低优先级，留待后续)
+- `user_message_chunk` ✅ Task 7 (低优先级，本期不实施)
+- `available_commands_update` ✅ Task 7 (低优先级，本期不实施)
 
 **2. Placeholder scan:** 无 TBD/TODO/implement later 类占位符。
 
