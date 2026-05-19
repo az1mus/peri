@@ -30,11 +30,13 @@ use peri_agent::thread::{ThreadId, ThreadMeta};
 use peri_middlewares::prelude::*;
 
 use agent_client_protocol::schema::{
-    AgentCapabilities, CloseSessionResponse, ForkSessionResponse, InitializeResponse,
-    ListSessionsResponse, LoadSessionResponse, NewSessionResponse, PromptResponse, ProtocolVersion,
+    AgentCapabilities, AvailableCommand, AvailableCommandsUpdate, CloseSessionResponse,
+    ConfigOptionUpdate, ForkSessionResponse, InitializeResponse, ListSessionsResponse,
+    LoadSessionResponse, NewSessionResponse, PromptCapabilities, PromptResponse, ProtocolVersion,
     ResumeSessionResponse, SessionCapabilities, SessionCloseCapabilities, SessionForkCapabilities,
-    SessionId, SessionInfo, SessionListCapabilities, SessionResumeCapabilities,
-    SetSessionConfigOptionResponse, SetSessionModeResponse, SetSessionModelResponse, StopReason,
+    SessionId, SessionInfo, SessionListCapabilities, SessionNotification,
+    SessionResumeCapabilities, SessionUpdate, SetSessionConfigOptionResponse,
+    SetSessionModeResponse, SetSessionModelResponse, StopReason,
 };
 
 use crate::app::agent::LlmProvider;
@@ -105,6 +107,7 @@ pub async fn run_acp_server(
                     let plugin_lsp_servers = cfg.plugin_lsp_servers.clone();
                     let thread_store = cfg.thread_store.clone();
                     let method_clone = method.clone();
+                    let prompt_session_id = extract_session_id(&params, "").to_string();
                     tokio::spawn(async move {
                         let result = if method_clone == "session/compact" {
                             execute_compact(
@@ -138,10 +141,16 @@ pub async fn run_acp_server(
                             .await
                         };
                         let _ = transport.send_response(id, result).await;
+                        // Send SessionInfoUpdate after prompt/compact completes
+                        if !prompt_session_id.is_empty() {
+                            send_session_info_update(transport.as_ref(), &prompt_session_id).await;
+                        }
                     });
                 } else {
                     let mut sessions = sessions.lock().await;
-                    let result = handle_request(&method, &params, &cfg, &mut sessions).await;
+                    let result =
+                        handle_request(&method, &params, &cfg, &mut sessions, transport.as_ref())
+                            .await;
                     let _ = transport.send_response(id, result).await;
                 }
             }
@@ -163,6 +172,7 @@ async fn handle_request(
     params: &Value,
     cfg: &AcpServerConfig,
     sessions: &mut HashMap<String, SessionState>,
+    transport: &dyn peri_acp::transport::AcpTransport,
 ) -> Result<Value, AcpError> {
     match method {
         "initialize" => {
@@ -173,6 +183,7 @@ async fn handle_request(
             info!(protocol_version = %version, "ACP initialize");
             let caps = AgentCapabilities::new()
                 .load_session(true)
+                .prompt_capabilities(PromptCapabilities::new())
                 .session_capabilities(
                     SessionCapabilities::new()
                         .list(SessionListCapabilities::new())
@@ -224,12 +235,14 @@ async fn handle_request(
                 .modes(modes)
                 .models(models)
                 .config_options(config_options);
+            send_available_commands_update(transport, &session_id).await;
             serde_json::to_value(resp)
                 .map_err(|e| AcpError::new(-32603, format!("Serialize failed: {e}")))
         }
 
         "session/set_model" => {
             let model_id = params.get("modelId").and_then(|v| v.as_str()).unwrap_or("");
+            let session_id = extract_session_id(params, "");
             let new_provider = {
                 let cfg = cfg.peri_config.read();
                 LlmProvider::from_config_for_alias(&cfg, model_id)
@@ -239,6 +252,7 @@ async fn handle_request(
                 *cfg.provider.write() = new_provider;
             }
             let resp = SetSessionModelResponse::new();
+            send_config_option_update(transport, session_id, cfg).await;
             serde_json::to_value(resp)
                 .map_err(|e| AcpError::new(-32603, format!("Serialize failed: {e}")))
         }
@@ -248,10 +262,12 @@ async fn handle_request(
                 .get("modeId")
                 .and_then(|v| v.as_str())
                 .unwrap_or("default");
+            let session_id = extract_session_id(params, "");
             let mode = parse_permission_mode(mode_id);
             cfg.permission_mode.store(mode);
             info!(mode_id = %mode_id, "Permission mode changed");
             let resp = SetSessionModeResponse::new();
+            send_config_option_update(transport, session_id, cfg).await;
             serde_json::to_value(resp)
                 .map_err(|e| AcpError::new(-32603, format!("Serialize failed: {e}")))
         }
@@ -261,6 +277,7 @@ async fn handle_request(
                 .get("configId")
                 .and_then(|v| v.as_str())
                 .unwrap_or("");
+            let session_id = extract_session_id(params, "");
             let value = params.get("value").and_then(|v| v.as_str()).unwrap_or("");
             match config_id {
                 "mode" => {
@@ -292,6 +309,7 @@ async fn handle_request(
                 build_config_options(&c, &p, cfg.permission_mode.load())
             };
             let resp = SetSessionConfigOptionResponse::new(config_options);
+            send_config_option_update(transport, session_id, cfg).await;
             serde_json::to_value(resp)
                 .map_err(|e| AcpError::new(-32603, format!("Serialize failed: {e}")))
         }
@@ -305,6 +323,7 @@ async fn handle_request(
                 .get("enabled")
                 .and_then(|v| v.as_bool())
                 .unwrap_or(true);
+            let session_id = extract_session_id(params, "");
             apply_thinking_effort(&cfg.peri_config, effort);
             {
                 let mut cfg_guard = cfg.peri_config.write();
@@ -319,6 +338,7 @@ async fn handle_request(
                 build_config_options(&c, &p, cfg.permission_mode.load())
             };
             let resp = SetSessionConfigOptionResponse::new(config_options);
+            send_config_option_update(transport, session_id, cfg).await;
             serde_json::to_value(resp)
                 .map_err(|e| AcpError::new(-32603, format!("Serialize failed: {e}")))
         }
@@ -531,6 +551,114 @@ fn handle_notification(method: &str, params: &Value, sessions: &HashMap<String, 
     }
 }
 
+// ── Notification helpers ───────────────────────────────────────────────────────
+
+/// Extract `sessionId` from JSON-RPC params, returning `default_value` if absent.
+fn extract_session_id<'a>(params: &'a Value, default_value: &'a str) -> &'a str {
+    params
+        .get("sessionId")
+        .or_else(|| params.get("session_id"))
+        .and_then(|v| v.as_str())
+        .unwrap_or(default_value)
+}
+
+/// Build the current set of config options and push a `ConfigOptionUpdate` notification.
+async fn send_config_option_update(
+    transport: &dyn peri_acp::transport::AcpTransport,
+    session_id: &str,
+    cfg: &AcpServerConfig,
+) {
+    if session_id.is_empty() {
+        return;
+    }
+    let config_options = {
+        let c = cfg.peri_config.read();
+        let p = cfg.provider.read();
+        build_config_options(&c, &p, cfg.permission_mode.load())
+    };
+    let update = SessionUpdate::ConfigOptionUpdate(ConfigOptionUpdate::new(config_options));
+    let notif = SessionNotification::new(SessionId::new(session_id.to_string()), update);
+    let payload = match serde_json::to_value(&notif) {
+        Ok(p) => p,
+        Err(e) => {
+            tracing::error!(error = %e, "Failed to serialize ConfigOptionUpdate notification");
+            return;
+        }
+    };
+    let _ = transport.send_notification("session/update", payload).await;
+}
+
+/// Push an `AvailableCommandsUpdate` notification for the given session.
+async fn send_available_commands_update(
+    transport: &dyn peri_acp::transport::AcpTransport,
+    session_id: &str,
+) {
+    if session_id.is_empty() {
+        return;
+    }
+    let commands = build_available_commands();
+    let update = SessionUpdate::AvailableCommandsUpdate(AvailableCommandsUpdate::new(commands));
+    let notif = SessionNotification::new(SessionId::new(session_id.to_string()), update);
+    let payload = match serde_json::to_value(&notif) {
+        Ok(p) => p,
+        Err(e) => {
+            tracing::error!(error = %e, "Failed to serialize AvailableCommandsUpdate notification");
+            return;
+        }
+    };
+    let _ = transport.send_notification("session/update", payload).await;
+}
+
+/// Push a `SessionInfoUpdate` notification after prompt/compact completes.
+async fn send_session_info_update(
+    transport: &dyn peri_acp::transport::AcpTransport,
+    session_id: &str,
+) {
+    use agent_client_protocol::schema::SessionInfoUpdate;
+    let info = SessionInfoUpdate::new().updated_at(chrono::Utc::now().to_rfc3339());
+    let update = SessionUpdate::SessionInfoUpdate(info);
+    let notif = SessionNotification::new(SessionId::new(session_id.to_string()), update);
+    let payload = match serde_json::to_value(&notif) {
+        Ok(p) => p,
+        Err(e) => {
+            tracing::error!(error = %e, "Failed to serialize SessionInfoUpdate notification");
+            return;
+        }
+    };
+    let _ = transport.send_notification("session/update", payload).await;
+}
+
+/// Build the list of available slash commands for ACP clients.
+fn build_available_commands() -> Vec<AvailableCommand> {
+    vec![
+        AvailableCommand::new("help", "Show available commands and their descriptions"),
+        AvailableCommand::new("clear", "Clear the current conversation"),
+        AvailableCommand::new(
+            "compact",
+            "Compress the conversation history to save context",
+        ),
+        AvailableCommand::new("context", "Display context usage / token statistics"),
+        AvailableCommand::new("cost", "Show token usage and estimated cost"),
+        AvailableCommand::new("model", "Switch the current LLM model"),
+        AvailableCommand::new("mode", "Switch the current permission mode"),
+        AvailableCommand::new("effort", "Configure LLM reasoning/thinking effort"),
+        AvailableCommand::new("loop", "Control agent iteration loop"),
+        AvailableCommand::new("history", "View and resume previous conversations"),
+        AvailableCommand::new("doctor", "Diagnose configuration and connection issues"),
+        AvailableCommand::new("mcp", "Manage MCP (Model Context Protocol) servers"),
+        AvailableCommand::new("hooks", "Manage Claude Code hooks"),
+        AvailableCommand::new("plugin", "Manage installed plugins"),
+        AvailableCommand::new("cron", "Manage scheduled/cron tasks"),
+        AvailableCommand::new("agents", "Manage sub-agent definitions"),
+        AvailableCommand::new("memory", "Manage persistent memory entries"),
+        AvailableCommand::new("login", "Configure authentication"),
+        AvailableCommand::new("split", "Manage split session layouts"),
+        AvailableCommand::new("rename", "Rename the current session"),
+        AvailableCommand::new("lang", "Switch display language / locale"),
+        AvailableCommand::new("exit", "Exit the application"),
+    ]
+}
+
 // ── Prompt execution (spawned into background task) ──────────────────────────
 
 #[allow(clippy::too_many_arguments)]
@@ -641,7 +769,12 @@ async fn execute_prompt(
         }
     }
 
-    let resp = PromptResponse::new(StopReason::EndTurn);
+    let acp_stop_reason = match result.stop_reason {
+        executor::PromptStopReason::Cancelled => StopReason::Cancelled,
+        executor::PromptStopReason::MaxTurnRequests => StopReason::MaxTurnRequests,
+        executor::PromptStopReason::EndTurn => StopReason::EndTurn,
+    };
+    let resp = PromptResponse::new(acp_stop_reason);
     serde_json::to_value(resp).map_err(|e| AcpError::new(-32603, format!("Serialize failed: {e}")))
 }
 

@@ -14,6 +14,7 @@ use peri_agent::agent::state::AgentState;
 use peri_agent::agent::token::ContextBudget;
 use peri_agent::agent::AgentCancellationToken;
 use peri_agent::agent::State;
+use peri_agent::error::AgentError;
 use peri_agent::interaction::UserInteractionBroker;
 use peri_agent::messages::BaseMessage;
 use tokio::sync::oneshot;
@@ -25,6 +26,17 @@ use crate::provider::LlmProvider;
 use crate::session::compact_runner::{self, HookContext};
 use crate::session::event_sink::EventSink;
 
+/// High-level reason why prompt execution stopped, used to derive ACP `StopReason`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PromptStopReason {
+    /// Normal completion — the agent finished its turn.
+    EndTurn,
+    /// The user cancelled via `session/cancel`.
+    Cancelled,
+    /// The agent reached the maximum number of iterations.
+    MaxTurnRequests,
+}
+
 /// Result of prompt execution.
 pub struct PromptResult {
     /// Updated message history after execution.
@@ -33,6 +45,8 @@ pub struct PromptResult {
     pub ok: bool,
     /// Whether a compact occurred during execution.
     pub compacted: bool,
+    /// Why the prompt execution stopped.
+    pub stop_reason: PromptStopReason,
 }
 
 /// Shared agent execution pipeline with auto-compact support.
@@ -200,12 +214,23 @@ pub async fn execute_prompt(
         }
 
         if !ok || cancel.is_cancelled() {
+            let stop_reason = if cancel.is_cancelled() {
+                PromptStopReason::Cancelled
+            } else if matches!(&result, Err(AgentError::MaxIterationsExceeded(_))) {
+                PromptStopReason::MaxTurnRequests
+            } else if matches!(&result, Err(AgentError::Interrupted)) {
+                PromptStopReason::Cancelled
+            } else {
+                PromptStopReason::EndTurn
+            };
+
             close_channel(&event_tx);
             wait_for_pump(pump_done_rx, &session_id).await;
             return PromptResult {
                 messages: agent_state.into_messages(),
                 ok,
                 compacted,
+                stop_reason,
             };
         }
 
@@ -273,6 +298,7 @@ pub async fn execute_prompt(
             messages,
             ok: true,
             compacted,
+            stop_reason: PromptStopReason::EndTurn,
         };
     }
 }

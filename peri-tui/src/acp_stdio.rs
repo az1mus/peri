@@ -75,6 +75,38 @@ impl peri_agent::interaction::UserInteractionBroker for StdioBroker {
 
 // ─── run_acp_stdio ───────────────────────────────────────────────────────
 
+/// Build the list of available slash commands for ACP stdio clients.
+fn build_stdio_available_commands() -> Vec<agent_client_protocol::schema::AvailableCommand> {
+    use agent_client_protocol::schema::AvailableCommand;
+    vec![
+        AvailableCommand::new("help", "Show available commands and their descriptions"),
+        AvailableCommand::new("clear", "Clear the current conversation"),
+        AvailableCommand::new(
+            "compact",
+            "Compress the conversation history to save context",
+        ),
+        AvailableCommand::new("context", "Display context usage / token statistics"),
+        AvailableCommand::new("cost", "Show token usage and estimated cost"),
+        AvailableCommand::new("model", "Switch the current LLM model"),
+        AvailableCommand::new("mode", "Switch the current permission mode"),
+        AvailableCommand::new("effort", "Configure LLM reasoning/thinking effort"),
+        AvailableCommand::new("loop", "Control agent iteration loop"),
+        AvailableCommand::new("history", "View and resume previous conversations"),
+        AvailableCommand::new("doctor", "Diagnose configuration and connection issues"),
+        AvailableCommand::new("mcp", "Manage MCP (Model Context Protocol) servers"),
+        AvailableCommand::new("hooks", "Manage Claude Code hooks"),
+        AvailableCommand::new("plugin", "Manage installed plugins"),
+        AvailableCommand::new("cron", "Manage scheduled/cron tasks"),
+        AvailableCommand::new("agents", "Manage sub-agent definitions"),
+        AvailableCommand::new("memory", "Manage persistent memory entries"),
+        AvailableCommand::new("login", "Configure authentication"),
+        AvailableCommand::new("split", "Manage split session layouts"),
+        AvailableCommand::new("rename", "Rename the current session"),
+        AvailableCommand::new("lang", "Switch display language / locale"),
+        AvailableCommand::new("exit", "Exit the application"),
+    ]
+}
+
 pub async fn run_acp_stdio(cwd: String) -> anyhow::Result<()> {
     let _telemetry = peri_agent::telemetry::init_tracing("peri-acp");
 
@@ -186,11 +218,12 @@ pub async fn run_acp_stdio(cwd: String) -> anyhow::Result<()> {
     });
 
     use agent_client_protocol::schema::{
-        AgentCapabilities, CancelNotification, InitializeRequest, InitializeResponse,
-        NewSessionRequest, NewSessionResponse, PromptRequest, PromptResponse, ProtocolVersion,
-        SessionId, SetSessionConfigOptionRequest, SetSessionConfigOptionResponse,
-        SetSessionModeRequest, SetSessionModeResponse, SetSessionModelRequest,
-        SetSessionModelResponse, StopReason,
+        AgentCapabilities, AvailableCommandsUpdate, CancelNotification, ConfigOptionUpdate,
+        InitializeRequest, InitializeResponse, NewSessionRequest, NewSessionResponse,
+        PromptCapabilities, PromptRequest, PromptResponse, ProtocolVersion, SessionId,
+        SessionInfoUpdate, SessionNotification, SessionUpdate, SetSessionConfigOptionRequest,
+        SetSessionConfigOptionResponse, SetSessionModeRequest, SetSessionModeResponse,
+        SetSessionModelRequest, SetSessionModelResponse, StopReason,
     };
     use agent_client_protocol::{Agent, Client, ConnectionTo};
     use agent_client_protocol_tokio::Stdio;
@@ -213,7 +246,10 @@ pub async fn run_acp_stdio(cwd: String) -> anyhow::Result<()> {
                 tracing::info!("ACP initialize");
                 responder.respond(
                     InitializeResponse::new(ProtocolVersion::V1)
-                        .agent_capabilities(AgentCapabilities::new()),
+                        .agent_capabilities(
+                            AgentCapabilities::new()
+                                .prompt_capabilities(PromptCapabilities::new()),
+                        ),
                 )
             },
             agent_client_protocol::on_receive_request!(),
@@ -222,7 +258,7 @@ pub async fn run_acp_stdio(cwd: String) -> anyhow::Result<()> {
         .on_receive_request(
             {
                 let ctx = ctx_clone.clone();
-                async move |req: NewSessionRequest, responder, _cx| {
+                async move |req: NewSessionRequest, responder, cx: ConnectionTo<Client>| {
                     let cwd_str = req.cwd.to_string_lossy().to_string();
                     let meta = peri_agent::thread::ThreadMeta::new(&cwd_str);
                     let thread_id = match ctx.thread_store.create_thread(meta).await {
@@ -259,12 +295,20 @@ pub async fn run_acp_stdio(cwd: String) -> anyhow::Result<()> {
                         let p = ctx.provider.read();
                         build_config_options(&c, &p, ctx.permission_mode.load())
                     };
-                    responder.respond(
+                    let _ = responder.respond(
                         NewSessionResponse::new(SessionId::new(&*sid))
                             .modes(modes)
                             .models(models)
                             .config_options(config_options),
-                    )
+                    );
+                    // Push AvailableCommandsUpdate notification
+                    let cmds = build_stdio_available_commands();
+                    let ac_notif = SessionNotification::new(
+                        SessionId::new(&*sid),
+                        SessionUpdate::AvailableCommandsUpdate(AvailableCommandsUpdate::new(cmds)),
+                    );
+                    let _ = cx.send_notification(ac_notif);
+                    Ok(())
                 }
             },
             agent_client_protocol::on_receive_request!(),
@@ -307,6 +351,7 @@ pub async fn run_acp_stdio(cwd: String) -> anyhow::Result<()> {
                         Arc::new(StdioBroker::new());
 
                     let event_sink = Arc::new(StdioEventSink::new(cx, req.session_id.clone()));
+                    let event_sink_for_notif = Arc::clone(&event_sink);
                     let provider_snapshot = ctx.provider.read().clone();
                     let peri_config_snapshot = Arc::new(ctx.peri_config.read().clone());
 
@@ -348,7 +393,16 @@ pub async fn run_acp_stdio(cwd: String) -> anyhow::Result<()> {
                         }
                     }
 
-                    let _ = responder.respond(PromptResponse::new(StopReason::EndTurn));
+                    let acp_stop_reason = match result.stop_reason {
+                        executor::PromptStopReason::Cancelled => StopReason::Cancelled,
+                        executor::PromptStopReason::MaxTurnRequests => StopReason::MaxTurnRequests,
+                        executor::PromptStopReason::EndTurn => StopReason::EndTurn,
+                    };
+                    let _ = responder.respond(PromptResponse::new(acp_stop_reason));
+                    // Send SessionInfoUpdate after prompt completes
+                    let info = SessionInfoUpdate::new()
+                        .updated_at(chrono::Utc::now().to_rfc3339());
+                    event_sink_for_notif.send_update(SessionUpdate::SessionInfoUpdate(info));
                     Ok(())
                 }
             },
@@ -358,11 +412,21 @@ pub async fn run_acp_stdio(cwd: String) -> anyhow::Result<()> {
         .on_receive_request(
             {
                 let ctx = ctx_clone.clone();
-                async move |req: SetSessionModeRequest, responder, _cx| {
+                async move |req: SetSessionModeRequest, responder, cx: ConnectionTo<Client>| {
                     let mode_id = req.mode_id.0.as_ref();
                     let mode = parse_permission_mode(mode_id);
                     ctx.permission_mode.store(mode);
                     tracing::info!(mode_id = %mode_id, "Permission mode changed");
+                    let config_options = {
+                        let c = ctx.peri_config.read();
+                        let p = ctx.provider.read();
+                        build_config_options(&c, &p, ctx.permission_mode.load())
+                    };
+                    let notif = SessionNotification::new(
+                        req.session_id.clone(),
+                        SessionUpdate::ConfigOptionUpdate(ConfigOptionUpdate::new(config_options)),
+                    );
+                    let _ = cx.send_notification(notif);
                     responder.respond(SetSessionModeResponse::new())
                 }
             },
@@ -372,7 +436,7 @@ pub async fn run_acp_stdio(cwd: String) -> anyhow::Result<()> {
         .on_receive_request(
             {
                 let ctx = ctx_clone.clone();
-                async move |req: SetSessionModelRequest, responder, _cx| {
+                async move |req: SetSessionModelRequest, responder, cx: ConnectionTo<Client>| {
                     let model_id = req.model_id.0.to_string();
                     let new_provider = {
                         let cfg = ctx.peri_config.read();
@@ -382,6 +446,16 @@ pub async fn run_acp_stdio(cwd: String) -> anyhow::Result<()> {
                         tracing::info!(model_id = %model_id, model = %new_provider.model_name(), "Model changed");
                         *ctx.provider.write() = new_provider;
                     }
+                    let config_options = {
+                        let c = ctx.peri_config.read();
+                        let p = ctx.provider.read();
+                        build_config_options(&c, &p, ctx.permission_mode.load())
+                    };
+                    let notif = SessionNotification::new(
+                        req.session_id.clone(),
+                        SessionUpdate::ConfigOptionUpdate(ConfigOptionUpdate::new(config_options)),
+                    );
+                    let _ = cx.send_notification(notif);
                     responder.respond(SetSessionModelResponse::new())
                 }
             },
@@ -391,7 +465,7 @@ pub async fn run_acp_stdio(cwd: String) -> anyhow::Result<()> {
         .on_receive_request(
             {
                 let ctx = ctx_clone.clone();
-                async move |req: SetSessionConfigOptionRequest, responder, _cx| {
+                async move |req: SetSessionConfigOptionRequest, responder, cx: ConnectionTo<Client>| {
                     let config_id = req.config_id.0.as_ref();
                     match &req.value {
                         agent_client_protocol_schema::SessionConfigOptionValue::ValueId { value } => {
@@ -433,6 +507,11 @@ pub async fn run_acp_stdio(cwd: String) -> anyhow::Result<()> {
                         let p = ctx.provider.read();
                         build_config_options(&cfg, &p, ctx.permission_mode.load())
                     };
+                    let notif = SessionNotification::new(
+                        req.session_id.clone(),
+                        SessionUpdate::ConfigOptionUpdate(ConfigOptionUpdate::new(config_options.clone())),
+                    );
+                    let _ = cx.send_notification(notif);
                     responder.respond(SetSessionConfigOptionResponse::new(config_options))
                 }
             },
