@@ -31,8 +31,9 @@ use peri_middlewares::prelude::*;
 
 use agent_client_protocol::schema::{
     AgentCapabilities, InitializeResponse, NewSessionResponse, PromptResponse, ProtocolVersion,
-    SessionId, SetSessionConfigOptionResponse, SetSessionModeResponse, SetSessionModelResponse,
-    StopReason,
+    SessionCapabilities, SessionCloseCapabilities, SessionForkCapabilities, SessionId,
+    SessionListCapabilities, SessionResumeCapabilities, SetSessionConfigOptionResponse,
+    SetSessionModeResponse, SetSessionModelResponse, StopReason,
 };
 
 use crate::app::agent::LlmProvider;
@@ -169,8 +170,16 @@ async fn handle_request(
                 .and_then(|v| v.as_u64())
                 .unwrap_or(1);
             info!(protocol_version = %version, "ACP initialize");
-            let resp = InitializeResponse::new(ProtocolVersion::V1)
-                .agent_capabilities(AgentCapabilities::new());
+            let caps = AgentCapabilities::new()
+                .load_session(true)
+                .session_capabilities(
+                    SessionCapabilities::new()
+                        .list(SessionListCapabilities::new())
+                        .close(SessionCloseCapabilities::new())
+                        .resume(SessionResumeCapabilities::new())
+                        .fork(SessionForkCapabilities::new()),
+                );
+            let resp = InitializeResponse::new(ProtocolVersion::V1).agent_capabilities(caps);
             serde_json::to_value(resp)
                 .map_err(|e| AcpError::new(-32603, format!("Serialize failed: {e}")))
         }
