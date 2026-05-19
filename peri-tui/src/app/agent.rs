@@ -155,7 +155,10 @@ pub(crate) fn map_executor_event(event: ExecutorEvent, cwd: &str) -> Option<Agen
             files_with_errors,
         },
         // SubAgent 生命周期事件 → 触发 spinner 更新 + 刷新显示
-        ExecutorEvent::SubagentStarted { agent_name } => AgentEvent::SubagentLifecycle {
+        ExecutorEvent::SubagentStarted {
+            agent_name,
+            instance_id: _,
+        } => AgentEvent::SubagentLifecycle {
             agent_name,
             started: true,
         },
@@ -163,6 +166,7 @@ pub(crate) fn map_executor_event(event: ExecutorEvent, cwd: &str) -> Option<Agen
             agent_name,
             result,
             is_error,
+            instance_id: _,
         } => AgentEvent::SubAgentEnd {
             agent_id: Some(agent_name),
             result,

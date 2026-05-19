@@ -81,12 +81,18 @@ pub enum AgentEvent {
     /// 后台 agent 任务完成（TUI 使用，用于空闲时通知）
     BackgroundTaskCompleted(BackgroundTaskResult),
     /// 子 agent 开始执行
-    SubagentStarted { agent_name: String },
+    SubagentStarted {
+        agent_name: String,
+        /// 唯一实例标识符（用于并发同类型 SubAgent 路由）
+        instance_id: String,
+    },
     /// 子 agent 执行完成
     SubagentStopped {
         agent_name: String,
         result: String,
         is_error: bool,
+        /// 唯一实例标识符
+        instance_id: String,
     },
     /// Session 结束
     SessionEnded,

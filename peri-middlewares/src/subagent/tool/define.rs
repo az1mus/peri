@@ -247,6 +247,7 @@ impl SubAgentTool {
         if let Some(ref handler) = self.event_handler {
             handler.on_event(AgentEvent::SubagentStarted {
                 agent_name: "fork".to_string(),
+                instance_id: String::new(),
             });
         }
         self.fire_subagent_lifecycle_hook(
@@ -280,6 +281,7 @@ impl SubAgentTool {
                 agent_name: "fork".to_string(),
                 result: output_summary.clone(),
                 is_error: stopped_is_error,
+                instance_id: String::new(),
             });
         }
         self.fire_subagent_lifecycle_hook(
@@ -759,6 +761,7 @@ impl BaseTool for SubAgentTool {
         if let Some(ref handler) = self.event_handler {
             handler.on_event(AgentEvent::SubagentStarted {
                 agent_name: agent_id.clone(),
+                instance_id: String::new(),
             });
         }
         self.fire_subagent_lifecycle_hook(
@@ -800,6 +803,7 @@ impl BaseTool for SubAgentTool {
                 agent_name: agent_id.clone(),
                 result: output_summary.clone(),
                 is_error: stopped_is_error,
+                instance_id: String::new(),
             });
         }
         self.fire_subagent_lifecycle_hook(

@@ -53,13 +53,20 @@ fn test_llm_retrying_serde_roundtrip() {
 fn test_subagent_started_serde_roundtrip() {
     let ev = AgentEvent::SubagentStarted {
         agent_name: "test-agent".to_string(),
+        instance_id: "sub_test123".to_string(),
     };
     let json = serde_json::to_string(&ev).unwrap();
     assert!(json.contains(r#""type":"subagent_started""#));
     assert!(json.contains(r#""agent_name":"test-agent""#));
+    assert!(json.contains(r#""instance_id":"sub_test123""#));
     let deserialized: AgentEvent = serde_json::from_str(&json).unwrap();
-    if let AgentEvent::SubagentStarted { agent_name } = deserialized {
+    if let AgentEvent::SubagentStarted {
+        agent_name,
+        instance_id,
+    } = deserialized
+    {
         assert_eq!(agent_name, "test-agent");
+        assert_eq!(instance_id, "sub_test123");
     } else {
         panic!("Deserialized to wrong variant");
     }
@@ -71,6 +78,7 @@ fn test_subagent_stopped_serde_roundtrip() {
         agent_name: "test-agent".to_string(),
         result: "done".to_string(),
         is_error: false,
+        instance_id: "sub_test456".to_string(),
     };
     let json = serde_json::to_string(&ev).unwrap();
     assert!(json.contains(r#""type":"subagent_stopped""#));
@@ -79,11 +87,13 @@ fn test_subagent_stopped_serde_roundtrip() {
         agent_name,
         result,
         is_error,
+        instance_id,
     } = deserialized
     {
         assert_eq!(agent_name, "test-agent");
         assert_eq!(result, "done");
         assert!(!is_error);
+        assert_eq!(instance_id, "sub_test456");
     } else {
         panic!("Deserialized to wrong variant");
     }
