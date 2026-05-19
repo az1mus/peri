@@ -31,7 +31,7 @@ impl App {
             return (true, false, false);
         }
 
-        // Full compact: 更新内部状态，清理 pipeline 显示
+        // Full compact: 清理 pipeline + 更新内部状态
         let mut label_lines = vec![format!("✻ {}", self.services.lc.tr("app-compact-done"))];
         for f in &files {
             label_lines.push(format!("  ⎿  Read {} ({} lines)", f.path, f.lines));
@@ -41,10 +41,20 @@ impl App {
         }
         let compact_label = label_lines.join("\n");
 
-        // 更新内部状态消息（供下一次 prompt 使用），过滤掉 system 消息避免被渲染
+        // 更新内部状态消息（供下一次 prompt 使用）
         self.session_mgr.sessions[self.session_mgr.active]
             .agent
-            .agent_state_messages = messages;
+            .agent_state_messages = messages.clone();
+
+        // 清空 pipeline 内部状态 + 用压缩后消息恢复
+        self.session_mgr.sessions[self.session_mgr.active]
+            .messages
+            .pipeline
+            .clear();
+        self.session_mgr.sessions[self.session_mgr.active]
+            .messages
+            .pipeline
+            .restore_completed(messages);
 
         // 清除 ephemeral_notes，防止 compact 前的系统通知残留
         self.session_mgr.sessions[self.session_mgr.active]
@@ -52,7 +62,7 @@ impl App {
             .ephemeral_notes
             .clear();
 
-        // 清空 pipeline，只显示 compact 通知
+        // 清空 view_messages，只显示 compact 通知
         let view_msgs = vec![MessageViewModel::system(compact_label)];
         self.apply_pipeline_action(PipelineAction::RebuildAll {
             prefix_len: 0,
