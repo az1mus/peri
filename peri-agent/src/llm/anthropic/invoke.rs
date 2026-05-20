@@ -372,6 +372,165 @@ pub(super) fn build_request_body(
     body
 }
 
+/// 处理 Anthropic HTTP 响应：读取、解析、错误处理、LlmResponse 构建
+///
+/// 从 `invoke` 提取以保持 ~130 行 → ~45 行。
+async fn handle_anthropic_response(
+    resp: reqwest::Response,
+    model: &str,
+    msg_count: usize,
+    start: std::time::Instant,
+    body: &Value,
+) -> AgentResult<LlmResponse> {
+    let status = resp.status();
+    let header_request_id = resp
+        .headers()
+        .get("x-request-id")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+    let resp_text = resp.text().await.map_err(|e| {
+        tracing::error!(
+            provider = "anthropic",
+            model = %model,
+            status = %status,
+            elapsed_ms = start.elapsed().as_millis() as u64,
+            error = %e,
+            "LLM 读取响应体失败"
+        );
+        AgentError::LlmError(format!("读取响应体失败: {e}"))
+    })?;
+    let resp_json: Value = serde_json::from_str(&resp_text).map_err(|e| {
+        tracing::error!(
+            provider = "anthropic",
+            model = %model,
+            status = %status,
+            elapsed_ms = start.elapsed().as_millis() as u64,
+            error = %e,
+            "LLM 响应解析失败"
+        );
+        AgentError::LlmError(format!(
+            "解析响应失败: {e}\n原始响应({status}): {resp_text}"
+        ))
+    })?;
+
+    let request_id = header_request_id.or_else(|| resp_json["id"].as_str().map(|s| s.to_string()));
+
+    if !status.is_success() {
+        let msg = resp_json["error"]["message"]
+            .as_str()
+            .unwrap_or("未知错误")
+            .to_string();
+        let error_type = resp_json["error"]["type"].as_str().unwrap_or("unknown");
+
+        if status.as_u16() == 500 {
+            tracing::error!(
+                provider = "anthropic",
+                model = %model,
+                status = %status,
+                error_type,
+                error_message = %msg,
+                elapsed_ms = start.elapsed().as_millis() as u64,
+                request_messages = %serde_json::to_string(&body["messages"]).unwrap_or_else(|_| "serialize failed".into()),
+                "LLM API 500 错误（服务端 bug），已记录请求体"
+            );
+        } else {
+            tracing::error!(
+                provider = "anthropic",
+                model = %model,
+                status = %status,
+                error_type,
+                error_message = %msg,
+                elapsed_ms = start.elapsed().as_millis() as u64,
+                msg_count,
+                "LLM API 错误"
+            );
+        }
+        return Err(AgentError::LlmHttpError {
+            status: status.as_u16(),
+            message: format!("API 错误 {status}: {msg}"),
+        });
+    }
+
+    tracing::info!(
+        provider = "anthropic",
+        model = %model,
+        status = %status,
+        elapsed_ms = start.elapsed().as_millis() as u64,
+        msg_count,
+        input_tokens = resp_json["usage"]["input_tokens"].as_u64().unwrap_or(0),
+        output_tokens = resp_json["usage"]["output_tokens"].as_u64().unwrap_or(0),
+        cache_read = resp_json["usage"]["cache_read_input_tokens"].as_u64().unwrap_or(0),
+        cache_creation = resp_json["usage"]["cache_creation_input_tokens"].as_u64().unwrap_or(0),
+        "LLM invoke completed"
+    );
+
+    let stop_reason =
+        StopReason::from_anthropic(resp_json["stop_reason"].as_str().unwrap_or("end_turn"));
+
+    let raw_blocks = resp_json["content"]
+        .as_array()
+        .ok_or_else(|| AgentError::LlmError("响应缺少 content 字段".to_string()))?;
+
+    let (blocks, tool_calls) = parse_content_blocks(raw_blocks);
+
+    let message = if !tool_calls.is_empty() {
+        let content = if let [single] = blocks.as_slice() {
+            if let Some(text) = single.as_text() {
+                MessageContent::text(text)
+            } else {
+                MessageContent::Blocks(blocks)
+            }
+        } else {
+            MessageContent::Blocks(blocks)
+        };
+        BaseMessage::ai_with_tool_calls(content, tool_calls)
+    } else if let [single] = blocks.as_slice() {
+        if let Some(text) = single.as_text() {
+            BaseMessage::ai(text)
+        } else {
+            BaseMessage::ai(MessageContent::Blocks(blocks))
+        }
+    } else if blocks.is_empty() {
+        BaseMessage::ai("")
+    } else {
+        BaseMessage::ai(MessageContent::Blocks(blocks))
+    };
+
+    let usage = {
+        let raw_input = resp_json["usage"]["input_tokens"]
+            .as_u64()
+            .map(|v| v as u32)
+            .unwrap_or(0);
+        let output = resp_json["usage"]["output_tokens"]
+            .as_u64()
+            .map(|v| v as u32);
+        let cache_creation = resp_json["usage"]["cache_creation_input_tokens"]
+            .as_u64()
+            .map(|v| v as u32)
+            .unwrap_or(0);
+        let cache_read = resp_json["usage"]["cache_read_input_tokens"]
+            .as_u64()
+            .map(|v| v as u32)
+            .unwrap_or(0);
+        match (resp_json["usage"]["input_tokens"].as_u64(), output) {
+            (Some(_), Some(o)) => Some(crate::llm::types::TokenUsage {
+                input_tokens: raw_input + cache_creation + cache_read,
+                output_tokens: o,
+                cache_creation_input_tokens: Some(cache_creation),
+                cache_read_input_tokens: Some(cache_read),
+                request_id: request_id.clone(),
+            }),
+            _ => None,
+        }
+    };
+    Ok(LlmResponse {
+        message,
+        stop_reason,
+        usage,
+        request_id,
+    })
+}
+
 #[async_trait]
 impl BaseModel for super::ChatAnthropic {
     async fn invoke(&self, request: LlmRequest) -> AgentResult<LlmResponse> {
@@ -392,12 +551,9 @@ impl BaseModel for super::ChatAnthropic {
             .header("anthropic-version", "2023-06-01")
             .header("content-type", "application/json");
 
-        // Prompt Caching 需要 beta header
         if self.enable_cache {
             req = req.header("anthropic-beta", "prompt-caching-2024-07-31");
         }
-
-        // LiteLLM session tracking：通过 header 按 session 聚合多次请求
         if let Some(ref sid) = request.session_id {
             req = req.header("x-session-id", sid.as_str());
         }
@@ -420,165 +576,7 @@ impl BaseModel for super::ChatAnthropic {
             AgentError::LlmError(e.to_string())
         })?;
 
-        let status = resp.status();
-        // 先保存 header 中的 request_id，解析 body 后尝试用 body id 兜底
-        let header_request_id = resp
-            .headers()
-            .get("x-request-id")
-            .and_then(|v| v.to_str().ok())
-            .map(|s| s.to_string());
-        let resp_text = resp.text().await.map_err(|e| {
-            tracing::error!(
-                provider = "anthropic",
-                model = %self.model,
-                status = %status,
-                elapsed_ms = start.elapsed().as_millis() as u64,
-                error = %e,
-                "LLM 读取响应体失败"
-            );
-            AgentError::LlmError(format!("读取响应体失败: {e}"))
-        })?;
-        let resp_json: Value = serde_json::from_str(&resp_text).map_err(|e| {
-            tracing::error!(
-                provider = "anthropic",
-                model = %self.model,
-                status = %status,
-                elapsed_ms = start.elapsed().as_millis() as u64,
-                error = %e,
-                "LLM 响应解析失败"
-            );
-            AgentError::LlmError(format!(
-                "解析响应失败: {e}\n原始响应({status}): {resp_text}"
-            ))
-        })?;
-
-        // request_id 优先用 x-request-id header，无则回退到 body 中的 id 字段
-        let request_id =
-            header_request_id.or_else(|| resp_json["id"].as_str().map(|s| s.to_string()));
-
-        if !status.is_success() {
-            let msg = resp_json["error"]["message"]
-                .as_str()
-                .unwrap_or("未知错误")
-                .to_string();
-            let error_type = resp_json["error"]["type"].as_str().unwrap_or("unknown");
-
-            // 500 错误记录完整请求体以便排查服务端 bug
-            if status.as_u16() == 500 {
-                tracing::error!(
-                    provider = "anthropic",
-                    model = %self.model,
-                    status = %status,
-                    error_type,
-                    error_message = %msg,
-                    elapsed_ms = start.elapsed().as_millis() as u64,
-                    request_messages = %serde_json::to_string(&body["messages"]).unwrap_or_else(|_| "serialize failed".into()),
-                    "LLM API 500 错误（服务端 bug），已记录请求体"
-                );
-            } else {
-                tracing::error!(
-                    provider = "anthropic",
-                    model = %self.model,
-                    status = %status,
-                    error_type,
-                    error_message = %msg,
-                    elapsed_ms = start.elapsed().as_millis() as u64,
-                    msg_count,
-                    "LLM API 错误"
-                );
-            }
-            return Err(AgentError::LlmHttpError {
-                status: status.as_u16(),
-                message: format!("API 错误 {status}: {msg}"),
-            });
-        }
-
-        tracing::info!(
-            provider = "anthropic",
-            model = %self.model,
-            status = %status,
-            elapsed_ms = start.elapsed().as_millis() as u64,
-            msg_count,
-            input_tokens = resp_json["usage"]["input_tokens"].as_u64().unwrap_or(0),
-            output_tokens = resp_json["usage"]["output_tokens"].as_u64().unwrap_or(0),
-            cache_read = resp_json["usage"]["cache_read_input_tokens"].as_u64().unwrap_or(0),
-            cache_creation = resp_json["usage"]["cache_creation_input_tokens"].as_u64().unwrap_or(0),
-            "LLM invoke completed"
-        );
-
-        let stop_reason =
-            StopReason::from_anthropic(resp_json["stop_reason"].as_str().unwrap_or("end_turn"));
-
-        let raw_blocks = resp_json["content"]
-            .as_array()
-            .ok_or_else(|| AgentError::LlmError("响应缺少 content 字段".to_string()))?;
-
-        let (blocks, tool_calls) = parse_content_blocks(raw_blocks);
-
-        // 决定 content 形式
-        // - 只有单个纯文本且无工具调用 → 简单 Text（向后兼容）
-        // - 含 thinking / tool_use / 多 block → Blocks
-        let message = if !tool_calls.is_empty() {
-            let content = if let [single] = blocks.as_slice() {
-                if let Some(text) = single.as_text() {
-                    MessageContent::text(text)
-                } else {
-                    MessageContent::Blocks(blocks)
-                }
-            } else {
-                MessageContent::Blocks(blocks)
-            };
-            BaseMessage::ai_with_tool_calls(content, tool_calls)
-        } else if let [single] = blocks.as_slice() {
-            if let Some(text) = single.as_text() {
-                BaseMessage::ai(text)
-            } else {
-                BaseMessage::ai(MessageContent::Blocks(blocks))
-            }
-        } else if blocks.is_empty() {
-            BaseMessage::ai("")
-        } else {
-            // 含 thinking block 或多 block
-            BaseMessage::ai(MessageContent::Blocks(blocks))
-        };
-
-        let usage = {
-            let raw_input = resp_json["usage"]["input_tokens"]
-                .as_u64()
-                .map(|v| v as u32)
-                .unwrap_or(0);
-            let output = resp_json["usage"]["output_tokens"]
-                .as_u64()
-                .map(|v| v as u32);
-            // Anthropic API 缓存字段始终存在，但值可能为 null（无缓存活动时）。
-            // null 等价于 0，用 unwrap_or(0) 统一处理。
-            let cache_creation = resp_json["usage"]["cache_creation_input_tokens"]
-                .as_u64()
-                .map(|v| v as u32)
-                .unwrap_or(0);
-            let cache_read = resp_json["usage"]["cache_read_input_tokens"]
-                .as_u64()
-                .map(|v| v as u32)
-                .unwrap_or(0);
-            match (resp_json["usage"]["input_tokens"].as_u64(), output) {
-                (Some(_), Some(o)) => Some(crate::llm::types::TokenUsage {
-                    // 规范化：Anthropic 的 input_tokens 不含缓存 token，
-                    // 加上 cache_creation + cache_read 使其与 OpenAI 语义一致（总输入）。
-                    input_tokens: raw_input + cache_creation + cache_read,
-                    output_tokens: o,
-                    cache_creation_input_tokens: Some(cache_creation),
-                    cache_read_input_tokens: Some(cache_read),
-                    request_id: request_id.clone(),
-                }),
-                _ => None,
-            }
-        };
-        Ok(LlmResponse {
-            message,
-            stop_reason,
-            usage,
-            request_id,
-        })
+        handle_anthropic_response(resp, &self.model, msg_count, start, &body).await
     }
 
     fn provider_name(&self) -> &str {

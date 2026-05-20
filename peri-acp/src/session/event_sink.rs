@@ -13,7 +13,9 @@ use crate::event::{map_executor_to_peri_notifications, map_executor_to_updates};
 use crate::transport::AcpTransport;
 
 // Re-export SDK types used by StdioEventSink.
-pub use agent_client_protocol::schema::{SessionId as SdkSessionId, SessionNotification};
+pub use agent_client_protocol::schema::{
+    SessionId as SdkSessionId, SessionNotification, SessionUpdate,
+};
 pub use agent_client_protocol::{Client, ConnectionTo};
 
 /// Receives [`ExecutorEvent`]s produced during agent execution and routes them
@@ -123,6 +125,14 @@ pub struct StdioEventSink {
 impl StdioEventSink {
     pub fn new(cx: ConnectionTo<Client>, session_id: SdkSessionId) -> Self {
         Self { cx, session_id }
+    }
+
+    /// Send an arbitrary `SessionUpdate` notification through the SDK connection.
+    pub fn send_update(&self, update: SessionUpdate) {
+        let notif = SessionNotification::new(self.session_id.clone(), update);
+        if let Err(e) = self.cx.send_notification(notif) {
+            error!(error = %e, "StdioEventSink: failed to send SessionUpdate");
+        }
     }
 }
 
