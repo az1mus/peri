@@ -281,6 +281,12 @@ impl PanelComponent for LoginPanel {
         }
     }
 
+    fn set_scroll_offset(&mut self, offset: u16) {
+        if matches!(self.mode, LoginPanelMode::Browse) {
+            self.browse_list.set_scroll_offset(offset);
+        }
+    }
+
     fn handle_mouse(
         &mut self,
         mouse: ratatui::crossterm::event::MouseEvent,

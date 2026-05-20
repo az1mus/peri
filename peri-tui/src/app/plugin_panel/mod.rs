@@ -248,6 +248,10 @@ impl PanelComponent for PluginPanel {
         EventResult::Consumed
     }
 
+    fn set_scroll_offset(&mut self, offset: u16) {
+        self.set_scroll_offset(offset);
+    }
+
     fn desired_height(&self, screen_height: u16, _screen_width: u16) -> u16 {
         screen_height * 70 / 100
     }

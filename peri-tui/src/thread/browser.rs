@@ -340,6 +340,10 @@ impl PanelComponent for ThreadBrowser {
         EventResult::Consumed
     }
 
+    fn set_scroll_offset(&mut self, offset: u16) {
+        self.scroll_offset = offset;
+    }
+
     fn handle_mouse(
         &mut self,
         mouse: ratatui::crossterm::event::MouseEvent,

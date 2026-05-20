@@ -106,6 +106,13 @@ impl McpPanel {
             McpPanelView::ServerDetail { .. } => self.detail_scroll_offset,
         }
     }
+
+    pub fn set_scroll_offset(&mut self, offset: u16) {
+        match &mut self.view {
+            McpPanelView::ServerList => self.server_list.set_scroll_offset(offset),
+            McpPanelView::ServerDetail { .. } => self.detail_scroll_offset = offset,
+        }
+    }
 }
 
 #[cfg(test)]

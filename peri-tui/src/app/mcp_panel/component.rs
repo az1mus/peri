@@ -105,6 +105,10 @@ impl PanelComponent for McpPanel {
         EventResult::Consumed
     }
 
+    fn set_scroll_offset(&mut self, offset: u16) {
+        self.set_scroll_offset(offset);
+    }
+
     fn handle_mouse(
         &mut self,
         mouse: MouseEvent,

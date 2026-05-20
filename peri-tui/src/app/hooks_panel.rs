@@ -322,6 +322,10 @@ impl PanelComponent for HooksPanel {
         EventResult::Consumed
     }
 
+    fn set_scroll_offset(&mut self, offset: u16) {
+        self.list.set_scroll_offset(offset);
+    }
+
     fn handle_mouse(
         &mut self,
         mouse: MouseEvent,
