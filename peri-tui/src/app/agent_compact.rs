@@ -5,6 +5,8 @@ use peri_agent::messages::BaseMessage;
 
 impl App {
     pub(crate) fn handle_compact_started(&mut self) -> (bool, bool, bool) {
+        // 显示 loading 状态（spinner + 禁用输入）
+        self.set_loading(true);
         let vm = MessageViewModel::system(self.services.lc.tr("app-compact-started"));
         self.apply_pipeline_action(PipelineAction::AddMessage(vm));
         (true, false, false)
@@ -32,6 +34,8 @@ impl App {
         }
 
         // Full compact: 清理 pipeline + 更新内部状态
+        // 结束 loading 状态
+        self.set_loading(false);
         let mut label_lines = vec![format!("✻ {}", self.services.lc.tr("app-compact-done"))];
         for f in &files {
             label_lines.push(format!("  ⎿  Read {} ({} lines)", f.path, f.lines));
@@ -78,6 +82,7 @@ impl App {
     }
 
     pub(crate) fn handle_compact_error(&mut self, msg: String) -> (bool, bool, bool) {
+        self.set_loading(false);
         let vm = MessageViewModel::system(
             self.services
                 .lc

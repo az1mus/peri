@@ -161,6 +161,15 @@ impl App {
             }
         }
 
+        // 当 loading=true 时（如 compact 中），即使没有新事件也返回 true，
+        // 确保 spinner 动画持续渲染而非冻结
+        let loading = self.session_mgr.sessions[self.session_mgr.active]
+            .ui
+            .loading;
+        if loading {
+            return true;
+        }
+
         updated
     }
 

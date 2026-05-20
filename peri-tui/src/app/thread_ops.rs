@@ -187,7 +187,23 @@ impl App {
             .pipeline
             .restore_completed(base_msgs.clone());
 
+        let thread_id_str = thread_id.to_string();
         self.session_mgr.sessions[self.session_mgr.active].current_thread_id = Some(thread_id);
+        // 同步 ACP 服务器端 session 状态：确保 state.history 包含当前 thread 的消息，
+        // 这样 /compact 命令和后续 prompt 能正确读到完整历史
+        if let Some(ref acp_client) = self.acp_client {
+            let client = acp_client.clone();
+            let cwd = self.services.cwd.clone();
+            let model = self.services.model_name.clone();
+            tokio::task::block_in_place(|| {
+                tokio::runtime::Handle::current().block_on(async {
+                    match client.load_session(&thread_id_str, &cwd, Some(&model)).await {
+                        Ok(sid) => tracing::info!(session_id = %sid, "open_thread: ACP session synced"),
+                        Err(e) => tracing::warn!(error = %e, "open_thread: ACP session sync failed (compact may not work until first prompt)"),
+                    }
+                })
+            });
+        }
         self.session_mgr.sessions[self.session_mgr.active]
             .session_panels
             .close_if(PanelKind::ThreadBrowser);
