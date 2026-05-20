@@ -1,3 +1,4 @@
+use peri_widgets::ScrollbarMetrics;
 use tui_textarea::TextArea;
 
 use crate::app::text_selection::{PanelTextSelection, TextSelection};
@@ -26,6 +27,10 @@ pub struct UiState {
     pub scrollbar_dragging: bool,
     /// 消息区域滚动条的最大偏移量（内容高度 - 可见高度）
     pub scrollbar_max_offset: u16,
+    /// Panel scrollbar geometry for mouse interaction
+    pub panel_scrollbar_metrics: Option<ScrollbarMetrics>,
+    /// Whether user is currently dragging the panel scrollbar
+    pub panel_scrollbar_dragging: bool,
 }
 
 impl UiState {
@@ -51,6 +56,8 @@ impl UiState {
             panel_scroll_offset: 0,
             scrollbar_dragging: false,
             scrollbar_max_offset: 0,
+            panel_scrollbar_metrics: None,
+            panel_scrollbar_dragging: false,
         }
     }
 }

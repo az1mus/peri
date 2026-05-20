@@ -62,6 +62,117 @@ function parseEntryName(name) {
   };
 }
 
+// ─── 从 stream.log 提取数据 ──────────────────────────────────────
+
+function extractUsageFromStream(streamLog) {
+  if (!streamLog) return null;
+  let usage = null;
+  for (const line of streamLog.split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed.startsWith("data: ")) continue;
+    const dataStr = trimmed.slice(6);
+    if (dataStr === "[DONE]") continue;
+    try {
+      const data = JSON.parse(dataStr);
+      // message_delta carries final usage with output_tokens
+      if (data.type === "message_delta" && data.usage) {
+        const u = data.usage;
+        const rawInput = u.input_tokens || 0;
+        const cacheCreation = u.cache_creation_input_tokens || 0;
+        const cacheRead = u.cache_read_input_tokens || 0;
+        usage = {
+          input: rawInput + cacheCreation + cacheRead,
+          output: u.output_tokens || 0,
+          cacheCreation,
+          cacheRead,
+        };
+      }
+      // Fallback: message_start also has usage (output_tokens=0 initially)
+      if (data.type === "message_start" && data.message?.usage && !usage) {
+        const u = data.message.usage;
+        const rawInput = u.input_tokens || 0;
+        const cacheCreation = u.cache_creation_input_tokens || 0;
+        const cacheRead = u.cache_read_input_tokens || 0;
+        usage = {
+          input: rawInput + cacheCreation + cacheRead,
+          output: u.output_tokens || 0,
+          cacheCreation,
+          cacheRead,
+        };
+      }
+    } catch { /* skip */ }
+  }
+  return usage;
+}
+
+function extractStreamMetadata(streamLog, headers) {
+  // Extract route from headers.host
+  let route = "";
+  const host = headers["host"] || "";
+  if (host.includes("anthropic")) route = "anthropic";
+  else if (host.includes("openai")) route = "openai";
+  else if (host) route = host.replace(/^api\./, "").split(".")[0];
+
+  // Determine status from stream.log presence and content
+  let status = "";
+  let latency = "";
+  if (streamLog) {
+    if (streamLog.includes("message_stop")) {
+      status = "200";
+    } else if (streamLog.includes('"error"')) {
+      status = "error";
+    }
+    // Extract latency from content-length + timing heuristic (not available in stream-only logs)
+  }
+
+  return { route, status, latency };
+}
+
+function extractStreamResponse(streamLog) {
+  if (!streamLog) return null;
+  const content = [];  // text blocks
+  const thinking = []; // thinking blocks
+  const toolCalls = []; // tool_use blocks
+  let stopReason = "";
+  let model = "";
+
+  for (const line of streamLog.split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed.startsWith("data: ")) continue;
+    const dataStr = trimmed.slice(6);
+    if (dataStr === "[DONE]") continue;
+    try {
+      const data = JSON.parse(dataStr);
+      if (data.type === "message_start" && data.message) {
+        model = data.message.model || "";
+        stopReason = data.message.stop_reason || "";
+      }
+      if (data.type === "content_block_start") {
+        const block = data.content_block;
+        if (block?.type === "text") content.push("");
+        else if (block?.type === "thinking") thinking.push("");
+        else if (block?.type === "tool_use") toolCalls.push({ id: block.id, name: block.name, input: "" });
+      }
+      if (data.type === "content_block_delta") {
+        const delta = data.delta;
+        if (delta?.type === "text_delta" && content.length > 0) {
+          content[content.length - 1] += delta.text;
+        } else if (delta?.type === "thinking_delta" && thinking.length > 0) {
+          thinking[thinking.length - 1] += delta.thinking;
+        } else if (delta?.type === "input_json_delta" && toolCalls.length > 0) {
+          toolCalls[toolCalls.length - 1].input += delta.partial_json;
+        }
+      }
+      if (data.type === "message_delta") {
+        if (data.delta?.stop_reason) stopReason = data.delta.stop_reason;
+      }
+    } catch { /* skip */ }
+  }
+
+  return { content, thinking, toolCalls, stopReason, model };
+}
+
+
 function loadEntries(dataDir) {
   let dirs;
   try {
@@ -90,7 +201,7 @@ function loadEntries(dataDir) {
       body = reqRaw.body;
     }
 
-    // 从 log.txt 提取元信息
+    // 从 log.txt 提取元信息（旧格式），或从 headers/stream.log 推导（新格式）
     let route = "";
     let latency = "";
     let status = "";
@@ -101,11 +212,16 @@ function loadEntries(dataDir) {
       latency = latencyM ? latencyM[1] : "";
       const statusM = logTxt.match(/STATUS:\s*(\d+)/);
       status = statusM ? statusM[1] : "";
-      // 从 log.txt REQUEST HEADERS 段提取 x-session-id（作为 request.json headers 的 fallback）
       if (!headers["x-session-id"] && !headers["x-litellm-session-id"]) {
         const sessionM = logTxt.match(/^\s*x-session-id:\s*(.+)$/mi);
         if (sessionM) headers["x-session-id"] = sessionM[1].trim();
       }
+    }
+    if (!route || !status) {
+      const meta = extractStreamMetadata(streamLog, headers);
+      if (!route) route = meta.route;
+      if (!status) status = meta.status;
+      if (!latency) latency = meta.latency;
     }
 
     const sessionId = headers["x-session-id"] || headers["x-litellm-session-id"] || "";
@@ -115,12 +231,11 @@ function loadEntries(dataDir) {
     const hasStream = !!streamLog;
     const isStream = body?.stream === true;
 
-    // token usage — 区分 OpenAI 和 Anthropic 格式
+    // token usage — 优先从 response.json，fallback 到 stream.log
     let usage = null;
     if (resRaw?.usage) {
       const u = resRaw.usage;
       if (u.prompt_tokens !== undefined) {
-        // OpenAI 格式
         usage = {
           input: u.prompt_tokens || 0,
           output: u.completion_tokens || 0,
@@ -128,7 +243,6 @@ function loadEntries(dataDir) {
           cacheRead: u.prompt_tokens_details?.cached_tokens || 0,
         };
       } else {
-        // Anthropic 格式: input_tokens 不含缓存 token
         const rawInput = u.input_tokens || 0;
         const cacheCreation = u.cache_creation_input_tokens || 0;
         const cacheRead = u.cache_read_input_tokens || 0;
@@ -139,6 +253,9 @@ function loadEntries(dataDir) {
           cacheRead,
         };
       }
+    }
+    if (!usage && streamLog) {
+      usage = extractUsageFromStream(streamLog);
     }
 
     return {
@@ -223,7 +340,13 @@ function cmdShow(args) {
   console.log(`Session: ${e.sessionId || "(无)"}`);
   console.log(`状态: ${e.status}  延迟: ${e.latency}ms`);
   if (e.usage) {
-    console.log(`Token: input=${e.usage.input} output=${e.usage.output} cache_read=${e.usage.cacheRead}`);
+    console.log(`Token: input=${e.usage.input} output=${e.usage.output} cache_read=${e.usage.cacheRead} cache_creation=${e.usage.cacheCreation || 0}`);
+  }
+  if (e.body?.thinking) {
+    console.log(`Thinking: ${e.body.thinking.type} budget=${e.body.thinking.budget_tokens || "N/A"}`);
+  }
+  if (e.body?.output_config) {
+    console.log(`Output Config: ${JSON.stringify(e.body.output_config)}`);
   }
   console.log("═".repeat(72));
 
@@ -234,6 +357,16 @@ function cmdShow(args) {
 
   if (args.messages) {
     console.log("\n── Messages ──");
+    if (e.body?.system) {
+      const sys = e.body.system;
+      if (Array.isArray(sys)) {
+        sys.forEach((block, i) => {
+          console.log(`  S${i}. [system] ${truncStr(block.text || JSON.stringify(block), 120)}${block.cache_control ? " [cached]" : ""}`);
+        });
+      } else if (typeof sys === "string") {
+        console.log(`  S0. [system] ${truncStr(sys, 120)}`);
+      }
+    }
     if (e.body?.messages) {
       e.body.messages.forEach((m, i) => {
         const role = m.role || "?";
@@ -241,7 +374,8 @@ function cmdShow(args) {
         const toolCalls = m.tool_calls?.length ? ` [${m.tool_calls.length} tool_calls]` : "";
         console.log(`  ${i}. [${role}]${toolCalls} ${content}`);
       });
-    } else {
+    }
+    if (!e.body?.messages && !e.body?.system) {
       console.log("  (无消息)");
     }
   }
@@ -251,7 +385,8 @@ function cmdShow(args) {
     if (e.body?.tools) {
       e.body.tools.forEach((t, i) => {
         const name = t.function?.name || t.name || "?";
-        console.log(`  ${i}. ${name}`);
+        const cc = t.cache_control ? " [cached]" : "";
+        console.log(`  ${i}. ${name}${cc}`);
       });
       console.log(`  共 ${e.body.tools.length} 个工具`);
     } else {
@@ -271,26 +406,42 @@ function cmdShow(args) {
     });
   }
 
-  if (e.response && !args.stream && !args.body && !args.messages && !args.tools && !args.headers) {
+  if (!args.stream && !args.body && !args.messages && !args.tools && !args.headers) {
     // 默认显示响应摘要
     console.log("\n── Response ──");
-    if (e.response.choices?.[0]) {
-      const choice = e.response.choices[0];
-      console.log(`  finish_reason: ${choice.finish_reason}`);
-      if (choice.message?.content) {
-        console.log(`  content: ${truncStr(choice.message.content, 200)}`);
+    if (e.response) {
+      if (e.response.choices?.[0]) {
+        const choice = e.response.choices[0];
+        console.log(`  finish_reason: ${choice.finish_reason}`);
+        if (choice.message?.content) console.log(`  content: ${truncStr(choice.message.content, 200)}`);
+        if (choice.message?.tool_calls) console.log(`  tool_calls: ${choice.message.tool_calls.length} 个`);
+      } else if (e.response.content) {
+        const textParts = e.response.content.filter((c) => c.type === "text").map((c) => c.text);
+        console.log(`  content: ${truncStr(textParts.join(""), 200)}`);
+        console.log(`  stop_reason: ${e.response.stop_reason}`);
       }
-      if (choice.message?.tool_calls) {
-        console.log(`  tool_calls: ${choice.message.tool_calls.length} 个`);
+      if (e.response.error) console.log(`  error: ${JSON.stringify(e.response.error)}`);
+    } else if (e.streamLog) {
+      // 新格式：从 stream.log 提取响应
+      const streamResp = extractStreamResponse(e.streamLog);
+      if (streamResp) {
+        console.log(`  stop_reason: ${streamResp.stopReason}`);
+        if (streamResp.model) console.log(`  stream_model: ${streamResp.model}`);
+        if (streamResp.thinking.length > 0) {
+          const t = streamResp.thinking.join("\n");
+          console.log(`  thinking: ${truncStr(t, 200)}`);
+        }
+        if (streamResp.content.length > 0) {
+          const t = streamResp.content.join("\n");
+          console.log(`  content: ${truncStr(t, 200)}`);
+        }
+        if (streamResp.toolCalls.length > 0) {
+          console.log(`  tool_calls: ${streamResp.toolCalls.length} 个`);
+          streamResp.toolCalls.forEach((tc, i) => {
+            console.log(`    ${i}. ${tc.name} (${tc.id})`);
+          });
+        }
       }
-    } else if (e.response.content) {
-      // Anthropic 格式
-      const textParts = e.response.content.filter((c) => c.type === "text").map((c) => c.text);
-      console.log(`  content: ${truncStr(textParts.join(""), 200)}`);
-      console.log(`  stop_reason: ${e.response.stop_reason}`);
-    }
-    if (e.response.error) {
-      console.log(`  error: ${JSON.stringify(e.response.error)}`);
     }
   }
 }
@@ -318,6 +469,7 @@ function parseStreamLog(text) {
       // Anthropic stream format
       else if (data.type === "content_block_delta") {
         if (data.delta?.text) events.push({ type: "text", data: data.delta.text });
+        else if (data.delta?.thinking) events.push({ type: "thinking", data: data.delta.thinking });
         else if (data.delta?.partial_json) events.push({ type: "tool_input", data: data.delta.partial_json });
         else events.push({ type: data.type, data: data.delta });
       } else if (data.type === "message_start" || data.type === "message_delta") {

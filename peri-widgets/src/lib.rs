@@ -24,7 +24,7 @@ pub use list::{ListState, SelectableList};
 pub use list_overlay::{Anchor, ListOverlay, ListOverlayState, OverlayPosition};
 pub use message_block::{BlockRenderStrategy, MessageBlockState, MessageBlockWidget};
 pub use radio_group::{RadioGroup, RadioOption, RadioState};
-pub use scrollable::{unified_vertical_scrollbar, ScrollState, ScrollableArea};
+pub use scrollable::{unified_vertical_scrollbar, ScrollState, ScrollableArea, ScrollbarMetrics};
 pub use spinner::{SpinnerMode, SpinnerState, SpinnerWidget};
 pub use tab_bar::{TabBar, TabState, TabStyle};
 pub use theme::{DarkTheme, Theme};
