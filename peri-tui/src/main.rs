@@ -716,6 +716,9 @@ async fn run_app(
 }
 
 #[cfg(test)]
+mod cli_integration_test;
+
+#[cfg(test)]
 mod tests {
     use super::*;
 
