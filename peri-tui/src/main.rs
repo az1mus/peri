@@ -24,6 +24,7 @@ use std::sync::Arc;
 mod acp_stdio;
 mod cli_args;
 mod cli_plugin;
+mod cli_print;
 
 // ─── CLI 定义 ──────────────────────────────────────────────────────────────
 
@@ -216,6 +217,27 @@ fn main() -> Result<()> {
     inject_env_from_settings();
 
     let cli = Cli::parse();
+
+    // -p/--print 模式（优先级高于子命令）
+    if cli.print.is_some() {
+        let rt = tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()?;
+        return rt.block_on(cli_print::run_print(
+            cli.print.and_then(|o| o),
+            cli.output_format,
+            cli.max_turns,
+            cli.bare,
+            cli.model,
+            cli.effort,
+            cli.permission_mode,
+            cli.skip_permissions,
+            cli.allowed_tools.unwrap_or_default(),
+            cli.disallowed_tools.unwrap_or_default(),
+            cli.settings,
+            None,
+        ));
+    }
 
     match cli.command {
         None => run_tui(cli.approve),
