@@ -10,6 +10,10 @@ members = [
 ]
 resolver = "2"
 
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+
 [profile.release]
 # NOTE: "symbols" not "true" — Apple strip doesn't behave like GNU strip.
 #       "true" on macOS only strips debug info, leaving 8MB of symbol table.

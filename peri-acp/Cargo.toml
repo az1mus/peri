@@ -1,7 +1,7 @@
 [package]
 name = "peri-acp"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
 description = "ACP Agent service layer — Session management, Agent construction, Middleware chain, Transport abstraction"
 
 [lib]
