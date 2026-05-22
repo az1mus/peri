@@ -19,7 +19,7 @@
     async fn test_batcher_add_and_manual_flush() {
         let mut server = mockito::Server::new_async().await;
         let mock = server
-            .mock("POST", "/api/public/otel/v1/traces")
+            .mock("POST", "/api/public/ingestion")
             .with_status(200)
             .with_header("content-type", "application/json")
             .with_body("{}")
@@ -48,7 +48,7 @@
     async fn test_batcher_auto_flush_on_max_events() {
         let mut server = mockito::Server::new_async().await;
         let mock = server
-            .mock("POST", "/api/public/otel/v1/traces")
+            .mock("POST", "/api/public/ingestion")
             .with_status(200)
             .with_header("content-type", "application/json")
             .with_body("{}")
@@ -79,7 +79,7 @@
     async fn test_batcher_periodic_flush() {
         let mut server = mockito::Server::new_async().await;
         let mock = server
-            .mock("POST", "/api/public/otel/v1/traces")
+            .mock("POST", "/api/public/ingestion")
             .with_status(200)
             .with_header("content-type", "application/json")
             .with_body("{}")
@@ -123,7 +123,7 @@
     async fn test_batcher_backpressure_block() {
         let mut server = mockito::Server::new_async().await;
         let mock = server
-            .mock("POST", "/api/public/otel/v1/traces")
+            .mock("POST", "/api/public/ingestion")
             .with_status(200)
             .with_header("content-type", "application/json")
             .with_body("{}")
@@ -156,7 +156,7 @@
     async fn test_batcher_graceful_shutdown_on_drop() {
         let mut server = mockito::Server::new_async().await;
         let mock = server
-            .mock("POST", "/api/public/otel/v1/traces")
+            .mock("POST", "/api/public/ingestion")
             .with_status(200)
             .with_header("content-type", "application/json")
             .with_body("{}")
@@ -184,7 +184,7 @@
     async fn test_batcher_multiple_flush_cycles() {
         let mut server = mockito::Server::new_async().await;
         let mock = server
-            .mock("POST", "/api/public/otel/v1/traces")
+            .mock("POST", "/api/public/ingestion")
             .with_status(200)
             .with_header("content-type", "application/json")
             .with_body("{}")
@@ -217,7 +217,7 @@
     async fn test_batcher_handles_ingest_error() {
         let mut server = mockito::Server::new_async().await;
         let mock = server
-            .mock("POST", "/api/public/otel/v1/traces")
+            .mock("POST", "/api/public/ingestion")
             .with_status(500)
             .with_body("error")
             .expect(1)
@@ -246,7 +246,7 @@
     async fn test_batcher_with_large_batch() {
         let mut server = mockito::Server::new_async().await;
         let mock = server
-            .mock("POST", "/api/public/otel/v1/traces")
+            .mock("POST", "/api/public/ingestion")
             .with_status(200)
             .with_header("content-type", "application/json")
             .with_body("{}")
@@ -279,7 +279,7 @@
     async fn test_batcher_backpressure_drop_new() {
         let mut server = mockito::Server::new_async().await;
         let _mock = server
-            .mock("POST", "/api/public/otel/v1/traces")
+            .mock("POST", "/api/public/ingestion")
             .with_status(200)
             .with_header("content-type", "application/json")
             .with_body("{}")

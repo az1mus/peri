@@ -105,21 +105,24 @@ impl Batcher {
         }
     }
 
-    /// 执行一次 flush：将 buffer 中的事件通过 OTLP 端点发送到 Langfuse API
+    /// 执行一次 flush：将 buffer 中的事件通过原生 Ingestion 端点发送到 Langfuse API
     async fn do_flush(client: &LangfuseClient, buffer: &mut Vec<IngestionEvent>) {
         if buffer.is_empty() {
             return;
         }
 
         let events: Vec<IngestionEvent> = std::mem::take(buffer);
-        debug!("Batcher flushing {} events via OTLP", events.len());
+        debug!(
+            "Batcher flushing {} events via native ingestion",
+            events.len()
+        );
 
-        match client.ingest(events).await {
+        match client.ingest_native(events).await {
             Ok(()) => {
-                debug!("Batcher OTLP flush successful");
+                debug!("Batcher native ingestion flush successful");
             }
             Err(e) => {
-                error!("Batcher OTLP flush failed: {}", e);
+                error!("Batcher native ingestion flush failed: {}", e);
             }
         }
     }

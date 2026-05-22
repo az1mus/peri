@@ -137,7 +137,9 @@ function analyzeTrace(trace: any, observations: any[]): TraceAnalysis {
     totalOutput += outputTokens;
     totalCache += cacheRead;
     return {
-      model: g.providedModelName || g.internalModelId || g.model || "?",
+      model: g.providedModelName || g.internalModelId || g.model
+        || (g.metadata?.attributes?.["langfuse.observation.model.name"])
+        || "?",
       input: inputTokens,
       output: outputTokens,
       cacheRead,

@@ -8,6 +8,8 @@ use peri_agent::tools::ToolDefinition;
 
 use super::session::LangfuseSession;
 
+const VERSION: &str = env!("CARGO_PKG_VERSION");
+
 /// 工具调用的中间缓冲数据（start 时存储，end 时取出组合成完整 span-create）
 struct PendingTool {
     span_id: String,
@@ -149,7 +151,7 @@ impl LangfuseTracer {
             status_message: None,
             metadata: None,
             level: None,
-            version: None,
+            version: Some(VERSION.to_string()),
             environment: None,
             session_id: Some(self.session_id.clone()),
         };
@@ -185,7 +187,7 @@ impl LangfuseTracer {
             model_parameters: None,
             level: None,
             status_message: None,
-            version: None,
+            version: Some(VERSION.to_string()),
             environment: None,
             session_id: Some(self.session_id.clone()),
         };
@@ -275,6 +277,7 @@ impl LangfuseTracer {
             start_time: Some(start_time),
             end_time: Some(end_time.clone()),
             session_id: Some(self.session_id.clone()),
+            version: Some(VERSION.to_string()),
             ..Default::default()
         };
         let event = IngestionEvent::GenerationCreate {
@@ -315,6 +318,7 @@ impl LangfuseTracer {
 
     /// 工具调用结束：同步创建 tool observation
     pub fn on_tool_end(&mut self, tool_call_id: &str, output: &str, is_error: bool) {
+        let session_id = self.session_id.clone();
         let trace_id = self.trace_id.clone();
         let trace_id_for_log = self.trace_id.clone();
         let (_, _, end_time_ref, pending_tools) = self.current_tools_context();
@@ -351,9 +355,9 @@ impl LangfuseTracer {
             model_parameters: None,
             level: None,
             status_message: status_msg,
-            version: None,
+            version: Some(VERSION.to_string()),
             environment: None,
-            session_id: None,
+            session_id: Some(session_id),
         };
         let event = IngestionEvent::ObservationCreate {
             id: uuid::Uuid::now_v7().to_string(),
@@ -397,6 +401,7 @@ impl LangfuseTracer {
                 name: Some("agent-run".to_string()),
                 output: Some(serde_json::json!(output)),
                 end_time: Some(end_time.clone()),
+                version: Some(VERSION.to_string()),
                 ..Default::default()
             };
             let obs_event = IngestionEvent::ObservationUpdate {
@@ -436,7 +441,7 @@ impl LangfuseTracer {
             model_parameters: None,
             level: None,
             status_message: None,
-            version: None,
+            version: Some(VERSION.to_string()),
             environment: None,
             session_id: Some(self.session_id.clone()),
         };
@@ -490,6 +495,7 @@ impl LangfuseTracer {
             output: Some(serde_json::json!(result)),
             end_time: Some(end_time.clone()),
             status_message,
+            version: Some(VERSION.to_string()),
             ..Default::default()
         };
         let obs_event = IngestionEvent::ObservationUpdate {
