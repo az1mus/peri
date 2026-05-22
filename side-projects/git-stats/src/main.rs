@@ -1,3 +1,5 @@
+mod commit;
+
 use clap::Parser;
 
 /// Analyze git commit activity in a time window
