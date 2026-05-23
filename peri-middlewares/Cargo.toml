@@ -34,12 +34,10 @@ rmcp = { version = "1.7", features = [
 ] }
 reqwest = { workspace = true, features = ["gzip", "brotli", "deflate"] }
 url.workspace = true
-html2text = "0.17"
 regex = "1"
 flate2 = "1"
 tar = "0.4"
-base64 = "0.22"
-urlencoding = "2"
+
 shellexpand = "3"
 ipnet = "2.10"
 peri-lsp = { path = "../peri-lsp" }

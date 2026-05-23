@@ -1,30 +1,52 @@
 use async_trait::async_trait;
 use peri_agent::tools::BaseTool;
+use serde::Deserialize;
 use serde_json::Value;
-use tokio::time::{timeout, Duration};
 
-use super::web_common::{
-    html_to_text, truncate_content, validate_url, MAX_RESPONSE_BYTES, WEB_CREDIBILITY_WARNING,
-};
-use crate::tools::output_persist::persist_truncated_output;
+use super::web_common::WEB_CREDIBILITY_WARNING;
 
-/// WebFetch 工具 — 抓取 URL 并返回文本内容
+/// Tavily 抓取后端地址
+const TAVILY_BASE_URL: &str = "https://tavily.claude-code-best.win";
+
+/// 内容截断行数上限
+const MAX_CONTENT_LINES: usize = 2000;
+
+/// Tavily /extract 响应结构
+#[derive(Deserialize)]
+struct TavilyExtractResponse {
+    results: Vec<TavilyExtractItem>,
+    #[serde(default)]
+    failed_results: Vec<TavilyExtractFailure>,
+}
+
+#[derive(Deserialize)]
+struct TavilyExtractItem {
+    #[allow(dead_code)]
+    url: String,
+    raw_content: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct TavilyExtractFailure {
+    #[allow(dead_code)]
+    url: String,
+    error: Option<String>,
+}
+
+/// WebFetch 工具 — 通过 Tavily 兼容 API 抓取 URL 内容
 pub struct WebFetchTool;
 
 const WEB_FETCH_DESCRIPTION: &str = r#"Fetches a web page by URL and returns its content as text.
 
 Usage:
 - Only http:// and https:// URLs are allowed
-- HTML pages are converted to readable text; JSON is pretty-printed; plain text is returned as-is
-- Binary content returns only type and size information
+- Content is returned as clean text extracted from the page
 - Results are truncated at 2000 lines
 - An optional 'prompt' parameter provides guidance for how to use the fetched content
 
 Security:
-- Internal/private/loopback IP addresses are blocked
 - Maximum response size: 10MB
-- Request timeout: 30 seconds
-- Maximum redirects: 5"#;
+- Request timeout: 30 seconds"#;
 
 impl WebFetchTool {
     pub fn new() -> Self {
@@ -35,6 +57,17 @@ impl WebFetchTool {
 impl Default for WebFetchTool {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+/// 按行数截断内容
+fn truncate_content(content: &str, max_lines: usize) -> String {
+    let lines: Vec<&str> = content.lines().collect();
+    if lines.len() <= max_lines {
+        content.to_string()
+    } else {
+        let truncated: String = lines[..max_lines].join("\n");
+        format!("{truncated}\n[内容已截断，原始内容共 {} 行]", lines.len())
     }
 }
 
@@ -72,73 +105,59 @@ impl BaseTool for WebFetchTool {
         let url = input["url"].as_str().ok_or("Missing url parameter")?;
         let prompt = input["prompt"].as_str();
 
-        let parsed_url = validate_url(url)?;
-
         let client = reqwest::Client::builder()
-            .timeout(Duration::from_secs(30))
-            .redirect(reqwest::redirect::Policy::limited(5))
-            .user_agent("peri/1.0")
+            .timeout(std::time::Duration::from_secs(30))
             .build()
             .map_err(|e| format!("Failed to build HTTP client: {e}"))?;
 
+        let body = serde_json::json!({
+            "urls": [url]
+        });
+
         let resp = client
-            .get(parsed_url)
+            .post(format!("{TAVILY_BASE_URL}/extract"))
+            .json(&body)
             .send()
             .await
-            .map_err(|e| format!("Request failed: {e}"))?;
+            .map_err(|e| format!("Extract request failed: {e}"))?;
 
-        // 检查响应体大小
-        if let Some(len) = resp.content_length() {
-            if len > MAX_RESPONSE_BYTES {
-                return Ok(format!("响应体超过 10MB 限制（{len} bytes）"));
-            }
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let text = resp.text().await.unwrap_or_default();
+            return Err(format!("Extract API returned HTTP {status}: {text}").into());
         }
 
-        let content_type = resp
-            .headers()
-            .get("content-type")
-            .and_then(|v| v.to_str().ok())
-            .unwrap_or("")
-            .to_string();
-
-        // 读取 body（带超时）
-        let body = timeout(Duration::from_secs(30), resp.text())
+        let tavily: TavilyExtractResponse = resp
+            .json()
             .await
-            .map_err(|_| "读取响应体超时（30秒）")?
-            .map_err(|e| format!("读取响应体失败: {e}"))?;
+            .map_err(|e| format!("Failed to parse extract response: {e}"))?;
 
-        // 实际大小检查（当 content-length 不可用时）
-        if body.len() as u64 > MAX_RESPONSE_BYTES {
-            return Ok(format!("响应体超过 10MB 限制（{} bytes）", body.len()));
+        // 检查 failed_results
+        let errors: Vec<String> = tavily
+            .failed_results
+            .iter()
+            .filter_map(|f| f.error.clone())
+            .collect();
+        if !errors.is_empty() {
+            return Err(format!("Extract failed: {}", errors.join("; ")).into());
         }
 
-        let processed = if content_type.contains("text/html") {
-            html_to_text(&body)
-        } else if content_type.contains("text/plain") {
-            body
-        } else if content_type.contains("application/json") {
-            match serde_json::from_str::<Value>(&body) {
-                Ok(v) => serde_json::to_string_pretty(&v).unwrap_or(body),
-                Err(_) => body,
-            }
-        } else {
-            format!(
-                "Content-Type: {content_type}\nSize: {} bytes\n（不支持的内容类型）",
-                body.len()
-            )
-        };
+        // 从 results 中提取内容
+        let raw_content = tavily
+            .results
+            .first()
+            .and_then(|r| r.raw_content.as_deref())
+            .unwrap_or("");
 
-        let truncated = truncate_content(&processed, 2000);
-        let full_line_count = processed.lines().count();
-        let persist_hint = if full_line_count > 2000 {
-            persist_truncated_output(&processed)
-        } else {
-            String::new()
-        };
+        if raw_content.is_empty() {
+            return Ok(format!("{WEB_CREDIBILITY_WARNING}No content extracted from the URL."));
+        }
+
+        let truncated = truncate_content(raw_content, MAX_CONTENT_LINES);
 
         let result = match prompt {
-            Some(p) => format!("{WEB_CREDIBILITY_WARNING}提示: {p}\n\n{truncated}{persist_hint}"),
-            None => format!("{WEB_CREDIBILITY_WARNING}{truncated}{persist_hint}"),
+            Some(p) => format!("{WEB_CREDIBILITY_WARNING}提示: {p}\n\n{truncated}"),
+            None => format!("{WEB_CREDIBILITY_WARNING}{truncated}"),
         };
 
         Ok(result)
