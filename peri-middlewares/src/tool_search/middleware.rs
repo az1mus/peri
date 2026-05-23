@@ -51,29 +51,31 @@ impl<S: State> Middleware<S> for ToolSearchMiddleware {
     }
 
     async fn before_agent(&self, state: &mut S) -> AgentResult<()> {
-        // 首次：从 shared_tools 构建索引并缓存提示词
-        if self.tool_search_index.cached_prompt().is_none() {
-            if self.tool_search_index.total_count() == 0 {
-                let tools = self.shared_tools.read();
-                let deferred_arcs: Vec<Arc<dyn BaseTool>> = tools
-                    .iter()
-                    .filter(|(name, _)| {
-                        !super::core_tools::CORE_TOOLS.contains(name.as_str())
-                            && !super::core_tools::META_TOOLS.contains(name.as_str())
-                    })
-                    .map(|(_, tool)| Arc::clone(tool))
-                    .collect();
-                if !deferred_arcs.is_empty() {
-                    let old_count = self.tool_search_index.total_count();
-                    self.tool_search_index.build(deferred_arcs);
-                    let new_count = self.tool_search_index.total_count();
-                    if old_count > 0 && new_count != old_count {
-                        state.push_recall(format!(
-                            "[ToolSearch] Deferred tools updated: {} tools available (was {})",
-                            new_count, old_count
-                        ));
-                    }
-                }
+        // 检查 shared_tools 是否有变化（MCP 后续连接等场景）
+        let tools = self.shared_tools.read();
+        let deferred_arcs: Vec<Arc<dyn BaseTool>> = tools
+            .iter()
+            .filter(|(name, _)| {
+                !super::core_tools::CORE_TOOLS.contains(name.as_str())
+                    && !super::core_tools::META_TOOLS.contains(name.as_str())
+            })
+            .map(|(_, tool)| Arc::clone(tool))
+            .collect();
+        drop(tools);
+
+        let old_count = self.tool_search_index.total_count();
+        let should_rebuild = !deferred_arcs.is_empty()
+            && (self.tool_search_index.cached_prompt().is_none()
+                || old_count != deferred_arcs.len());
+
+        if should_rebuild {
+            self.tool_search_index.build(deferred_arcs);
+            let new_count = self.tool_search_index.total_count();
+            if old_count > 0 && new_count != old_count {
+                state.push_recall(format!(
+                    "[ToolSearch] Deferred tools updated: {} tools available (was {})",
+                    new_count, old_count
+                ));
             }
             let list = self.tool_search_index.format_deferred_list();
             if !list.is_empty() {

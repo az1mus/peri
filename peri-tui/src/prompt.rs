@@ -88,7 +88,7 @@ pub fn build_system_prompt(
 ) -> String {
     let env = PromptEnv::detect(cwd);
 
-    // 静态段落（编译时嵌入，按编号顺序）—— 01-06 为缓存稳定内容
+    // 静态段落（编译时嵌入，按编号顺序）—— 01-06 + 14 为缓存稳定内容
     let static_sections: &[&str] = &[
         include_str!("../prompts/sections/01_intro.md"),
         include_str!("../prompts/sections/02_system.md"),
