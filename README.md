@@ -2,7 +2,7 @@
 
 Peri is a terminal coding agent, built the **Nobody Coding** way — powered by **DeepSeek-V4-Pro** and **GLM-5.1**. Peri is compatible with Claude Code — your `.claude/` config just works. It grew out of [OpenLangGraphServer](https://github.com/konghayao/open-langgraph-server) and [Zen Code](https://github.com/konghayao/zen-code). Built in Rust, runs on my little RISC-V dev board.
 
-> The git log tells the story — recent commits are almost entirely DeepSeek and GLM. Claude was just there in the beginning.
+> Recent commits are almost entirely DeepSeek and GLM. Claude was just there in the beginning.
 
 ## Why Peri
 
@@ -51,14 +51,13 @@ A typical pipeline:
 
 ## Acknowledgments
 
+- [Claude Code Best](https://github.com/claude-code-best/claude-code) — invaluable community support and feedback
 - [Superpowers](https://github.com/obra/superpowers) & [Matt Pocock's Skills](https://github.com/mattpocock/skills) — the skill suites that drive Peri's AI engineering workflow
-- [Zed](https://zed.dev) — first ACP-compatible IDE, proved the protocol works
+- [ACP](hhttps://agentclientprotocol.com/) — open protocol for agent-IDE communication
 - [rmcp](https://github.com/anthropics/rmcp) — Rust MCP client library
-- [agent-client-protocol](https://github.com/Azure/agent-client-protocol) — open protocol for agent-IDE communication
-- [Claude Code 开发社区](https://github.com/claude-code-best/claude-code) — invaluable community support and feedback
-- [Ratatui](https://ratatui.rs) — terminal UI framework
-- [Tokio](https://tokio.rs) — async runtime
+- [Ratatui](https://ratatui.rs) & [Tokio](https://tokio.rs)
 - [Langfuse](https://langfuse.com) — LLM observability
+- [Zed](https://zed.dev) — first ACP-compatible IDE, proved the protocol works
 
 ## License
 
