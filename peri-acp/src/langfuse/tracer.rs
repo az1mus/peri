@@ -255,8 +255,11 @@ impl LangfuseTracer {
             let mut map = HashMap::new();
             let cache_creation = u.cache_creation_input_tokens.unwrap_or(0);
             let cache_read = u.cache_read_input_tokens.unwrap_or(0);
-            let total = u.input_tokens + u.output_tokens;
-            map.insert("input".to_string(), u.input_tokens as i32);
+            // input_tokens 已被适配器规范化（Anthropic: raw + cache_creation + cache_read），
+            // Langfuse 要求 input 为不含缓存的原始值，需减去缓存部分。
+            let raw_input = u.input_tokens.saturating_sub(cache_creation + cache_read);
+            let total = raw_input + u.output_tokens + cache_creation + cache_read;
+            map.insert("input".to_string(), raw_input as i32);
             map.insert("output".to_string(), u.output_tokens as i32);
             map.insert("total".to_string(), total as i32);
             if cache_creation > 0 {
