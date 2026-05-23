@@ -56,6 +56,36 @@ impl Command for HeapdumpCommand {
                 rss_mb - mb(resident)
             );
 
+            // Jemalloc config diagnostics
+            {
+                let _ = writeln!(buf, "=== JEMALLOC CONFIG ===");
+                let dirty_decay: i64 =
+                    unsafe { tikv_jemalloc_ctl::raw::read(b"arenas.dirty_decay_ms\0") }
+                        .unwrap_or(-1);
+                let _ = writeln!(buf, "  dirty_decay_ms: {}", dirty_decay);
+                let bg_thread: bool =
+                    unsafe { tikv_jemalloc_ctl::raw::read(b"background_thread\0") }
+                        .unwrap_or(false);
+                let _ = writeln!(buf, "  background_thread: {}", bg_thread);
+                let lg_tcache_max: usize =
+                    unsafe { tikv_jemalloc_ctl::raw::read(b"arenas.lg_tcache_max\0") }.unwrap_or(0);
+                let _ = writeln!(
+                    buf,
+                    "  lg_tcache_max: {} ({}KB)",
+                    lg_tcache_max,
+                    1 << (lg_tcache_max.saturating_sub(10))
+                );
+                let narenas: usize =
+                    tikv_jemalloc_ctl::arenas::narenas::read().unwrap_or(0) as usize;
+                let _ = writeln!(buf, "  narenas: {}", narenas);
+                let _ = writeln!(
+                    buf,
+                    "  tcache_bytes: {:.1} MB",
+                    mb(tikv_jemalloc_ctl::stats::allocated::read().unwrap_or(0))
+                );
+                let _ = writeln!(buf);
+            }
+
             let _ = writeln!(buf, "=== JEMALLOC ARENAS ===");
             let mut jemalloc_buf = Vec::new();
             let mut opts = tikv_jemalloc_ctl::stats_print::Options::default();
