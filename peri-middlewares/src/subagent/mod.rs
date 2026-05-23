@@ -51,6 +51,7 @@ use peri_agent::error::AgentResult;
 use peri_agent::messages::BaseMessage;
 use peri_agent::middleware::r#trait::Middleware;
 use peri_agent::tools::BaseTool;
+use tokio::sync::mpsc::UnboundedSender;
 
 use crate::agent_define::AgentOverrides;
 use crate::parse_agent_file;
@@ -97,6 +98,8 @@ pub struct SubAgentMiddleware {
     parent_messages: Option<Arc<RwLock<Vec<BaseMessage>>>>,
     /// 后台任务注册中心（通过 build_tool 传递给 SubAgentTool）
     background_registry: Option<Arc<BackgroundTaskRegistry>>,
+    /// 独立的事件发送通道（background agent 完成后直接发送，不受 close_channel 影响）
+    bg_event_sender: Option<UnboundedSender<peri_agent::agent::events::AgentEvent>>,
     /// Registered hooks for SubagentStart/SubagentStop lifecycle events
     registered_hooks: Arc<Vec<crate::hooks::types::RegisteredHook>>,
     /// Per-child agent event handler factory: takes agent_id → returns handler for that child.
@@ -125,6 +128,7 @@ impl SubAgentMiddleware {
             cancel: None,
             parent_messages: None,
             background_registry: None,
+            bg_event_sender: None,
             registered_hooks: Arc::new(Vec::new()),
             child_handler_factory: None,
         }
@@ -155,6 +159,15 @@ impl SubAgentMiddleware {
     /// Set background task registry for run_in_background mode
     pub fn with_background_registry(mut self, registry: Arc<BackgroundTaskRegistry>) -> Self {
         self.background_registry = Some(registry);
+        self
+    }
+
+    /// Set independent event sender for background agent completion events
+    pub fn with_bg_event_sender(
+        mut self,
+        sender: UnboundedSender<peri_agent::agent::events::AgentEvent>,
+    ) -> Self {
+        self.bg_event_sender = Some(sender);
         self
     }
 
@@ -199,6 +212,9 @@ impl SubAgentMiddleware {
         }
         if let Some(ref registry) = self.background_registry {
             tool = tool.with_background_registry(Arc::clone(registry));
+        }
+        if let Some(ref sender) = self.bg_event_sender {
+            tool = tool.with_bg_event_sender(sender.clone());
         }
         if !self.registered_hooks.is_empty() {
             tool = tool.with_registered_hooks(self.registered_hooks.to_vec());

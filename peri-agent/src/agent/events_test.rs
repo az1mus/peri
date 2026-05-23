@@ -54,6 +54,7 @@ fn test_subagent_started_serde_roundtrip() {
     let ev = AgentEvent::SubagentStarted {
         agent_name: "test-agent".to_string(),
         instance_id: "sub_test123".to_string(),
+        is_background: false,
     };
     let json = serde_json::to_string(&ev).unwrap();
     assert!(json.contains(r#""type":"subagent_started""#));
@@ -63,10 +64,12 @@ fn test_subagent_started_serde_roundtrip() {
     if let AgentEvent::SubagentStarted {
         agent_name,
         instance_id,
+        is_background,
     } = deserialized
     {
         assert_eq!(agent_name, "test-agent");
         assert_eq!(instance_id, "sub_test123");
+        assert!(!is_background);
     } else {
         panic!("Deserialized to wrong variant");
     }

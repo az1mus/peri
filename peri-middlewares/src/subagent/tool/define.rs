@@ -8,6 +8,7 @@ use peri_agent::agent::BackgroundTaskResult;
 use peri_agent::agent::{AgentCancellationToken, ReActAgent};
 use peri_agent::messages::BaseMessage;
 use peri_agent::tools::BaseTool;
+use tokio::sync::mpsc::UnboundedSender;
 
 use crate::agent_define::{AgentDefineMiddleware, AgentOverrides};
 use crate::claude_agent_parser::{parse_agent_file, ClaudeAgent, ToolsValue};
@@ -76,6 +77,9 @@ pub struct SubAgentTool {
     parent_messages: Option<Arc<RwLock<Vec<BaseMessage>>>>,
     /// 后台任务注册中心（run_in_background 模式使用）
     background_registry: Option<Arc<BackgroundTaskRegistry>>,
+    /// 独立的事件发送通道（background agent 完成后直接发送，不依赖共享 event_tx）
+    /// 避免主 event_tx 被 close_channel 关闭后 background 完成事件丢失
+    bg_event_sender: Option<UnboundedSender<AgentEvent>>,
     /// 子 agent 生命周期 hook（SubagentStart/SubagentStop）
     registered_hooks: Arc<Vec<RegisteredHook>>,
     /// Per-child event handler factory
@@ -100,6 +104,7 @@ impl SubAgentTool {
             cancel: None,
             parent_messages: None,
             background_registry: None,
+            bg_event_sender: None,
             registered_hooks: Arc::new(Vec::new()),
             child_handler_factory: None,
         }
@@ -126,6 +131,11 @@ impl SubAgentTool {
 
     pub fn with_background_registry(mut self, registry: Arc<BackgroundTaskRegistry>) -> Self {
         self.background_registry = Some(registry);
+        self
+    }
+
+    pub fn with_bg_event_sender(mut self, sender: UnboundedSender<AgentEvent>) -> Self {
+        self.bg_event_sender = Some(sender);
         self
     }
 
@@ -249,6 +259,7 @@ impl SubAgentTool {
             handler.on_event(AgentEvent::SubagentStarted {
                 agent_name: "fork".to_string(),
                 instance_id: instance_id.clone(),
+                is_background: false,
             });
         }
         self.fire_subagent_lifecycle_hook(
@@ -405,6 +416,7 @@ impl SubAgentTool {
         let event_handler = self.event_handler.clone();
         let spawn_registry = Arc::clone(registry);
         let spawn_hooks = Arc::clone(&self.registered_hooks);
+        let bg_sender = self.bg_event_sender.clone();
 
         self.fire_subagent_lifecycle_hook(
             crate::hooks::types::HookEvent::SubagentStart,
@@ -413,6 +425,15 @@ impl SubAgentTool {
             None,
         )
         .await;
+
+        // 通知 TUI background agent 启动（递增 background_task_count）
+        if let Some(ref handler) = event_handler {
+            handler.on_event(AgentEvent::SubagentStarted {
+                agent_name: agent_name.clone(),
+                instance_id: task_id.clone(),
+                is_background: true,
+            });
+        }
 
         let handle = tokio::spawn(async move {
             let mut state = AgentState::new(&cwd);
@@ -460,7 +481,11 @@ impl SubAgentTool {
             )
             .await;
 
-            if let Some(ref handler) = event_handler {
+            // 优先使用独立的 bg_event_sender（不受 close_channel 影响）
+            // 回退到 event_handler（共享 Mutex event_tx，可能已关闭）
+            if let Some(ref sender) = bg_sender {
+                let _ = sender.send(AgentEvent::BackgroundTaskCompleted(result));
+            } else if let Some(ref handler) = event_handler {
                 handler.on_event(AgentEvent::BackgroundTaskCompleted(result));
             }
         });
@@ -522,6 +547,7 @@ impl SubAgentTool {
         let spawn_task_id = task_id.clone();
         let spawn_agent_name = agent_name.clone();
         let spawn_prompt_summary = prompt_summary.clone();
+        let bg_sender = self.bg_event_sender.clone();
 
         self.fire_subagent_lifecycle_hook(
             crate::hooks::types::HookEvent::SubagentStart,
@@ -530,6 +556,15 @@ impl SubAgentTool {
             None,
         )
         .await;
+
+        // 通知 TUI background agent 启动（递增 background_task_count）
+        if let Some(ref handler) = event_handler {
+            handler.on_event(AgentEvent::SubagentStarted {
+                agent_name: agent_name.clone(),
+                instance_id: task_id.clone(),
+                is_background: true,
+            });
+        }
 
         let handle = tokio::spawn(async move {
             let mut fork_state = AgentState::with_messages(cwd.clone(), parent_msgs);
@@ -581,7 +616,10 @@ impl SubAgentTool {
             )
             .await;
 
-            if let Some(ref handler) = event_handler {
+            // 优先使用独立的 bg_event_sender（不受 close_channel 影响）
+            if let Some(ref sender) = bg_sender {
+                let _ = sender.send(AgentEvent::BackgroundTaskCompleted(result));
+            } else if let Some(ref handler) = event_handler {
                 handler.on_event(AgentEvent::BackgroundTaskCompleted(result));
             }
         });
@@ -765,6 +803,7 @@ impl BaseTool for SubAgentTool {
             handler.on_event(AgentEvent::SubagentStarted {
                 agent_name: agent_id.clone(),
                 instance_id: instance_id.clone(),
+                is_background: false,
             });
         }
         self.fire_subagent_lifecycle_hook(

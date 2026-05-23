@@ -166,12 +166,19 @@ pub async fn execute_prompt(
 
     let provider_display_name = provider.display_name().to_string();
 
+    // Slot for bg_event_rx — will be filled after build_agent, read by event pump
+    let bg_event_rx_slot: Arc<
+        std::sync::Mutex<Option<tokio::sync::mpsc::UnboundedReceiver<ExecutorEvent>>>,
+    > = Arc::new(std::sync::Mutex::new(None));
+    let bg_slot_for_pump = Arc::clone(&bg_event_rx_slot);
+
     tokio::spawn(async move {
         // Start Langfuse trace
         if let Some(ref tracer) = langfuse_tracer {
             tracer.lock().on_trace_start(&trace_input);
         }
 
+        // Phase 1: 主 agent 事件循环
         while let Some(exec_event) = event_rx.recv().await {
             // Langfuse tracing
             if let Some(ref tracer) = langfuse_tracer {
@@ -223,6 +230,7 @@ pub async fn execute_prompt(
             sink.push_event(&sid, &exec_event, pump_cw).await;
         }
 
+        // Phase 1 结束：主 agent 已完成，立即发送 done 通知
         // End Langfuse trace and flush
         let langfuse_flush = if let Some(tracer) = langfuse_tracer {
             let handle = tracer.into_inner().on_trace_end(None);
@@ -236,6 +244,17 @@ pub async fn execute_prompt(
         // Wait for Langfuse flush before exiting pump
         if let Some(handle) = langfuse_flush {
             let _ = handle.await;
+        }
+
+        // Phase 2: event_rx 已关闭，从 bg_event_rx 接收 background agent 完成事件
+        // 这些事件在 push_done 之后异步推送，TUI 通过 AgentDone 已设置
+        // agent_done_pending_bg=true，会正确处理 BackgroundTaskCompleted
+        let bg_rx = bg_slot_for_pump.lock().unwrap().take();
+        if let Some(mut bg_rx) = bg_rx {
+            tracing::info!(session_id = %sid, "Event pump: forwarding background agent completion events");
+            while let Some(bg_event) = bg_rx.recv().await {
+                sink.push_event(&sid, &bg_event, pump_cw).await;
+            }
         }
 
         let _ = pump_done_tx.send(());
@@ -316,6 +335,11 @@ pub async fn execute_prompt(
         },
         compact_event_tx: Some(event_tx.clone()),
     });
+
+    // 将 bg_event_rx 放入共享 slot，event pump 在主通道关闭后从这里读取
+    if let Some(bg_rx) = agent_output.bg_event_rx {
+        *bg_event_rx_slot.lock().unwrap() = Some(bg_rx);
+    }
 
     // 转发 todo 更新为 ExecutorEvent::TodoUpdate
     let mut todo_rx = agent_output.todo_rx;

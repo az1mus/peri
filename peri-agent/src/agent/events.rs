@@ -106,6 +106,8 @@ pub enum AgentEvent {
         agent_name: String,
         /// 唯一实例标识符（用于并发同类型 SubAgent 路由）
         instance_id: String,
+        /// 是否为后台模式（run_in_background）
+        is_background: bool,
     },
     /// 子 agent 执行完成
     SubagentStopped {
