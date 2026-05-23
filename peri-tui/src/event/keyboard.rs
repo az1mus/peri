@@ -717,8 +717,7 @@ pub fn handle_key_event(
             }
         }
 
-        // PageUp/PageDown: VS Code terminal maps Option+Backspace to PageUp
-        // Detect VS Code terminal environment; perform word-delete when textarea has content
+        // VS Code terminal maps Option+Backspace to PageUp; perform word-delete when textarea has content
         Input {
             key: Key::PageUp, ..
         } if std::env::var("TERM_PROGRAM").as_deref() == Ok("vscode") => {
@@ -731,28 +730,34 @@ pub fn handle_key_event(
                 .any(|line| !line.is_empty());
             if has_content {
                 session.ui.textarea.delete_word();
-            } else {
-                for _ in 0..10 {
-                    app.scroll_up();
-                }
-            }
-        }
-        Input {
-            key: Key::PageDown, ..
-        } => {
-            for _ in 0..10 {
-                app.scroll_down();
             }
         }
 
         // Ctrl+U / Ctrl+D: half-page scroll (no physical PageUp/PageDown needed; MacBook friendly)
+        // Ctrl+U: macOS Cmd+Backspace maps to Ctrl+U.
+        // When textarea has content → delete to beginning of line (macOS standard behavior).
+        // When textarea is empty → scroll up.
         Input {
             key: Key::Char('u'),
             ctrl: true,
             ..
         } => {
-            for _ in 0..20 {
-                app.scroll_up();
+            let session = &app.session_mgr.sessions[app.session_mgr.active];
+            let has_content = session
+                .ui
+                .textarea
+                .lines()
+                .iter()
+                .any(|line| !line.is_empty());
+            if has_content {
+                app.session_mgr.sessions[app.session_mgr.active]
+                    .ui
+                    .textarea
+                    .delete_line_by_head();
+            } else {
+                for _ in 0..20 {
+                    app.scroll_up();
+                }
             }
         }
         Input {

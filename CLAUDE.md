@@ -373,6 +373,7 @@ session/new → chrono::Local::now() → frozen_date
 - **快捷键设计**：禁止 `Shift+字母`（编辑态等同大写输入）。全局用 `Ctrl+字母`，面板用方向键/Space/Enter/Esc。
 - **面板系统**：`PanelManager` + `PanelComponent` trait（`panel_manager.rs`/`panel_component.rs`），新增面板只需定义变体 + 实现 trait。面板内禁止渲染提示行，由 `status_bar_hints()` 统一描述。面板内列表组件使用统一的 `ListState` 管理（选中/滚动/过滤），支持鼠标交互（滚轮/点击/拖拽）。
 - **`Event::Paste`**：独立于 key event 链，必须单独拦截。
+- **翻页快捷键**：不使用 PageUp/PageDown 做滚动。macOS 终端会将 Cmd+Backspace 映射为 Ctrl+U（非 PageUp），导致误触发滚动。滚动统一用 `Ctrl+U`/`Ctrl+D`（textarea 空时）。PageUp/PageDown 静默消费不传 textarea。Ctrl+U 在 textarea 有内容时执行 `delete_line_by_head`（删除到行首，匹配 macOS Cmd+Backspace 标准行为）。禁止添加 PageUp/PageDown 滚动行为。
 
 ## i18n 国际化
 
