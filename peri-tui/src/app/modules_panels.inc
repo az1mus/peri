@@ -8,6 +8,7 @@ pub mod model_panel;
 pub mod plugin_panel;
 pub mod setup_wizard;
 pub mod status_panel;
+pub mod tasks_panel;
 pub mod mcp_panel;
 pub mod panel_component;
 pub mod panel_list;

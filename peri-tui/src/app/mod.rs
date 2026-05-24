@@ -55,6 +55,7 @@ pub use panel_component::PanelComponent;
 pub use panel_manager::{
     EventResult, MutexGroup, PanelContext, PanelKind, PanelManager, PanelScope, PanelState,
 };
+pub use tasks_panel::TasksPanel;
 
 // ─── App ──────────────────────────────────────────────────────────────────────
 

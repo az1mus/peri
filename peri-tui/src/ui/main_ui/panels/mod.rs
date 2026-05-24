@@ -8,4 +8,5 @@ pub mod memory;
 pub mod model;
 pub mod plugin;
 pub mod status;
+pub mod tasks;
 pub mod thread_browser;

@@ -19,6 +19,7 @@ use super::plugin_panel::PluginPanel;
 use super::service_registry::ServiceRegistry;
 use super::session_manager::SessionManager;
 use super::status_panel::StatusPanel;
+use super::tasks_panel::TasksPanel;
 use crate::thread::ThreadBrowser;
 
 // ─── PanelScope ─────────────────────────────────────────────────────────────
@@ -63,6 +64,7 @@ pub enum PanelKind {
     Cron,
     Status,
     Memory,
+    Tasks,
 }
 
 impl PanelKind {
@@ -80,6 +82,7 @@ impl PanelKind {
             PanelKind::Cron => 8,
             PanelKind::Status => 9,
             PanelKind::Memory => 10,
+            PanelKind::Tasks => 11,
         }
     }
 
@@ -88,7 +91,7 @@ impl PanelKind {
         match self {
             PanelKind::Model | PanelKind::Login | PanelKind::Config => MutexGroup::Settings,
             PanelKind::Agent | PanelKind::Hooks => MutexGroup::Agent,
-            PanelKind::Mcp | PanelKind::Plugin | PanelKind::Cron => MutexGroup::Tools,
+            PanelKind::Mcp | PanelKind::Plugin | PanelKind::Cron | PanelKind::Tasks => MutexGroup::Tools,
             PanelKind::Status | PanelKind::Memory => MutexGroup::Info,
             PanelKind::ThreadBrowser => MutexGroup::Thread,
         }
@@ -107,7 +110,8 @@ impl PanelKind {
             | PanelKind::Plugin
             | PanelKind::Cron
             | PanelKind::Status
-            | PanelKind::Memory => PanelScope::Global,
+            | PanelKind::Memory
+            | PanelKind::Tasks => PanelScope::Global,
         }
     }
 }
@@ -144,6 +148,7 @@ pub enum PanelState {
     Cron(CronPanel),
     Status(StatusPanel),
     Memory(MemoryPanel),
+    Tasks(TasksPanel),
 }
 
 impl PanelState {
@@ -161,6 +166,7 @@ impl PanelState {
             PanelState::Cron(_) => PanelKind::Cron,
             PanelState::Status(_) => PanelKind::Status,
             PanelState::Memory(_) => PanelKind::Memory,
+            PanelState::Tasks(_) => PanelKind::Tasks,
         }
     }
 
@@ -178,6 +184,7 @@ impl PanelState {
             PanelState::Cron(p) => p as &dyn Any,
             PanelState::Status(p) => p as &dyn Any,
             PanelState::Memory(p) => p as &dyn Any,
+            PanelState::Tasks(p) => p as &dyn Any,
         }
     }
 
@@ -195,6 +202,7 @@ impl PanelState {
             PanelState::Cron(p) => p as &mut dyn Any,
             PanelState::Status(p) => p as &mut dyn Any,
             PanelState::Memory(p) => p as &mut dyn Any,
+            PanelState::Tasks(p) => p as &mut dyn Any,
         }
     }
 
@@ -213,6 +221,7 @@ impl PanelState {
             PanelState::Cron(p) => p.render(f, app, area),
             PanelState::Status(p) => p.render(f, app, area),
             PanelState::Memory(p) => p.render(f, app, area),
+            PanelState::Tasks(p) => p.render(f, app, area),
         }
     }
 
@@ -231,6 +240,7 @@ impl PanelState {
             PanelState::Cron(p) => p.desired_height(screen_height, screen_width),
             PanelState::Status(p) => p.desired_height(screen_height, screen_width),
             PanelState::Memory(p) => p.desired_height(screen_height, screen_width),
+            PanelState::Tasks(p) => p.desired_height(screen_height, screen_width),
         }
     }
 
@@ -249,6 +259,7 @@ impl PanelState {
             PanelState::Cron(p) => p.status_bar_hints(lc),
             PanelState::Status(p) => p.status_bar_hints(lc),
             PanelState::Memory(p) => p.status_bar_hints(lc),
+            PanelState::Tasks(p) => p.status_bar_hints(lc),
         }
     }
 }
@@ -355,6 +366,7 @@ impl PanelManager {
             PanelState::Mcp(p) => p.handle_key(input, ctx),
             PanelState::Cron(p) => p.handle_key(input, ctx),
             PanelState::Plugin(p) => p.handle_key(input, ctx),
+            PanelState::Tasks(p) => p.handle_key(input, ctx),
         }
     }
 
@@ -376,6 +388,7 @@ impl PanelManager {
             PanelState::Mcp(p) => p.handle_paste(text, ctx),
             PanelState::Cron(p) => p.handle_paste(text, ctx),
             PanelState::Plugin(p) => p.handle_paste(text, ctx),
+            PanelState::Tasks(p) => p.handle_paste(text, ctx),
         }
     }
 
@@ -397,6 +410,7 @@ impl PanelManager {
             PanelState::Mcp(p) => p.handle_scroll(lines, ctx),
             PanelState::Cron(p) => p.handle_scroll(lines, ctx),
             PanelState::Plugin(p) => p.handle_scroll(lines, ctx),
+            PanelState::Tasks(p) => p.handle_scroll(lines, ctx),
         }
     }
 
@@ -423,6 +437,7 @@ impl PanelManager {
             PanelState::Mcp(p) => p.handle_mouse(mouse, area, ctx),
             PanelState::Cron(p) => p.handle_mouse(mouse, area, ctx),
             PanelState::Plugin(p) => p.handle_mouse(mouse, area, ctx),
+            PanelState::Tasks(p) => p.handle_mouse(mouse, area, ctx),
         }
     }
 
@@ -444,6 +459,7 @@ impl PanelManager {
             PanelState::Mcp(p) => p.status_bar_hints(lc),
             PanelState::Cron(p) => p.status_bar_hints(lc),
             PanelState::Plugin(p) => p.status_bar_hints(lc),
+            PanelState::Tasks(p) => p.status_bar_hints(lc),
         }
     }
 
@@ -463,6 +479,7 @@ impl PanelManager {
             PanelState::Mcp(p) => p.desired_height(screen_height, screen_width),
             PanelState::Cron(p) => p.desired_height(screen_height, screen_width),
             PanelState::Plugin(p) => p.desired_height(screen_height, screen_width),
+            PanelState::Tasks(p) => p.desired_height(screen_height, screen_width),
         })
     }
 
@@ -482,6 +499,7 @@ impl PanelManager {
             PanelState::Mcp(p) => p.set_scroll_offset(offset),
             PanelState::Cron(p) => p.set_scroll_offset(offset),
             PanelState::Plugin(p) => p.set_scroll_offset(offset),
+            PanelState::Tasks(p) => p.set_scroll_offset(offset),
         }
     }
 }
