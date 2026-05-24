@@ -251,14 +251,12 @@ fn inject_settings_override(source: &str) {
 // ─── 入口 ──────────────────────────────────────────────────────────────────
 
 fn main() -> Result<()> {
-    // Set MALLOC_CONF env var BEFORE jemalloc initializes.
-    // jemalloc reads this during its one-time init (triggered by the first
-    // allocation through #[global_allocator]). This is the only reliable way
-    // to enable background_thread — runtime raw::write fails once arenas exist.
-    peri_tui::jemalloc_config::init_malloc_conf();
+    // jemalloc config is applied at compile time via the `_rjem_malloc_conf`
+    // global symbol (see jemalloc_config.rs). It takes effect BEFORE main()
+    // runs — jemalloc initializes during lang_start's first allocation.
 
     // Runtime mallctl writes as fallback/diagnostics (may not fully take effect
-    // if arenas already exist, but harmless to call).
+    // for background_thread if arenas already exist, but harmless to call).
     peri_tui::jemalloc_config::configure_jemalloc();
 
     // 最先注入环境变量（进程环境变量优先）

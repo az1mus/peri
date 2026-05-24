@@ -1264,3 +1264,180 @@ async fn test_state_snapshot_excludes_system_messages() {
         }
     }
 }
+
+// ─── set_* per-turn update 方法测试 ──────────────────────────────────────────
+
+/// 验证 set_event_handler 在 &mut agent 上替换事件回调
+#[tokio::test]
+async fn test_set_event_handler() {
+    use crate::agent::events::FnEventHandler;
+    use std::sync::{Arc, Mutex};
+
+    struct AnswerLLM;
+    #[async_trait::async_trait]
+    impl ReactLLM for AnswerLLM {
+        async fn generate_reasoning(
+            &self,
+            _messages: &[BaseMessage],
+            _tools: &[&dyn BaseTool],
+            _streaming: Option<crate::llm::types::StreamingContext>,
+        ) -> crate::error::AgentResult<Reasoning> {
+            Ok(Reasoning::with_answer("", "ok"))
+        }
+    }
+
+    let events_a: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
+    let events_b: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
+    let events_a_clone = events_a.clone();
+    let events_b_clone = events_b.clone();
+
+    let mut agent = ReActAgent::new(AnswerLLM).max_iterations(3);
+
+    // 第一次：无 handler，静默
+    let mut state = AgentState::new("/tmp");
+    agent
+        .execute(AgentInput::text("first"), &mut state, None)
+        .await
+        .unwrap();
+    assert!(
+        events_a.lock().unwrap().is_empty(),
+        "无 handler 时不应收集事件"
+    );
+
+    // set_event_handler: 切换到 handler_a
+    agent.set_event_handler(Arc::new(FnEventHandler(move |ev| {
+        if let AgentEvent::TextChunk { chunk, .. } = ev {
+            events_a_clone.lock().unwrap().push(chunk);
+        }
+    })));
+    agent
+        .execute(AgentInput::text("second"), &mut state, None)
+        .await
+        .unwrap();
+    assert_eq!(
+        events_a.lock().unwrap().len(),
+        1,
+        "handler_a 应收到第二次 execute 的 TextChunk"
+    );
+
+    // set_event_handler: 切换到 handler_b
+    agent.set_event_handler(Arc::new(FnEventHandler(move |ev| {
+        if let AgentEvent::TextChunk { chunk, .. } = ev {
+            events_b_clone.lock().unwrap().push(chunk);
+        }
+    })));
+    agent
+        .execute(AgentInput::text("third"), &mut state, None)
+        .await
+        .unwrap();
+    assert_eq!(
+        events_b.lock().unwrap().len(),
+        1,
+        "handler_b 应收到第三次 execute 的 TextChunk"
+    );
+    // handler_a 不应收到后续事件（长度仍为 1）
+    assert_eq!(
+        events_a.lock().unwrap().len(),
+        1,
+        "handler_a 不应收到切换后的事件"
+    );
+}
+
+/// 验证 set_system_prompt 在 &mut agent 上更新系统提示词
+#[tokio::test]
+async fn test_set_system_prompt() {
+    struct AnswerLLM;
+    #[async_trait::async_trait]
+    impl ReactLLM for AnswerLLM {
+        async fn generate_reasoning(
+            &self,
+            _messages: &[BaseMessage],
+            _tools: &[&dyn BaseTool],
+            _streaming: Option<crate::llm::types::StreamingContext>,
+        ) -> crate::error::AgentResult<Reasoning> {
+            Ok(Reasoning::with_answer("", "ok"))
+        }
+    }
+
+    let mut agent = ReActAgent::new(AnswerLLM).max_iterations(3);
+    let mut state = AgentState::new("/tmp");
+
+    // 第一次：无 system prompt
+    agent
+        .execute(AgentInput::text("first"), &mut state, None)
+        .await
+        .unwrap();
+
+    // set_system_prompt
+    agent.set_system_prompt("updated system prompt");
+    agent
+        .execute(AgentInput::text("second"), &mut state, None)
+        .await
+        .unwrap();
+
+    // 验证 system 消息未累积（prepend 后清理）
+    let system_count = state.messages().iter().filter(|m| m.is_system()).count();
+    assert_eq!(
+        system_count, 0,
+        "set_system_prompt 后 system 消息不应累积，实际有 {system_count} 条"
+    );
+
+    // 再次更新 system prompt，确认可重复调用
+    agent.set_system_prompt("another prompt");
+    agent
+        .execute(AgentInput::text("third"), &mut state, None)
+        .await
+        .unwrap();
+
+    let system_count = state.messages().iter().filter(|m| m.is_system()).count();
+    assert_eq!(
+        system_count, 0,
+        "重复 set_system_prompt 后 system 消息不应累积，实际有 {system_count} 条"
+    );
+}
+
+/// 验证 set_notification_rx 在 &mut agent 上更新通知接收端
+#[tokio::test]
+async fn test_set_notification_rx() {
+    struct AnswerLLM;
+    #[async_trait::async_trait]
+    impl ReactLLM for AnswerLLM {
+        async fn generate_reasoning(
+            &self,
+            _messages: &[BaseMessage],
+            _tools: &[&dyn BaseTool],
+            _streaming: Option<crate::llm::types::StreamingContext>,
+        ) -> crate::error::AgentResult<Reasoning> {
+            Ok(Reasoning::with_answer("", "ok"))
+        }
+    }
+
+    let mut agent = ReActAgent::new(AnswerLLM).max_iterations(3);
+    assert!(
+        agent.notification_rx.is_none(),
+        "新建 agent 的 notification_rx 应为 None"
+    );
+
+    let (_tx1, rx1) = tokio::sync::mpsc::unbounded_channel();
+    agent.set_notification_rx(rx1);
+    assert!(
+        agent.notification_rx.is_some(),
+        "set_notification_rx 后应为 Some"
+    );
+
+    // 可重复调用替换
+    let (_tx2, rx2) = tokio::sync::mpsc::unbounded_channel();
+    agent.set_notification_rx(rx2);
+    assert!(
+        agent.notification_rx.is_some(),
+        "重复 set_notification_rx 后应仍为 Some"
+    );
+
+    // 功能验证：更新后的 agent 仍可正常执行
+    let mut state = AgentState::new("/tmp");
+    let output = agent
+        .execute(AgentInput::text("go"), &mut state, None)
+        .await
+        .unwrap();
+    assert_eq!(output.text, "ok");
+}

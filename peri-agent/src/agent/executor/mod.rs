@@ -141,11 +141,29 @@ impl<L: ReactLLM, S: State> ReActAgent<L, S> {
 
     /// 设置 micro_compact 配置
     ///
-    /// 启用后，ReAct 循环在每次工具调用完成后检查上下文用量，
+    /// 启用后，ReAct 循环在每次工具调用完��后检查上下文用量，
     /// 超过 warning 阈值时自动执行 micro_compact（压缩旧工具结果）。
     pub fn with_compact_config(mut self, config: crate::agent::compact::CompactConfig) -> Self {
         self.compact_config = Some(config);
         self
+    }
+
+    /// 更新事件回调（用于同一 agent 实例的新轮次）
+    pub fn set_event_handler(&mut self, handler: Arc<dyn AgentEventHandler>) {
+        self.event_handler = Some(handler);
+    }
+
+    /// 更新系统提示词（用于同一 agent 实例的新轮次）
+    pub fn set_system_prompt(&mut self, prompt: impl Into<String>) {
+        self.system_prompt = Some(prompt.into());
+    }
+
+    /// 更新后台任务通知接收端（用于同一 agent 实例的新轮次）
+    pub fn set_notification_rx(
+        &mut self,
+        rx: tokio::sync::mpsc::UnboundedReceiver<BackgroundTaskResult>,
+    ) {
+        self.notification_rx = Some(tokio::sync::Mutex::new(rx));
     }
 
     pub fn middleware_names(&self) -> Vec<&str> {
