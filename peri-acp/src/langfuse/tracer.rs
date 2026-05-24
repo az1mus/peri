@@ -124,6 +124,72 @@ impl LangfuseTracer {
         self.final_answer.push_str(chunk);
     }
 
+    /// 从 Agent 工具的输入 JSON 中提取 subagent 标识（用于 Langfuse 显示名称）
+    fn subagent_identity(input: &serde_json::Value) -> String {
+        input
+            .get("subagent_type")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string())
+            .or_else(|| {
+                input
+                    .get("fork")
+                    .and_then(|v| v.as_bool())
+                    .filter(|&f| f)
+                    .map(|_| "fork".to_string())
+            })
+            .unwrap_or_else(|| "fork".to_string())
+    }
+
+    /// 创建 SubAgent observation 并将上下文压入 subagent_stack
+    ///
+    /// parent_observation_id 应为 Agent 工具调用的 Tool span_id，
+    /// 这样 SubAgent 作为 Tool 的子节点出现在 Langfuse 树中。
+    fn begin_subagent(&mut self, parent_tool_span_id: &str, input: &serde_json::Value) {
+        let agent_id = Self::subagent_identity(input);
+        let task_preview: String = input
+            .get("prompt")
+            .and_then(|v| v.as_str())
+            .map(|s| s.chars().take(200).collect())
+            .unwrap_or_default();
+
+        let observation_id = uuid::Uuid::now_v7().to_string();
+        let start_time = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+
+        let body = ObservationBody {
+            id: Some(observation_id.clone()),
+            trace_id: Some(self.trace_id.clone()),
+            r#type: ObservationType::Agent,
+            name: Some(format!("subagent:{}", agent_id)),
+            start_time: Some(start_time.clone()),
+            parent_observation_id: Some(parent_tool_span_id.to_string()),
+            input: Some(serde_json::json!(task_preview)),
+            version: Some(VERSION.to_string()),
+            session_id: Some(self.session_id.clone()),
+            ..Default::default()
+        };
+        let event = IngestionEvent::ObservationCreate {
+            id: uuid::Uuid::now_v7().to_string(),
+            timestamp: start_time,
+            body,
+            metadata: None,
+        };
+        if let Err(e) = self.session.batcher.try_add(event) {
+            tracing::warn!(
+                error = %e, trace_id = %self.trace_id, subagent = %agent_id,
+                "langfuse: subagent observation create 入队失败（背压丢弃）"
+            );
+        }
+
+        self.subagent_stack.push(SubAgentContext {
+            observation_id,
+            agent_id,
+            tools_batch_span_id: None,
+            tools_batch_start_time: None,
+            tools_batch_end_time: None,
+            pending_tools: HashMap::new(),
+        });
+    }
+
     /// 提交当前批次 Tools Span
     fn flush_tools_batch(&mut self) {
         let (batch_id, batch_start, batch_end, parent_id) = {
@@ -302,27 +368,39 @@ impl LangfuseTracer {
 
     /// 工具调用开始
     pub fn on_tool_start(&mut self, tool_call_id: &str, name: &str, input: &serde_json::Value) {
-        let current_agent_id = self.current_agent_id();
-        let (batch_id_ref, start_time_ref, _, pending_tools) = self.current_tools_context();
-        if pending_tools.is_empty() {
-            *batch_id_ref = Some(uuid::Uuid::now_v7().to_string());
-            *start_time_ref =
-                Some(chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true));
-        }
-        let parent_span_id = batch_id_ref.clone().unwrap_or(current_agent_id);
+        let is_agent = name == "Agent";
+        let tool_span_id;
 
-        let span_id = uuid::Uuid::now_v7().to_string();
-        let start_time = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
-        pending_tools.insert(
-            tool_call_id.to_string(),
-            PendingTool {
-                span_id,
-                name: name.to_string(),
-                input: input.clone(),
-                start_time,
-                parent_span_id,
-            },
-        );
+        // Block 限定 current_tools_context 的可变借用范围
+        {
+            let current_agent_id = self.current_agent_id();
+            let (batch_id_ref, start_time_ref, _, pending_tools) = self.current_tools_context();
+            if pending_tools.is_empty() {
+                *batch_id_ref = Some(uuid::Uuid::now_v7().to_string());
+                *start_time_ref =
+                    Some(chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true));
+            }
+            let parent_span_id = batch_id_ref.clone().unwrap_or(current_agent_id);
+
+            tool_span_id = uuid::Uuid::now_v7().to_string();
+            let start_time =
+                chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+            pending_tools.insert(
+                tool_call_id.to_string(),
+                PendingTool {
+                    span_id: tool_span_id.clone(),
+                    name: name.to_string(),
+                    input: input.clone(),
+                    start_time,
+                    parent_span_id,
+                },
+            );
+        } // 可变借用在此释放
+
+        // Agent 工具：创建 SubAgent observation，push 到栈
+        if is_agent {
+            self.begin_subagent(&tool_span_id, input);
+        }
     }
 
     /// 工具调用结束：同步创建 tool observation
