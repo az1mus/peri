@@ -26,7 +26,7 @@ pub trait ThreadStore: Send + Sync {
     /// 更新指定 thread 的元数据
     async fn update_meta(&self, id: &ThreadId, meta: ThreadMeta) -> Result<()>;
 
-    /// 列举所有 thread 元数据，按 updated_at 降序
+    /// 列举所有 thread 元数据，按 updated_at 降序（不含 hidden 的子 agent）
     async fn list_threads(&self) -> Result<Vec<ThreadMeta>>;
 
     /// 删除指定 thread（包含消息和元数据）
@@ -38,4 +38,19 @@ pub trait ThreadStore: Send + Sync {
         meta.title = Some(title.to_string());
         self.update_meta(id, meta).await
     }
+
+    /// 加载 thread 的完整上下文（含祖先链 + 缓存）
+    async fn load_context(&self, thread_id: &ThreadId) -> Result<Vec<BaseMessage>>;
+
+    /// 列举指定父 thread 的直接子 thread
+    async fn list_child_threads(&self, parent_id: &ThreadId) -> Result<Vec<ThreadMeta>>;
+
+    /// 递归列举以 root_id 为根的所有 thread（含自身）
+    async fn list_session_threads(&self, root_id: &ThreadId) -> Result<Vec<ThreadMeta>>;
+
+    /// 更新 thread 的 agent_status 字段
+    async fn update_thread_status(&self, id: &ThreadId, status: &str) -> Result<()>;
+
+    /// 清除 thread 的 cached_context
+    async fn invalidate_context_cache(&self, thread_id: &ThreadId) -> Result<()>;
 }

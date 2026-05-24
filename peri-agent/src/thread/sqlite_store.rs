@@ -8,6 +8,11 @@ use std::path::PathBuf;
 use crate::messages::BaseMessage;
 use crate::thread::{ThreadId, ThreadMeta, ThreadStore};
 
+/// SELECT 所有 thread 列的统一常量
+const THREAD_COLUMNS: &str = "t.id, t.title, t.cwd, t.created_at, t.updated_at, t.message_count,
+    (SELECT COALESCE(SUM(LENGTH(m.content)), 0) FROM messages m WHERE m.thread_id = t.id) as content_size,
+    t.parent_thread_id, t.snapshot_at_message_id, t.hidden, t.cancel_policy, t.config, t.cached_context, t.agent_status";
+
 /// 基于 SQLite 的 ThreadStore 实现
 ///
 /// 使用 WAL 模式提升并发读性能，sqlx SqlitePool 连接池管理并发。
@@ -82,6 +87,99 @@ impl SqliteThreadStore {
         .execute(&self.pool)
         .await?;
 
+        // 迁移：为已有表添加新列（忽略 "duplicate column" 错误实现幂等）
+        let alter_columns = [
+            "ALTER TABLE threads ADD COLUMN parent_thread_id TEXT",
+            "ALTER TABLE threads ADD COLUMN snapshot_at_message_id TEXT",
+            "ALTER TABLE threads ADD COLUMN hidden BOOLEAN NOT NULL DEFAULT 0",
+            "ALTER TABLE threads ADD COLUMN cancel_policy TEXT NOT NULL DEFAULT 'cascade'",
+            "ALTER TABLE threads ADD COLUMN config TEXT",
+            "ALTER TABLE threads ADD COLUMN cached_context TEXT",
+            "ALTER TABLE threads ADD COLUMN agent_status TEXT NOT NULL DEFAULT 'active'",
+        ];
+        for sql in &alter_columns {
+            // SQLite 返回 "duplicate column name" 时忽略
+            if let Err(e) = sqlx::query(sql).execute(&self.pool).await {
+                let msg = e.to_string();
+                if !msg.contains("duplicate column name") {
+                    return Err(e.into());
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    /// 沿 parent_thread_id 链向上回溯，返回从根到自身的有序列表
+    async fn resolve_ancestor_chain(&self, thread_id: &ThreadId) -> Result<Vec<ThreadId>> {
+        let mut chain = vec![thread_id.clone()];
+        let mut current = thread_id.clone();
+        loop {
+            let row: Option<(Option<String>,)> =
+                sqlx::query_as("SELECT parent_thread_id FROM threads WHERE id = ?1")
+                    .bind(current.as_str())
+                    .fetch_optional(&self.pool)
+                    .await?;
+            match row {
+                Some((Some(parent),)) => {
+                    chain.push(parent.clone());
+                    current = parent;
+                }
+                _ => break,
+            }
+        }
+        chain.reverse();
+        Ok(chain)
+    }
+
+    /// 加载指定 thread 中 rowid <= 目标消息 rowid 的所有消息
+    async fn load_messages_up_to(
+        &self,
+        thread_id: &ThreadId,
+        message_id: &str,
+    ) -> Result<Vec<BaseMessage>> {
+        // 先查找目标消息的 rowid
+        let target_row: Option<(i64,)> =
+            sqlx::query_as("SELECT rowid FROM messages WHERE message_id = ?1")
+                .bind(message_id)
+                .fetch_optional(&self.pool)
+                .await?;
+
+        let target_rowid = match target_row {
+            Some((rid,)) => rid,
+            None => {
+                // 消息不存在，返回空
+                return Ok(vec![]);
+            }
+        };
+
+        let rows: Vec<(String,)> = sqlx::query_as(
+            "SELECT content FROM messages WHERE thread_id = ?1 AND rowid <= ?2 ORDER BY rowid",
+        )
+        .bind(thread_id.as_str())
+        .bind(target_rowid)
+        .fetch_all(&self.pool)
+        .await?;
+
+        rows.into_iter()
+            .map(|(content,)| serde_json::from_str(&content).map_err(Into::into))
+            .collect()
+    }
+
+    /// 将消息序列化为 JSON 并保存到 cached_context 列
+    async fn save_context_cache(
+        &self,
+        thread_id: &ThreadId,
+        messages: &[BaseMessage],
+    ) -> Result<()> {
+        let cached = serde_json::to_string(messages)?;
+        let now = Utc::now().to_rfc3339();
+        sqlx::query("UPDATE threads SET cached_context = ?1, updated_at = ?2 WHERE id = ?3")
+            .bind(&cached)
+            .bind(&now)
+            .bind(thread_id.as_str())
+            .execute(&self.pool)
+            .await?;
         Ok(())
     }
 }
@@ -97,6 +195,7 @@ fn role_of(msg: &BaseMessage) -> &'static str {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn meta_from_row(
     id: String,
     title: Option<String>,
@@ -105,6 +204,13 @@ fn meta_from_row(
     updated_at: String,
     message_count: i64,
     content_size: i64,
+    parent_thread_id: Option<String>,
+    snapshot_at_message_id: Option<String>,
+    hidden: bool,
+    cancel_policy: String,
+    config: Option<String>,
+    cached_context: Option<String>,
+    agent_status: String,
 ) -> Result<ThreadMeta> {
     Ok(ThreadMeta {
         id,
@@ -114,7 +220,13 @@ fn meta_from_row(
         updated_at: updated_at.parse::<DateTime<Utc>>()?,
         message_count: message_count as usize,
         content_size: content_size as u64,
-        ..ThreadMeta::default_for_db()
+        parent_thread_id,
+        snapshot_at_message_id,
+        hidden,
+        cancel_policy,
+        config,
+        cached_context,
+        agent_status,
     })
 }
 
@@ -154,8 +266,9 @@ impl ThreadStore for SqliteThreadStore {
     async fn create_thread(&self, meta: ThreadMeta) -> Result<ThreadId> {
         let id = meta.id.clone();
         sqlx::query(
-            "INSERT INTO threads (id, title, cwd, created_at, updated_at, message_count)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            "INSERT INTO threads (id, title, cwd, created_at, updated_at, message_count,
+                parent_thread_id, snapshot_at_message_id, hidden, cancel_policy, config, cached_context, agent_status)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
         )
         .bind(&meta.id)
         .bind(&meta.title)
@@ -163,6 +276,13 @@ impl ThreadStore for SqliteThreadStore {
         .bind(meta.created_at.to_rfc3339())
         .bind(meta.updated_at.to_rfc3339())
         .bind(meta.message_count as i64)
+        .bind(&meta.parent_thread_id)
+        .bind(&meta.snapshot_at_message_id)
+        .bind(meta.hidden)
+        .bind(&meta.cancel_policy)
+        .bind(&meta.config)
+        .bind(&meta.cached_context)
+        .bind(&meta.agent_status)
         .execute(&self.pool)
         .await?;
         Ok(id)
@@ -223,26 +343,52 @@ impl ThreadStore for SqliteThreadStore {
     }
 
     async fn load_meta(&self, id: &ThreadId) -> Result<ThreadMeta> {
-        let row: (String, Option<String>, String, String, String, i64, i64) = sqlx::query_as(
-            "SELECT t.id, t.title, t.cwd, t.created_at, t.updated_at, t.message_count,
-                    (SELECT COALESCE(SUM(LENGTH(m.content)), 0) FROM messages m WHERE m.thread_id = t.id) as content_size
-             FROM threads t WHERE t.id = ?1"
-        )
+        let row: (
+            String,
+            Option<String>,
+            String,
+            String,
+            String,
+            i64,
+            i64,
+            Option<String>,
+            Option<String>,
+            bool,
+            String,
+            Option<String>,
+            Option<String>,
+            String,
+        ) = sqlx::query_as(&format!(
+            "SELECT {THREAD_COLUMNS} FROM threads t WHERE t.id = ?1"
+        ))
         .bind(id.as_str())
         .fetch_one(&self.pool)
         .await?;
 
-        meta_from_row(row.0, row.1, row.2, row.3, row.4, row.5, row.6)
+        meta_from_row(
+            row.0, row.1, row.2, row.3, row.4, row.5, row.6, row.7, row.8, row.9, row.10, row.11,
+            row.12, row.13,
+        )
     }
 
     async fn update_meta(&self, id: &ThreadId, meta: ThreadMeta) -> Result<()> {
         sqlx::query(
-            "UPDATE threads SET title = ?1, cwd = ?2, updated_at = ?3, message_count = ?4 WHERE id = ?5"
+            "UPDATE threads SET title = ?1, cwd = ?2, updated_at = ?3, message_count = ?4,
+                parent_thread_id = ?5, snapshot_at_message_id = ?6, hidden = ?7,
+                cancel_policy = ?8, config = ?9, cached_context = ?10, agent_status = ?11
+             WHERE id = ?12",
         )
         .bind(&meta.title)
         .bind(&meta.cwd)
         .bind(meta.updated_at.to_rfc3339())
         .bind(meta.message_count as i64)
+        .bind(&meta.parent_thread_id)
+        .bind(&meta.snapshot_at_message_id)
+        .bind(meta.hidden)
+        .bind(&meta.cancel_policy)
+        .bind(&meta.config)
+        .bind(&meta.cached_context)
+        .bind(&meta.agent_status)
         .bind(id.as_str())
         .execute(&self.pool)
         .await?;
@@ -250,16 +396,34 @@ impl ThreadStore for SqliteThreadStore {
     }
 
     async fn list_threads(&self) -> Result<Vec<ThreadMeta>> {
-        let rows: Vec<(String, Option<String>, String, String, String, i64, i64)> = sqlx::query_as(
-            "SELECT t.id, t.title, t.cwd, t.created_at, t.updated_at, t.message_count,
-                    (SELECT COALESCE(SUM(LENGTH(m.content)), 0) FROM messages m WHERE m.thread_id = t.id) as content_size
-             FROM threads t ORDER BY t.updated_at DESC"
-        )
+        let rows: Vec<(
+            String,
+            Option<String>,
+            String,
+            String,
+            String,
+            i64,
+            i64,
+            Option<String>,
+            Option<String>,
+            bool,
+            String,
+            Option<String>,
+            Option<String>,
+            String,
+        )> = sqlx::query_as(&format!(
+            "SELECT {THREAD_COLUMNS} FROM threads t WHERE t.hidden = 0 ORDER BY t.updated_at DESC"
+        ))
         .fetch_all(&self.pool)
         .await?;
 
         rows.into_iter()
-            .map(|row| meta_from_row(row.0, row.1, row.2, row.3, row.4, row.5, row.6))
+            .map(|row| {
+                meta_from_row(
+                    row.0, row.1, row.2, row.3, row.4, row.5, row.6, row.7, row.8, row.9, row.10,
+                    row.11, row.12, row.13,
+                )
+            })
             .collect()
     }
 
@@ -279,6 +443,150 @@ impl ThreadStore for SqliteThreadStore {
             .bind(title)
             .bind(&now)
             .bind(id.as_str())
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+
+    async fn load_context(&self, thread_id: &ThreadId) -> Result<Vec<BaseMessage>> {
+        // 先尝试从 cached_context 读取
+        let cache_row: Option<(Option<String>,)> =
+            sqlx::query_as("SELECT cached_context FROM threads WHERE id = ?1")
+                .bind(thread_id.as_str())
+                .fetch_optional(&self.pool)
+                .await?;
+
+        let cached = cache_row.and_then(|(c,)| c);
+
+        if let Some(json) = cached {
+            let mut cached_msgs: Vec<BaseMessage> = serde_json::from_str(&json)?;
+            // 检查是否有新消息追加到缓存之后
+            let cached_count = cached_msgs.len();
+            let rows: Vec<(String,)> = sqlx::query_as(
+                "SELECT content FROM messages WHERE thread_id = ?1 ORDER BY rowid LIMIT -1 OFFSET ?2"
+            )
+            .bind(thread_id.as_str())
+            .bind(cached_count as i64)
+            .fetch_all(&self.pool)
+            .await?;
+
+            if rows.is_empty() {
+                return Ok(cached_msgs);
+            }
+
+            let new_msgs: Vec<BaseMessage> = rows
+                .into_iter()
+                .map(|(content,)| serde_json::from_str(&content).map_err(Into::into))
+                .collect::<Result<Vec<_>>>()?;
+            cached_msgs.extend(new_msgs);
+
+            // 更新缓存
+            self.save_context_cache(thread_id, &cached_msgs).await?;
+            return Ok(cached_msgs);
+        }
+
+        // 缓存未命中：解析祖先链 + 各级消息
+        let chain = self.resolve_ancestor_chain(thread_id).await?;
+        let mut all_msgs = Vec::new();
+
+        for (i, tid) in chain.iter().enumerate() {
+            let is_last = i == chain.len() - 1;
+
+            if is_last {
+                // 自身线程：加载全部消息
+                let msgs = self.load_messages(tid).await?;
+                all_msgs.extend(msgs);
+            } else {
+                // 祖先线程：只加载到 snapshot_at_message_id
+                let meta = self.load_meta(tid).await?;
+                if let Some(ref snap_id) = meta.snapshot_at_message_id {
+                    let msgs = self.load_messages_up_to(tid, snap_id).await?;
+                    all_msgs.extend(msgs);
+                }
+            }
+        }
+
+        // 保存缓存
+        if !all_msgs.is_empty() {
+            self.save_context_cache(thread_id, &all_msgs).await?;
+        }
+
+        Ok(all_msgs)
+    }
+
+    async fn list_child_threads(&self, parent_id: &ThreadId) -> Result<Vec<ThreadMeta>> {
+        let rows: Vec<(String, Option<String>, String, String, String, i64, i64,
+                       Option<String>, Option<String>, bool, String, Option<String>, Option<String>, String)> =
+            sqlx::query_as(&format!(
+                "SELECT {THREAD_COLUMNS} FROM threads t WHERE t.parent_thread_id = ?1 ORDER BY t.created_at ASC"
+            ))
+            .bind(parent_id.as_str())
+            .fetch_all(&self.pool)
+            .await?;
+
+        rows.into_iter()
+            .map(|row| {
+                meta_from_row(
+                    row.0, row.1, row.2, row.3, row.4, row.5, row.6, row.7, row.8, row.9, row.10,
+                    row.11, row.12, row.13,
+                )
+            })
+            .collect()
+    }
+
+    async fn list_session_threads(&self, root_id: &ThreadId) -> Result<Vec<ThreadMeta>> {
+        let rows: Vec<(
+            String,
+            Option<String>,
+            String,
+            String,
+            String,
+            i64,
+            i64,
+            Option<String>,
+            Option<String>,
+            bool,
+            String,
+            Option<String>,
+            Option<String>,
+            String,
+        )> = sqlx::query_as(&format!(
+            "WITH RECURSIVE session_tree AS (
+                    SELECT * FROM threads WHERE id = ?1
+                    UNION ALL
+                    SELECT t.* FROM threads t
+                    INNER JOIN session_tree st ON t.parent_thread_id = st.id
+                )
+                SELECT {THREAD_COLUMNS} FROM session_tree t ORDER BY t.created_at ASC"
+        ))
+        .bind(root_id.as_str())
+        .fetch_all(&self.pool)
+        .await?;
+
+        rows.into_iter()
+            .map(|row| {
+                meta_from_row(
+                    row.0, row.1, row.2, row.3, row.4, row.5, row.6, row.7, row.8, row.9, row.10,
+                    row.11, row.12, row.13,
+                )
+            })
+            .collect()
+    }
+
+    async fn update_thread_status(&self, id: &ThreadId, status: &str) -> Result<()> {
+        let now = Utc::now().to_rfc3339();
+        sqlx::query("UPDATE threads SET agent_status = ?1, updated_at = ?2 WHERE id = ?3")
+            .bind(status)
+            .bind(&now)
+            .bind(id.as_str())
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+
+    async fn invalidate_context_cache(&self, thread_id: &ThreadId) -> Result<()> {
+        sqlx::query("UPDATE threads SET cached_context = NULL WHERE id = ?1")
+            .bind(thread_id.as_str())
             .execute(&self.pool)
             .await?;
         Ok(())

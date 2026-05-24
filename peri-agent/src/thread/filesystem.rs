@@ -168,6 +168,8 @@ impl ThreadStore for FilesystemThreadStore {
 
     async fn list_threads(&self) -> Result<Vec<ThreadMeta>> {
         let mut metas = self.read_index().await?;
+        // 排除 hidden 的子 agent
+        metas.retain(|m| !m.hidden);
         metas.sort_by_key(|b| std::cmp::Reverse(b.updated_at));
         // 计算 content_size（从 messages.jsonl 文件大小）
         for meta in &mut metas {
@@ -189,6 +191,54 @@ impl ThreadStore for FilesystemThreadStore {
         let mut metas = self.read_index().await?;
         metas.retain(|m| m.id != *id);
         self.write_index(&metas).await
+    }
+
+    async fn load_context(&self, thread_id: &ThreadId) -> Result<Vec<BaseMessage>> {
+        // 文件系统实现暂不支持祖先链，直接加载自身消息
+        self.load_messages(thread_id).await
+    }
+
+    async fn list_child_threads(&self, parent_id: &ThreadId) -> Result<Vec<ThreadMeta>> {
+        let metas = self.read_index().await?;
+        Ok(metas
+            .into_iter()
+            .filter(|m| m.parent_thread_id.as_deref() == Some(parent_id.as_str()))
+            .collect())
+    }
+
+    async fn list_session_threads(&self, root_id: &ThreadId) -> Result<Vec<ThreadMeta>> {
+        // 文件系统实现：简单过滤 parent_chain 包含 root_id 的 thread
+        let metas = self.read_index().await?;
+        let mut result = vec![];
+        for m in &metas {
+            if m.id == *root_id {
+                result.push(m.clone());
+            }
+        }
+        // 简单 BFS 查找子孙
+        let mut to_check: Vec<String> = result.iter().map(|m| m.id.clone()).collect();
+        while let Some(pid) = to_check.pop() {
+            for m in &metas {
+                if m.parent_thread_id.as_deref() == Some(pid.as_str()) {
+                    to_check.push(m.id.clone());
+                    result.push(m.clone());
+                }
+            }
+        }
+        Ok(result)
+    }
+
+    async fn update_thread_status(&self, id: &ThreadId, status: &str) -> Result<()> {
+        let mut meta = self.load_meta(id).await?;
+        meta.agent_status = status.to_string();
+        meta.updated_at = Utc::now();
+        self.update_meta(id, meta).await
+    }
+
+    async fn invalidate_context_cache(&self, thread_id: &ThreadId) -> Result<()> {
+        let mut meta = self.load_meta(thread_id).await?;
+        meta.cached_context = None;
+        self.update_meta(thread_id, meta).await
     }
 }
 
