@@ -53,7 +53,7 @@ fn test_whitelist_only_compactable_tools() {
     ];
     let mut config = test_config();
     config.micro_compact_stale_steps = 1;
-    let cleared = micro_compact_enhanced(&config, &mut msgs);
+    let cleared = micro_compact_enhanced(&config, &mut msgs, 0);
     assert_eq!(cleared, 1);
     assert_eq!(msgs[1].content(), "[compacted: 600 chars]");
     assert_ne!(msgs[4].content(), "[compacted: 600 chars]");
@@ -73,7 +73,7 @@ fn test_whitelist_custom_list() {
         micro_compact_stale_steps: 0,
         ..Default::default()
     };
-    let cleared = micro_compact_enhanced(&config, &mut msgs);
+    let cleared = micro_compact_enhanced(&config, &mut msgs, 0);
     assert_eq!(cleared, 1);
     assert_ne!(msgs[1].content(), "[compacted: 600 chars]");
     assert_eq!(msgs[3].content(), "[compacted: 600 chars]");
@@ -88,7 +88,7 @@ fn test_whitelist_unknown_tool_preserved() {
     ];
     let mut config = test_config();
     config.micro_compact_stale_steps = 0;
-    let cleared = micro_compact_enhanced(&config, &mut msgs);
+    let cleared = micro_compact_enhanced(&config, &mut msgs, 0);
     assert_eq!(cleared, 0);
 }
 
@@ -105,7 +105,7 @@ fn test_stale_steps_keep_recent() {
     }
     let mut config = test_config();
     config.micro_compact_stale_steps = 5;
-    let cleared = micro_compact_enhanced(&config, &mut msgs);
+    let cleared = micro_compact_enhanced(&config, &mut msgs, 0);
     assert_eq!(cleared, 2);
 }
 
@@ -122,7 +122,7 @@ fn test_stale_steps_zero_compact_all() {
     ];
     let mut config = test_config();
     config.micro_compact_stale_steps = 0;
-    let cleared = micro_compact_enhanced(&config, &mut msgs);
+    let cleared = micro_compact_enhanced(&config, &mut msgs, 0);
     assert_eq!(cleared, 3);
 }
 
@@ -139,7 +139,7 @@ fn test_stale_steps_large_keep_all() {
     ];
     let mut config = test_config();
     config.micro_compact_stale_steps = 100;
-    let cleared = micro_compact_enhanced(&config, &mut msgs);
+    let cleared = micro_compact_enhanced(&config, &mut msgs, 0);
     assert_eq!(cleared, 0);
 }
 
@@ -153,7 +153,7 @@ fn test_image_replaced_with_placeholder() {
     ];
     let mut config = test_config();
     config.micro_compact_stale_steps = 0;
-    let cleared = micro_compact_enhanced(&config, &mut msgs);
+    let cleared = micro_compact_enhanced(&config, &mut msgs, 0);
     assert_eq!(cleared, 1);
     let content = msgs[1].content();
     assert!(content.contains("[image]"), "got: {}", content);
@@ -167,7 +167,7 @@ fn test_large_image_compacted_with_token_info() {
     ];
     let mut config = test_config();
     config.micro_compact_stale_steps = 0;
-    let cleared = micro_compact_enhanced(&config, &mut msgs);
+    let cleared = micro_compact_enhanced(&config, &mut msgs, 0);
     assert_eq!(cleared, 1);
     let content = msgs[1].content();
     assert!(content.contains("compacted: image"), "got: {}", content);
@@ -183,7 +183,7 @@ fn test_image_in_recent_step_preserved() {
     ];
     let mut config = test_config();
     config.micro_compact_stale_steps = 5;
-    let cleared = micro_compact_enhanced(&config, &mut msgs);
+    let cleared = micro_compact_enhanced(&config, &mut msgs, 0);
     assert_eq!(cleared, 0);
 }
 
@@ -207,7 +207,7 @@ fn test_invariant_preserves_tool_pair() {
     ];
     let mut config = test_config();
     config.micro_compact_stale_steps = 1;
-    let cleared = micro_compact_enhanced(&config, &mut msgs);
+    let cleared = micro_compact_enhanced(&config, &mut msgs, 0);
     assert_eq!(cleared, 2);
 }
 
@@ -222,7 +222,7 @@ fn test_invariant_preserves_ai_parent() {
     ];
     let mut config = test_config();
     config.micro_compact_stale_steps = 1;
-    let cleared = micro_compact_enhanced(&config, &mut msgs);
+    let cleared = micro_compact_enhanced(&config, &mut msgs, 0);
     assert_eq!(cleared, 1);
     assert!(msgs[0].has_tool_calls());
 }
@@ -232,7 +232,7 @@ fn test_invariant_preserves_ai_parent() {
 #[test]
 fn test_empty_messages() {
     let mut msgs: Vec<BaseMessage> = vec![];
-    let cleared = micro_compact_enhanced(&test_config(), &mut msgs);
+    let cleared = micro_compact_enhanced(&test_config(), &mut msgs, 0);
     assert_eq!(cleared, 0);
 }
 
@@ -244,7 +244,7 @@ fn test_no_tool_messages() {
         BaseMessage::human("q2"),
         ai_plain("a2"),
     ];
-    let cleared = micro_compact_enhanced(&test_config(), &mut msgs);
+    let cleared = micro_compact_enhanced(&test_config(), &mut msgs, 0);
     assert_eq!(cleared, 0);
 }
 
@@ -256,7 +256,7 @@ fn test_error_tool_result_preserved() {
     ];
     let mut config = test_config();
     config.micro_compact_stale_steps = 0;
-    let cleared = micro_compact_enhanced(&config, &mut msgs);
+    let cleared = micro_compact_enhanced(&config, &mut msgs, 0);
     assert_eq!(cleared, 0);
 }
 
@@ -268,7 +268,7 @@ fn test_already_compacted_skipped() {
     ];
     let mut config = test_config();
     config.micro_compact_stale_steps = 0;
-    let cleared = micro_compact_enhanced(&config, &mut msgs);
+    let cleared = micro_compact_enhanced(&config, &mut msgs, 0);
     assert_eq!(cleared, 0, "已压缩的消息应被跳过");
     assert_eq!(
         msgs[1].content(),
@@ -282,7 +282,7 @@ fn test_orphan_tool_result_preserved() {
     let mut msgs = vec![tool_result("orphan_id", &"x".repeat(600))];
     let mut config = test_config();
     config.micro_compact_stale_steps = 0;
-    let cleared = micro_compact_enhanced(&config, &mut msgs);
+    let cleared = micro_compact_enhanced(&config, &mut msgs, 0);
     assert_eq!(cleared, 0);
 }
 
@@ -299,7 +299,7 @@ fn test_mixed_compactable_and_protected() {
     ];
     let mut config = test_config();
     config.micro_compact_stale_steps = 0;
-    let cleared = micro_compact_enhanced(&config, &mut msgs);
+    let cleared = micro_compact_enhanced(&config, &mut msgs, 0);
     assert_eq!(cleared, 2);
     assert_eq!(msgs[1].content(), "[compacted: 600 chars]");
     assert_ne!(msgs[3].content(), "[compacted: 600 chars]");
@@ -338,7 +338,7 @@ fn test_document_replaced_with_placeholder() {
     ];
     let mut config = test_config();
     config.micro_compact_stale_steps = 0;
-    let cleared = micro_compact_enhanced(&config, &mut msgs);
+    let cleared = micro_compact_enhanced(&config, &mut msgs, 0);
     assert_eq!(cleared, 1);
     let content = msgs[1].content();
     assert!(
@@ -363,7 +363,7 @@ fn test_large_document_compacted_with_token_info() {
     ];
     let mut config = test_config();
     config.micro_compact_stale_steps = 0;
-    let cleared = micro_compact_enhanced(&config, &mut msgs);
+    let cleared = micro_compact_enhanced(&config, &mut msgs, 0);
     assert_eq!(cleared, 1);
     let content = msgs[1].content();
     assert!(
@@ -398,7 +398,7 @@ fn test_document_compaction_preserves_other_content() {
     ];
     let mut config = test_config();
     config.micro_compact_stale_steps = 0;
-    let cleared = micro_compact_enhanced(&config, &mut msgs);
+    let cleared = micro_compact_enhanced(&config, &mut msgs, 0);
     assert_eq!(cleared, 1);
     let content = msgs[1].content();
     // Document 被替换为占位符，Text 内容保留
@@ -436,7 +436,7 @@ fn test_compact_preserves_tool_call_ids_on_ai_message() {
     ];
     let mut config = test_config();
     config.micro_compact_stale_steps = 0;
-    let cleared = micro_compact_enhanced(&config, &mut msgs);
+    let cleared = micro_compact_enhanced(&config, &mut msgs, 0);
     assert_eq!(cleared, 2, "两个工具结果都应被压缩");
     let ai_msg = &msgs[0];
     let tool_calls = ai_msg.tool_calls();

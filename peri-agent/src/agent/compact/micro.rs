@@ -75,28 +75,38 @@ fn compact_tool_result_content(content: &mut MessageContent, config: &CompactCon
     modified
 }
 
-pub fn micro_compact_enhanced(config: &CompactConfig, messages: &mut [BaseMessage]) -> usize {
+pub fn micro_compact_enhanced(
+    config: &CompactConfig,
+    messages: &mut [BaseMessage],
+    ancestor_len: usize,
+) -> usize {
     if messages.is_empty() {
         return 0;
     }
 
-    let rounds = group_messages_by_round(messages);
+    // 只对 own messages（ancestor_len..）进行分组和压缩
+    if ancestor_len >= messages.len() {
+        return 0;
+    }
+    let own_messages = &mut messages[ancestor_len..];
+
+    let rounds = group_messages_by_round(own_messages);
     let total_rounds = rounds.len();
     let stale_threshold = config.micro_compact_stale_steps;
     let stale_round_limit = total_rounds.saturating_sub(stale_threshold);
 
-    let mut round_index = vec![0usize; messages.len()];
+    let mut round_index = vec![0usize; own_messages.len()];
     for (ri, round) in rounds.iter().enumerate() {
         #[allow(clippy::needless_range_loop)]
         for mi in round.start..round.end {
-            if mi < messages.len() {
+            if mi < own_messages.len() {
                 round_index[mi] = ri;
             }
         }
     }
 
     let mut compactable_indices: Vec<usize> = Vec::new();
-    for (i, msg) in messages.iter().enumerate() {
+    for (i, msg) in own_messages.iter().enumerate() {
         if let BaseMessage::Tool {
             tool_call_id,
             is_error,
@@ -109,7 +119,7 @@ pub fn micro_compact_enhanced(config: &CompactConfig, messages: &mut [BaseMessag
             if round_index[i] >= stale_round_limit {
                 continue;
             }
-            let tool_name = find_tool_name_for_tool_result(messages, tool_call_id);
+            let tool_name = find_tool_name_for_tool_result(own_messages, tool_call_id);
             match tool_name {
                 Some(ref name) if config.micro_compactable_tools.contains(name) => {}
                 _ => continue,
@@ -120,13 +130,13 @@ pub fn micro_compact_enhanced(config: &CompactConfig, messages: &mut [BaseMessag
 
     if compactable_indices.is_empty() {
         let mut image_cleared = 0;
-        for i in 0..messages.len() {
+        for i in 0..own_messages.len() {
             if round_index[i] >= stale_round_limit {
                 continue;
             }
             if let BaseMessage::Tool {
                 content, is_error, ..
-            } = &mut messages[i]
+            } = &mut own_messages[i]
             {
                 if *is_error {
                     continue;
@@ -142,14 +152,14 @@ pub fn micro_compact_enhanced(config: &CompactConfig, messages: &mut [BaseMessag
     let compact_start = *compactable_indices.first().unwrap();
     let compact_end = *compactable_indices.last().unwrap() + 1;
     let (adj_start, adj_end) =
-        adjust_index_to_preserve_invariants(messages, compact_start, compact_end);
+        adjust_index_to_preserve_invariants(own_messages, compact_start, compact_end);
 
     let mut cleared = 0;
     for i in adj_start..adj_end {
         if round_index[i] >= stale_round_limit {
             continue;
         }
-        let (tc_id, is_err) = match &messages[i] {
+        let (tc_id, is_err) = match &own_messages[i] {
             BaseMessage::Tool {
                 tool_call_id,
                 is_error,
@@ -160,7 +170,7 @@ pub fn micro_compact_enhanced(config: &CompactConfig, messages: &mut [BaseMessag
         if is_err {
             continue;
         }
-        let tool_name = find_tool_name_for_tool_result(messages, &tc_id);
+        let tool_name = find_tool_name_for_tool_result(own_messages, &tc_id);
         let in_whitelist = match tool_name {
             Some(ref name) => config.micro_compactable_tools.contains(name),
             None => false,
@@ -169,7 +179,7 @@ pub fn micro_compact_enhanced(config: &CompactConfig, messages: &mut [BaseMessag
             continue;
         }
 
-        if let BaseMessage::Tool { content, .. } = &mut messages[i] {
+        if let BaseMessage::Tool { content, .. } = &mut own_messages[i] {
             let original_text = content.text_content();
             // 跳过已压缩的消息，避免重复处理（覆盖 chars/image/document 三种格式）
             if original_text.starts_with("[compacted:") {

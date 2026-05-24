@@ -3,8 +3,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::messages::BaseMessage;
-use crate::thread::ThreadId;
-use crate::thread::ThreadStore;
+use crate::thread::{ThreadId, ThreadStore};
 
 /// State trait - 所有 Agent 状态必须实现此 trait
 /// 与 TypeScript BaseAgentStateType 对齐
@@ -38,6 +37,16 @@ pub trait State: Send + Sync + Clone + 'static {
     /// messages[..ancestor_len] = 只读祖先消息（compact 边界）
     fn ancestor_len(&self) -> usize {
         0
+    }
+
+    /// 持久化后端（compact 后 invalidate cache 用）
+    fn store(&self) -> Option<&Arc<dyn ThreadStore>> {
+        None
+    }
+
+    /// 持久化目标 thread id（compact 后 invalidate cache 用）
+    fn own_thread_id(&self) -> Option<&ThreadId> {
+        None
     }
 }
 
@@ -256,6 +265,14 @@ impl State for AgentState {
 
     fn ancestor_len(&self) -> usize {
         self.ancestor_len
+    }
+
+    fn store(&self) -> Option<&Arc<dyn ThreadStore>> {
+        self.store.as_ref()
+    }
+
+    fn own_thread_id(&self) -> Option<&ThreadId> {
+        self.thread_id.as_ref()
     }
 }
 
