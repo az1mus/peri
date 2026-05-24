@@ -36,6 +36,9 @@ impl App {
     }
 
     pub(super) fn handle_done(&mut self) -> (bool, bool, bool) {
+        self.session_mgr.sessions[self.session_mgr.active]
+            .agent
+            .cancel_sent_at = None;
         // Child agent Done during tool execution — ignore
         let in_sub = self.session_mgr.sessions[self.session_mgr.active]
             .messages
@@ -140,6 +143,9 @@ impl App {
     }
 
     pub(super) fn handle_interrupted(&mut self) -> (bool, bool, bool) {
+        self.session_mgr.sessions[self.session_mgr.active]
+            .agent
+            .cancel_sent_at = None;
         // Child agent interrupted during tool execution — ignore
         if self.session_mgr.sessions[self.session_mgr.active]
             .messages
@@ -230,6 +236,9 @@ impl App {
     }
 
     pub(super) fn handle_error(&mut self, error_msg: &str) -> (bool, bool, bool) {
+        self.session_mgr.sessions[self.session_mgr.active]
+            .agent
+            .cancel_sent_at = None;
         // Child agent error during tool execution — ignore
         if self.session_mgr.sessions[self.session_mgr.active]
             .messages

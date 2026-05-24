@@ -77,6 +77,8 @@ pub struct AgentComm {
     pub tool_search_index: Option<std::sync::Arc<peri_middlewares::tool_search::ToolSearchIndex>>,
     /// 会话级共享工具注册表（跨 submit 复用）
     pub shared_tools: Option<SharedToolRegistry>,
+    /// cancel 通知发送时间（用于超时 fallback：5s 后仍未收到事件则强制清理）
+    pub cancel_sent_at: Option<std::time::Instant>,
     /// Pending ACP request ID for HITL/AskUser response routing
     pub pending_acp_request_id: Option<peri_acp::transport::types::RequestId>,
 }
@@ -112,6 +114,7 @@ impl Default for AgentComm {
             tool_search_index: None,
             shared_tools: None,
             pending_acp_request_id: None,
+            cancel_sent_at: None,
         }
     }
 }

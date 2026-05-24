@@ -353,6 +353,13 @@ impl App {
                     tracing::warn!(error = %e, "ACP cancel failed (session may have ended)");
                 }
             });
+            // 安全网：记录 cancel 时间，5 秒后如果仍在 loading 则强制清理
+            self.session_mgr.sessions[self.session_mgr.active]
+                .agent
+                .cancel_sent_at = Some(std::time::Instant::now());
+            // ACP 路径：cancel 已发送，UI 清理由后续 Interrupted/Done 事件完成。
+            // 不执行强制清理——避免与 ACP server 端事件竞态导致双重清理。
+            return;
         }
         // Fallback: direct cancel_token (legacy path, kept for tests)
         if let Some(token) = &self.session_mgr.sessions[self.session_mgr.active]

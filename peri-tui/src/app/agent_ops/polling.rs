@@ -8,6 +8,22 @@ use crate::app::App;
 
 impl App {
     pub fn poll_agent(&mut self) -> bool {
+        // Cancel 超时安全网：5 秒后仍未收到 Interrupted/Done，强制清理
+        if let Some(cancel_at) = self.session_mgr.sessions[self.session_mgr.active]
+            .agent
+            .cancel_sent_at
+        {
+            if cancel_at.elapsed() > std::time::Duration::from_secs(5)
+                && self.session_mgr.sessions[self.session_mgr.active].ui.loading
+            {
+                tracing::warn!("cancel timeout: 5s elapsed without Interrupted/Done, force cleanup");
+                self.session_mgr.sessions[self.session_mgr.active]
+                    .agent
+                    .cancel_sent_at = None;
+                self.cleanup_agent_state(None);
+                return true;
+            }
+        }
         // 优先处理延迟的后台任务 continuation（由 BackgroundTaskCompleted 处理器设置）
         // 只有在 loading=false 时才 take()，避免 loading=true（如 compact 中）时
         // continuation 被消费但未使用而永久丢失
