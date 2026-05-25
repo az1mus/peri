@@ -2,16 +2,10 @@ use super::*;
 
 /// 通知分配器将空闲内存页归还给 OS。
 /// 在 `/clear`、`/compact`、切换会话等大块内存释放后调用。
-/// 注意：仅释放 mimalloc 管理的 Rust 堆内存，SQLite/tokio 等非 Rust 分配不受影响。
+/// 使用系统默认分配器（macOS malloc / Linux glibc malloc），
+/// 系统分配器自行管理内存归还策略。
 #[cfg(not(target_os = "windows"))]
-pub(crate) fn alloc_collect() {
-    // mimalloc: force=true triggers aggressive collection, immediately
-    // returning all freeable segments to the OS. This replaces the old
-    // jemalloc per-arena decay+purge cycle with a single call.
-    unsafe {
-        libmimalloc_sys::mi_collect(true);
-    }
-}
+pub(crate) fn alloc_collect() {}
 
 #[cfg(target_os = "windows")]
 pub(crate) fn alloc_collect() {}

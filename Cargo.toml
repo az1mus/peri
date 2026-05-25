@@ -71,9 +71,5 @@ sysinfo = "0.39"
 lsp-types = "0.97"
 lru = "0.18"
 
-# --- Memory ---
-mimalloc = { version = "0.1", default-features = false }
-libmimalloc-sys = { version = "0.1", features = ["extended"] }
-
 # --- Build ---
 tempfile = "3"

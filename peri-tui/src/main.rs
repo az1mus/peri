@@ -1,9 +1,5 @@
 use anyhow::Result;
 
-#[cfg(not(target_os = "windows"))]
-#[global_allocator]
-static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
-
 use clap::{Parser, Subcommand};
 use ratatui::{
     crossterm::{
@@ -250,10 +246,6 @@ fn inject_settings_override(source: &str) {
 // ─── 入口 ──────────────────────────────────────────────────────────────────
 
 fn main() -> Result<()> {
-    // mimalloc requires no compile-time or runtime configuration — its default
-    // behavior aggressively returns freed pages to the OS, which is exactly
-    // what we need for high allocation-churn workloads.
-
     // 最先注入环境变量（进程环境变量优先）
     inject_env_from_settings();
 
