@@ -171,6 +171,16 @@ impl App {
             .iter()
             .rposition(|vm| matches!(vm, MessageViewModel::UserBubble { .. }))
             .unwrap_or(0);
+        let view_len = self.session_mgr.sessions[self.session_mgr.active]
+            .messages
+            .view_messages
+            .len();
+        tracing::info!(
+            user_msg_idx,
+            view_len,
+            has_tool_calls = false,
+            "handle_interrupted: about to check for tool calls"
+        );
         let has_tool_calls = self.session_mgr.sessions[self.session_mgr.active]
             .messages
             .view_messages
@@ -201,10 +211,23 @@ impl App {
             .take()
         {
             // 截断 view_messages（移除 UserBubble + 本轮所有 Agent 响应）
+            tracing::info!(
+                user_msg_idx,
+                pre_drain_len = view_len,
+                "handle_interrupted: RebuildAll with prefix_len"
+            );
             self.apply_pipeline_action(PipelineAction::RebuildAll {
                 prefix_len: user_msg_idx,
                 tail_vms: vec![],
             });
+            let view_len_after = self.session_mgr.sessions[self.session_mgr.active]
+                .messages
+                .view_messages
+                .len();
+            tracing::info!(
+                view_len_after,
+                "handle_interrupted: after RebuildAll"
+            );
             // 截断 agent_state_messages（回滚 StateSnapshot 扩展的内容）
             let pre_len = self.session_mgr.sessions[self.session_mgr.active]
                 .metadata
