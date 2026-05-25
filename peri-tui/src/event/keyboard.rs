@@ -618,12 +618,10 @@ pub fn handle_key_event(
             app.hint_complete();
         }
 
-        // Alt+Enter: insert newline
+        // Shift+Enter / Alt+Enter: insert newline (Shift works everywhere; Alt (Option) for macOS)
         Input {
-            key: Key::Enter,
-            alt: true,
-            ..
-        } => {
+            key: Key::Enter, ..
+        } if input.shift || input.alt => {
             app.session_mgr.sessions[app.session_mgr.active]
                 .ui
                 .textarea

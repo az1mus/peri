@@ -143,7 +143,7 @@ pub(crate) fn render_welcome(f: &mut Frame, app: &App, area: Rect) {
             Style::default().fg(theme::DIM),
         ),
         Span::styled("  ", Style::default().fg(theme::DIM)),
-        Span::styled("Alt+Enter", Style::default().fg(theme::DIM)),
+        Span::styled("Shift+Enter", Style::default().fg(theme::DIM)),
         Span::styled(
             lc.tr("welcome-shortcut-newline"),
             Style::default().fg(theme::DIM),

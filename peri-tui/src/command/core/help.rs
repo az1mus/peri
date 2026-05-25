@@ -46,7 +46,8 @@ impl Command for HelpCommand {
         // 全局快捷键提示
         lines.push("".to_string());
         lines.push(
-            "快捷键：Shift+Tab 切换权限模式 │ Alt+M 切换模型 │ Esc 退出 │ Ctrl+C 中断".to_string(),
+            "快捷键：Shift+Tab 切换权限模式 │ Shift+Enter 换行 │ Esc 退出 │ Ctrl+C 中断"
+                .to_string(),
         );
 
         let vm = MessageViewModel::system(lines.join("\n"));

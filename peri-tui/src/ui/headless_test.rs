@@ -2306,8 +2306,8 @@ async fn test_textarea_shows_placeholder_hint() {
     let snap = handle.snapshot();
     let snap_text = snap.join("\n");
     assert!(
-        snap_text.contains("Alt+Enter") || snap_text.contains("输入消息"),
-        "输入框应显示占位提示（含 Alt+Enter 换行），实际:\n{}",
+        snap_text.contains("Shift+Enter") || snap_text.contains("输入消息"),
+        "输入框应显示占位提示（含 Shift+Enter 换行），实际:\n{}",
         snap_text
     );
 }
@@ -2324,8 +2324,8 @@ async fn test_welcome_card_shows_alt_enter_hint() {
     let snap = handle.snapshot();
     let snap_text = snap.join("\n");
     assert!(
-        snap_text.contains("Alt+Enter"),
-        "Welcome Card 应显示 Alt+Enter 快捷键提示，实际:\n{}",
+        snap_text.contains("Shift+Enter"),
+        "Welcome Card 应显示 Shift+Enter 快捷键提示，实际:\n{}",
         snap_text
     );
 }

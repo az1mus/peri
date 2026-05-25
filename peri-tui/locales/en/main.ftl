@@ -44,7 +44,7 @@ help-available-commands = Available commands:
 help-alias-prefix = (aliases: /{ $aliases })
 help-skills-count = Skills ({ $count } available): type # prefix to view
 help-skills-empty = Skills: place .md files in .claude/skills/ directory to add
-help-shortcuts = Shortcuts: Shift+Tab toggle permission mode | Alt+M switch model | Esc quit | Ctrl+C interrupt
+help-shortcuts = Shortcuts: Shift+Tab toggle permission mode | Shift+Enter newline | Esc quit | Ctrl+C interrupt
 
 # compact command
 compact-agent-running = Agent is running, cannot compact
@@ -148,7 +148,7 @@ welcome-skills-available = { $count } skills available
 tip-0 = Type / to enter commands, Tab to autocomplete
 tip-1 = Ctrl+C interrupts Agent, Shift+Tab toggles permission mode
 tip-2 = Alt+M quickly switch model (opus / sonnet / haiku)
-tip-3 = Alt+Enter for newline in input box
+tip-3 = Shift+Enter for newline in input box
 tip-4 = Drag files or images to terminal to auto-attach to message
 tip-5 = Long press Ctrl+V to paste clipboard image
 tip-6 = Ctrl+U/D scroll message history, Up/Down browse input history

@@ -408,13 +408,13 @@ fn render_second_row(f: &mut Frame, app: &App, area: Rect) {
             } else if no_mouse {
                 vec![
                     ("/".to_string(), lc.tr("key-command")),
-                    ("Alt+Enter".to_string(), lc.tr("key-newline")),
+                    ("Shift+Enter".to_string(), lc.tr("key-newline")),
                     ("Ctrl+U/D".to_string(), lc.tr("key-scroll")),
                 ]
             } else {
                 vec![
                     ("/".to_string(), lc.tr("key-command")),
-                    ("Alt+Enter".to_string(), lc.tr("key-newline")),
+                    ("Shift+Enter".to_string(), lc.tr("key-newline")),
                 ]
             };
             format_hints(&hints, key_style, desc_style)
