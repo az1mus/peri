@@ -61,5 +61,5 @@ thiserror = "1"
 futures-util = "0.3"
 
 [target.'cfg(not(target_os = "windows"))'.dependencies]
-tikv-jemallocator = { workspace = true }
-tikv-jemalloc-ctl = { workspace = true }
+mimalloc = { workspace = true }
+libmimalloc-sys = { workspace = true }

@@ -1,46 +1,9 @@
 use super::*;
 
-/// 通知 jemalloc 将空闲内存页归还给 OS。
-/// 在 `/clear`、`/compact`、切换会话等大块内存释放后调用。
-/// 注：仅释放 jemalloc 管理的 Rust 堆内存，SQLite/tokio 等非 Rust 分配不受影响。
-#[cfg(not(target_os = "windows"))]
-pub(crate) fn jemalloc_decay() {
-    // Advance epoch to refresh internal stats
-    if let Err(e) = tikv_jemalloc_ctl::epoch::advance() {
-        tracing::debug!(error = %e, "jemalloc epoch advance failed");
-        return;
-    }
-    let narenas: usize = match tikv_jemalloc_ctl::arenas::narenas::read() {
-        Ok(n) => n as usize,
-        Err(e) => {
-            tracing::debug!(error = %e, "jemalloc narenas read failed");
-            return;
-        }
-    };
-    for i in 0..narenas {
-        // 先触发 decay：处理 decay timeline 中正在老化的 dirty pages
-        let mut decay_key = format!("arena.{}.decay", i);
-        decay_key.push(0 as char);
-        unsafe {
-            let _: u8 = match tikv_jemalloc_ctl::raw::read(decay_key.as_bytes()) {
-                Ok(v) => v,
-                Err(_) => continue,
-            };
-        }
-        // 再触发 purge：立即释放所有已达到 decay 阈值的 dirty pages
-        let mut purge_key = format!("arena.{}.purge", i);
-        purge_key.push(0 as char);
-        unsafe {
-            let _: u8 = match tikv_jemalloc_ctl::raw::read(purge_key.as_bytes()) {
-                Ok(v) => v,
-                Err(_) => continue,
-            };
-        }
-    }
-}
-
-#[cfg(target_os = "windows")]
-pub(crate) fn jemalloc_decay() {}
+/// mimalloc automatically returns freed pages to the OS — no manual
+/// decay/purge needed. Kept as a no-op placeholder for call-sites that
+/// previously triggered jemalloc arena decay.
+pub(crate) fn allocator_decay() {}
 
 impl App {
     /// 获取或新建当前 thread id（同步，block_in_place）
@@ -293,7 +256,7 @@ impl App {
             ));
 
         // 切换会话时旧数据已释放，归还内存页给 OS
-        jemalloc_decay();
+        allocator_decay();
     }
 
     pub fn open_thread_with_feedback(&mut self, thread_id: ThreadId) {
@@ -400,8 +363,8 @@ impl App {
             });
         }
 
-        // 归还已释放内存页给 OS（jemalloc arena decay）
-        jemalloc_decay();
+        // 归还已释放内存页给 OS（mimalloc 自动回收，无需手动触发）
+        allocator_decay();
     }
 
     /// 打开 thread 浏览面板（通过命令触发）

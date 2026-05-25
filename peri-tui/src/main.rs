@@ -2,7 +2,7 @@ use anyhow::Result;
 
 #[cfg(not(target_os = "windows"))]
 #[global_allocator]
-static GLOBAL: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
+static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
 use clap::{Parser, Subcommand};
 use ratatui::{
@@ -30,7 +30,6 @@ mod acp_stdio;
 mod cli_args;
 mod cli_plugin;
 mod cli_print;
-mod jemalloc_config;
 
 // ─── CLI 定义 ──────────────────────────────────────────────────────────────
 
@@ -251,13 +250,9 @@ fn inject_settings_override(source: &str) {
 // ─── 入口 ──────────────────────────────────────────────────────────────────
 
 fn main() -> Result<()> {
-    // jemalloc config is applied at compile time via the `_rjem_malloc_conf`
-    // global symbol (see jemalloc_config.rs). It takes effect BEFORE main()
-    // runs — jemalloc initializes during lang_start's first allocation.
-
-    // Runtime mallctl writes as fallback/diagnostics (may not fully take effect
-    // for background_thread if arenas already exist, but harmless to call).
-    peri_tui::jemalloc_config::configure_jemalloc();
+    // mimalloc requires no compile-time or runtime configuration — its default
+    // behavior aggressively returns freed pages to the OS, which is exactly
+    // what we need for high allocation-churn workloads.
 
     // 最先注入环境变量（进程环境变量优先）
     inject_env_from_settings();

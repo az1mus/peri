@@ -25,76 +25,16 @@ impl Command for HeapdumpCommand {
         let _ = writeln!(buf, "=== HEAPDUMP {} ===", now.format("%Y-%m-%d %H:%M:%S"));
         let _ = writeln!(buf, "RSS: {:.1} MB\n", rss_mb);
 
-        // ── 2. jemalloc summary + detailed ──
+        // ── 2. Allocator info ──
         #[cfg(not(target_os = "windows"))]
         {
-            let _ = tikv_jemalloc_ctl::epoch::advance();
-            let allocated = tikv_jemalloc_ctl::stats::allocated::read().unwrap_or(0);
-            let active = tikv_jemalloc_ctl::stats::active::read().unwrap_or(0);
-            let mapped = tikv_jemalloc_ctl::stats::mapped::read().unwrap_or(0);
-            let resident = tikv_jemalloc_ctl::stats::resident::read().unwrap_or(0);
-            let retained = tikv_jemalloc_ctl::stats::retained::read().unwrap_or(0);
-            let huge: usize =
-                unsafe { tikv_jemalloc_ctl::raw::read(b"stats.huge.allocated\x00") }.unwrap_or(0);
-            let mb = |v: usize| v as f64 / (1024.0 * 1024.0);
-
-            let _ = writeln!(buf, "=== JEMALLOC SUMMARY ===");
-            let _ = writeln!(buf, "  allocated:    {:.1} MB", mb(allocated));
-            let _ = writeln!(buf, "  active:       {:.1} MB", mb(active));
-            let _ = writeln!(buf, "  resident:     {:.1} MB", mb(resident));
-            let _ = writeln!(buf, "  mapped:       {:.1} MB", mb(mapped));
-            let _ = writeln!(buf, "  retained:     {:.1} MB", mb(retained));
-            let _ = writeln!(buf, "  huge:         {:.1} MB", mb(huge));
+            let _ = writeln!(buf, "=== ALLOCATOR ===");
+            let _ = writeln!(buf, "  backend: mimalloc");
             let _ = writeln!(
                 buf,
-                "  non_arena:    {:.1} MB (mapped-active)",
-                mb(mapped.saturating_sub(active))
+                "  note: mimalloc automatically returns freed pages to the OS"
             );
-            let _ = writeln!(
-                buf,
-                "  RSS-overhead: {:.1} MB (RSS-resident)\n",
-                rss_mb - mb(resident)
-            );
-
-            // Jemalloc config diagnostics
-            {
-                let _ = writeln!(buf, "=== JEMALLOC CONFIG ===");
-                let dirty_decay: i64 =
-                    unsafe { tikv_jemalloc_ctl::raw::read(b"arenas.dirty_decay_ms\0") }
-                        .unwrap_or(-1);
-                let _ = writeln!(buf, "  dirty_decay_ms: {}", dirty_decay);
-                let bg_thread: bool =
-                    unsafe { tikv_jemalloc_ctl::raw::read(b"background_thread\0") }
-                        .unwrap_or(false);
-                let _ = writeln!(buf, "  background_thread: {}", bg_thread);
-                let lg_tcache_max: usize =
-                    unsafe { tikv_jemalloc_ctl::raw::read(b"arenas.lg_tcache_max\0") }.unwrap_or(0);
-                let _ = writeln!(
-                    buf,
-                    "  lg_tcache_max: {} ({}KB)",
-                    lg_tcache_max,
-                    1 << (lg_tcache_max.saturating_sub(10))
-                );
-                let narenas: usize =
-                    tikv_jemalloc_ctl::arenas::narenas::read().unwrap_or(0) as usize;
-                let _ = writeln!(buf, "  narenas: {}", narenas);
-                let _ = writeln!(
-                    buf,
-                    "  tcache_bytes: {:.1} MB",
-                    mb(tikv_jemalloc_ctl::stats::allocated::read().unwrap_or(0))
-                );
-                let _ = writeln!(buf);
-            }
-
-            let _ = writeln!(buf, "=== JEMALLOC ARENAS ===");
-            let mut jemalloc_buf = Vec::new();
-            let mut opts = tikv_jemalloc_ctl::stats_print::Options::default();
-            opts.skip_constants = true;
-            opts.skip_per_arena = true;
-            opts.skip_bin_size_classes = true;
-            opts.skip_mutex_statistics = true;
-            let _ = tikv_jemalloc_ctl::stats_print::stats_print(&mut jemalloc_buf, opts);
-            buf.extend_from_slice(&jemalloc_buf);
+            let _ = writeln!(buf);
         }
 
         // ── 3. TUI components ──
@@ -172,17 +112,7 @@ impl Command for HeapdumpCommand {
         }
 
         let msg = match std::fs::write(full_path, &buf) {
-            Ok(()) => {
-                #[cfg(not(target_os = "windows"))]
-                let mapped_str = format!(
-                    "{:.0}MB",
-                    tikv_jemalloc_ctl::stats::mapped::read().unwrap_or(0) as f64
-                        / (1024.0 * 1024.0)
-                );
-                #[cfg(target_os = "windows")]
-                let mapped_str = "N/A".to_string();
-                format!("Heapdump -> {filename}\nRSS: {rss_mb:.0}MB | mapped: {mapped_str}")
-            }
+            Ok(()) => format!("Heapdump -> {filename}\nRSS: {rss_mb:.0}MB"),
             Err(e) => format!("heapdump failed: {e}"),
         };
         app.session_mgr.sessions[app.session_mgr.active]

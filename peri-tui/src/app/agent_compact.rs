@@ -79,7 +79,7 @@ impl App {
         });
 
         // Full compact 释放了大量消息数据，归���内存页给 OS
-        super::thread_ops::jemalloc_decay();
+        super::thread_ops::allocator_decay();
 
         (true, false, false)
     }
