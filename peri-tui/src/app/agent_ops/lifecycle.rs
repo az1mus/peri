@@ -163,21 +163,44 @@ impl App {
             self.apply_pipeline_action(action);
         }
 
-        // 始终尝试恢复用户文本到输入框（无论 agent 是否已回复）
+        // 检测本轮是否已有工具调用：有工具调用时只中断执行，不撤回历史
+        let round_start = self.session_mgr.sessions[self.session_mgr.active]
+            .messages
+            .round_start_vm_idx;
+        let prefix = round_start.saturating_sub(1);
+        let has_tool_calls = self.session_mgr.sessions[self.session_mgr.active]
+            .messages
+            .view_messages
+            .iter()
+            .skip(prefix)
+            .any(|vm| {
+                matches!(
+                    vm,
+                    MessageViewModel::ToolCallGroup { .. } | MessageViewModel::ToolBlock { .. }
+                )
+            });
+
+        if has_tool_calls {
+            // 已有工具调用：只中断，保留对话历史
+            let vm = MessageViewModel::system(self.services.lc.tr("app-interrupt-done"));
+            self.apply_pipeline_action(PipelineAction::AddMessage(vm));
+            // 标记 reconcile 已完成，防止后续 Done 事件覆盖通知消息
+            self.session_mgr.sessions[self.session_mgr.active]
+                .agent
+                .reconcile_already_done = true;
+            return (true, false, false);
+        }
+
+        // 无工具调用：撤回用户消息，恢复文本到输入框
         if let Some(text) = self.session_mgr.sessions[self.session_mgr.active]
             .messages
             .last_submitted_text
             .take()
         {
-            let round_start = self.session_mgr.sessions[self.session_mgr.active]
-                .messages
-                .round_start_vm_idx;
             // 截断 view_messages（移除本轮 Human 消息 + Agent 响应）
-            // round_start_vm_idx 指向 UserBubble 之后的位置，saturating_sub(1)
-            // 确保 UserBubble 也被移除
-            let prefix_len = round_start.saturating_sub(1);
+            // prefix 已在上面计算为 round_start.saturating_sub(1)
             self.apply_pipeline_action(PipelineAction::RebuildAll {
-                prefix_len,
+                prefix_len: prefix,
                 tail_vms: vec![],
             });
             // 截断 agent_state_messages（回滚 StateSnapshot 扩展的内容）
