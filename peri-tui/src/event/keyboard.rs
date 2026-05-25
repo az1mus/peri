@@ -729,14 +729,20 @@ pub fn handle_key_event(
             }
         }
 
-        // Enter with @ mention active: inject selected path
+        // Enter with @ mention active and candidates: inject selected path
+        // If no candidates, close popup and fall through to normal submit
         Input {
             key: Key::Enter, ..
         } if !app.session_mgr.sessions[app.session_mgr.active].ui.loading
             && app.session_mgr.sessions[app.session_mgr.active]
                 .ui
                 .at_mention
-                .active =>
+                .active
+            && !app.session_mgr.sessions[app.session_mgr.active]
+                .ui
+                .at_mention
+                .candidates
+                .is_empty() =>
         {
             inject_at_mention_path(app);
         }
@@ -778,6 +784,17 @@ pub fn handle_key_event(
         Input {
             key: Key::Enter, ..
         } => {
+            // 关闭可能残留的 @ mention 弹窗
+            if app.session_mgr.sessions[app.session_mgr.active]
+                .ui
+                .at_mention
+                .active
+            {
+                app.session_mgr.sessions[app.session_mgr.active]
+                    .ui
+                    .at_mention
+                    .close();
+            }
             let text = app.session_mgr.sessions[app.session_mgr.active]
                 .ui
                 .textarea
