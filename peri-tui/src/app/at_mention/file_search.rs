@@ -3,6 +3,7 @@ use fuzzy_matcher::FuzzyMatcher;
 use std::path::Path;
 
 /// 文件搜索候选结果
+#[derive(Clone)]
 pub struct FileCandidate {
     pub path: String,
     /// 用于显示的相对路径

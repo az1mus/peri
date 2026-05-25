@@ -537,10 +537,34 @@ pub fn handle_key_event(
             }
         }
 
-        // Up: hint navigation > history browse (only first row) > textarea cursor
+        // Esc: 关闭 @ 提及弹窗
+        Input { key: Key::Esc, .. }
+            if app.session_mgr.sessions[app.session_mgr.active]
+                .ui
+                .at_mention
+                .active =>
+        {
+            app.session_mgr.sessions[app.session_mgr.active]
+                .ui
+                .at_mention
+                .close();
+        }
+
+        // Up: @ 提及导航 > hint navigation > history browse (only first row) > textarea cursor
         Input { key: Key::Up, .. } => {
             let hint_count = app.hint_candidates_count();
-            if hint_count > 0 && !app.session_mgr.sessions[app.session_mgr.active].ui.loading {
+            if app.session_mgr.sessions[app.session_mgr.active]
+                .ui
+                .at_mention
+                .active
+                && !app.session_mgr.sessions[app.session_mgr.active].ui.loading
+            {
+                app.session_mgr.sessions[app.session_mgr.active]
+                    .ui
+                    .at_mention
+                    .move_up();
+            } else if hint_count > 0 && !app.session_mgr.sessions[app.session_mgr.active].ui.loading
+            {
                 let cur = app.session_mgr.sessions[app.session_mgr.active]
                     .ui
                     .hint_cursor
@@ -573,10 +597,21 @@ pub fn handle_key_event(
             }
         }
 
-        // Down: hint navigation > history restore (only last row) > textarea cursor
+        // Down: @ 提及导航 > hint navigation > history restore (only last row) > textarea cursor
         Input { key: Key::Down, .. } => {
             let hint_count = app.hint_candidates_count();
-            if hint_count > 0 && !app.session_mgr.sessions[app.session_mgr.active].ui.loading {
+            if app.session_mgr.sessions[app.session_mgr.active]
+                .ui
+                .at_mention
+                .active
+                && !app.session_mgr.sessions[app.session_mgr.active].ui.loading
+            {
+                app.session_mgr.sessions[app.session_mgr.active]
+                    .ui
+                    .at_mention
+                    .move_down();
+            } else if hint_count > 0 && !app.session_mgr.sessions[app.session_mgr.active].ui.loading
+            {
                 let cur = app.session_mgr.sessions[app.session_mgr.active]
                     .ui
                     .hint_cursor
@@ -653,37 +688,57 @@ pub fn handle_key_event(
             }
         }
 
-        // Tab: hint overlay candidate navigation and completion
+        // Tab: @ 提及补全 > hint overlay candidate navigation and completion
         Input {
             key: Key::Tab,
             shift: false,
             ..
         } if !app.session_mgr.sessions[app.session_mgr.active].ui.loading => {
-            let count = app.hint_candidates_count();
-            if count > 0 {
-                match app.session_mgr.sessions[app.session_mgr.active]
-                    .ui
-                    .hint_cursor
-                {
-                    Some(cur) if cur + 1 < count => {
-                        app.session_mgr.sessions[app.session_mgr.active]
-                            .ui
-                            .hint_cursor = Some(cur + 1);
-                    }
-                    Some(_) => {
-                        // Already at last, cycle to first
-                        app.session_mgr.sessions[app.session_mgr.active]
-                            .ui
-                            .hint_cursor = Some(0);
-                    }
-                    None => {
-                        // First Tab press, select first
-                        app.session_mgr.sessions[app.session_mgr.active]
-                            .ui
-                            .hint_cursor = Some(0);
+            if app.session_mgr.sessions[app.session_mgr.active]
+                .ui
+                .at_mention
+                .active
+            {
+                inject_at_mention_path(app);
+            } else {
+                let count = app.hint_candidates_count();
+                if count > 0 {
+                    match app.session_mgr.sessions[app.session_mgr.active]
+                        .ui
+                        .hint_cursor
+                    {
+                        Some(cur) if cur + 1 < count => {
+                            app.session_mgr.sessions[app.session_mgr.active]
+                                .ui
+                                .hint_cursor = Some(cur + 1);
+                        }
+                        Some(_) => {
+                            // Already at last, cycle to first
+                            app.session_mgr.sessions[app.session_mgr.active]
+                                .ui
+                                .hint_cursor = Some(0);
+                        }
+                        None => {
+                            // First Tab press, select first
+                            app.session_mgr.sessions[app.session_mgr.active]
+                                .ui
+                                .hint_cursor = Some(0);
+                        }
                     }
                 }
             }
+        }
+
+        // Enter with @ mention active: inject selected path
+        Input {
+            key: Key::Enter, ..
+        } if !app.session_mgr.sessions[app.session_mgr.active].ui.loading
+            && app.session_mgr.sessions[app.session_mgr.active]
+                .ui
+                .at_mention
+                .active =>
+        {
+            inject_at_mention_path(app);
         }
 
         // Enter with hints available: confirm selection (defaults to first if none selected)
@@ -925,6 +980,7 @@ pub fn handle_key_event(
                 app.session_mgr.sessions[app.session_mgr.active]
                     .ui
                     .hint_cursor = None;
+                update_at_mention_detection(app);
             }
         }
 
@@ -935,4 +991,91 @@ pub fn handle_key_event(
     }
 
     Ok(Some(Action::Redraw))
+}
+
+/// 检测 textarea 中 @ 提及模式，更新状态并触发搜索
+fn update_at_mention_detection(app: &mut App) {
+    let textarea = &app.session_mgr.sessions[app.session_mgr.active].ui.textarea;
+    let text = textarea.lines().join("\n");
+    let (row, col) = textarea.cursor();
+    // 将 (row, col) 转为字节偏移
+    let mut pos = 0usize;
+    for (i, line) in textarea.lines().iter().enumerate() {
+        if i == row {
+            pos += line.chars().take(col).map(|c| c.len_utf8()).sum::<usize>();
+            break;
+        }
+        pos += line.len() + 1; // +1 for \n
+    }
+
+    let at = &mut app.session_mgr.sessions[app.session_mgr.active]
+        .ui
+        .at_mention;
+
+    if let Some((query, start)) = crate::app::AtMentionState::detect(&text, pos) {
+        if at.active && at.query == query {
+            return; // 未变化
+        }
+        at.activate(query, start);
+        let cwd = app.services.cwd.clone();
+        let candidates = crate::app::at_mention::file_search::search_files(&cwd, &at.query);
+        at.update_candidates(candidates);
+    } else if at.active {
+        at.close();
+    }
+}
+
+/// 将选中的 @ 提及路径注入 textarea
+fn inject_at_mention_path(app: &mut App) {
+    let at = &app.session_mgr.sessions[app.session_mgr.active]
+        .ui
+        .at_mention;
+    let candidate = match at.selected_candidate() {
+        Some(c) => c.clone(),
+        None => return,
+    };
+    let query_start = at.query_start;
+    let query_len = at.query.len();
+
+    let textarea = &app.session_mgr.sessions[app.session_mgr.active].ui.textarea;
+    let full_text: String = textarea.lines().join("\n");
+
+    let needs_quotes = candidate.path.contains(' ');
+    let replacement = if needs_quotes {
+        format!("@\"{}\"", candidate.path)
+    } else {
+        format!("@{}", candidate.path)
+    };
+
+    // 替换从 query_start 到 query_start + 1(@) + query_len
+    let mut new_text = String::with_capacity(full_text.len() + replacement.len());
+    new_text.push_str(&full_text[..query_start]);
+    new_text.push_str(&replacement);
+    let after_end = query_start + 1 + query_len;
+    if after_end < full_text.len() {
+        new_text.push_str(&full_text[after_end..]);
+    }
+
+    let is_dir = candidate.is_dir;
+
+    let mut new_ta = crate::app::build_textarea(false);
+    new_ta.insert_str(&new_text);
+    app.session_mgr.sessions[app.session_mgr.active].ui.textarea = new_ta;
+
+    if is_dir {
+        app.session_mgr.sessions[app.session_mgr.active]
+            .ui
+            .textarea
+            .insert_str("/");
+        update_at_mention_detection(app);
+    } else {
+        app.session_mgr.sessions[app.session_mgr.active]
+            .ui
+            .textarea
+            .insert_str(" ");
+        app.session_mgr.sessions[app.session_mgr.active]
+            .ui
+            .at_mention
+            .close();
+    }
 }
