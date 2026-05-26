@@ -1167,10 +1167,12 @@ fn handle_bar_key_event(app: &mut App, key_event: ratatui::crossterm::event::Key
         .len();
     let total_items = 1 + agents_len.min(4);
 
-    let cursor = app.session_mgr.sessions[app.session_mgr.active]
+    let raw_cursor = app.session_mgr.sessions[app.session_mgr.active]
         .ui
         .bg_bar_cursor
         .unwrap_or(0);
+    // Clamp cursor to valid range (agents may have been removed)
+    let cursor = raw_cursor.min(total_items.saturating_sub(1));
 
     match key_event.code {
         KeyCode::Esc => {

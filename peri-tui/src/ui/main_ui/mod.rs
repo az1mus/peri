@@ -272,11 +272,26 @@ fn render_session_column(
         }
     }
 
-    // 聚焦模式输入框样式
+    // 输入框样式：Bar 焦点变暗 / 聚焦只读模式 / 正常模式
+    let bar_focused = app.session_mgr.sessions[session_idx]
+        .ui
+        .bg_bar_cursor
+        .is_some();
     let focused_id = app.session_mgr.sessions[session_idx]
         .focused_instance_id
         .clone();
-    if let Some(ref id) = focused_id {
+
+    if bar_focused {
+        // Bar 焦点模式：输入框变暗
+        let block = ratatui::widgets::Block::default()
+            .borders(ratatui::widgets::Borders::ALL)
+            .border_style(ratatui::style::Style::default().fg(ratatui::style::Color::DarkGray));
+        app.session_mgr.sessions[session_idx]
+            .ui
+            .textarea
+            .set_block(block);
+    } else if let Some(ref id) = focused_id {
+        // 聚焦只读模式：彩色边框 + agent 名称标签 + 暗色文本
         let agents = &app.session_mgr.sessions[session_idx].background_agents;
         let color_idx = agents.iter().position(|a| a.instance_id == *id);
         let color = color_idx
@@ -296,7 +311,12 @@ fn render_session_column(
             .ui
             .textarea
             .set_block(block);
+        app.session_mgr.sessions[session_idx]
+            .ui
+            .textarea
+            .set_style(ratatui::style::Style::default().fg(ratatui::style::Color::DarkGray));
     } else {
+        // 正常模式
         let block = ratatui::widgets::Block::default()
             .borders(ratatui::widgets::Borders::ALL)
             .border_style(ratatui::style::Style::default());
@@ -304,6 +324,10 @@ fn render_session_column(
             .ui
             .textarea
             .set_block(block);
+        app.session_mgr.sessions[session_idx]
+            .ui
+            .textarea
+            .set_style(ratatui::style::Style::default());
     }
 
     // 输入框：非聚焦 session 或应用失焦时隐藏光标（移除 REVERSED 修饰符）

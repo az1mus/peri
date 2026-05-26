@@ -56,7 +56,9 @@ pub(crate) fn render_bg_agent_bar(f: &mut Frame, app: &mut App, area: Rect) {
     let session = &app.session_mgr.sessions[app.session_mgr.active];
     let agents = &session.background_agents;
     let focused_id = &session.focused_instance_id;
-    let cursor = session.ui.bg_bar_cursor;
+    let visible_count = agents.len().min(4);
+    let total_items = 1 + visible_count;
+    let cursor = session.ui.bg_bar_cursor.map(|c| c.min(total_items - 1));
 
     let mut items: Vec<ListItem> = Vec::new();
 
@@ -76,7 +78,6 @@ pub(crate) fn render_bg_agent_bar(f: &mut Frame, app: &mut App, area: Rect) {
     ])));
 
     // 后续行：每个后台 agent
-    let visible_count = agents.len().min(4);
     for (i, agent) in agents.iter().take(visible_count).enumerate() {
         let color = agent_color(i);
         let is_focused = focused_id.as_deref() == Some(&agent.instance_id);
