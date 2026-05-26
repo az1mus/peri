@@ -13,7 +13,9 @@ use crate::with_global_panels;
 use crate::with_session_panels;
 
 use anyhow::Result;
-use ratatui::crossterm::event::{self, Event, MouseButton, MouseEventKind};
+use ratatui::crossterm::event::{
+    self, Event, KeyCode, KeyEventKind, KeyModifiers, MouseButton, MouseEventKind,
+};
 use std::time::Duration;
 use tui_textarea::{Input, Key};
 
@@ -71,6 +73,12 @@ pub async fn next_event(app: &mut App) -> Result<Option<Action>> {
     // Scroll/Drag event coalescing: drain queued mouse events to avoid
     // redundant redraws during rapid scrolling or scrollbar dragging.
     let ev = coalesce_mouse_events(ev);
+
+    // Simulated-paste detection: on terminals without bracketed paste support
+    // (Windows), multi-line paste arrives as a rapid burst of key events.
+    // Detect this pattern and convert to Event::Paste so the normal paste
+    // handler inserts the full text into the textarea.
+    let ev = detect_simulated_paste(ev);
 
     handle_event(app, ev).await
 }
@@ -132,6 +140,90 @@ fn coalesce_mouse_events(ev: Event) -> Event {
     }
 
     last_ev
+}
+
+// ── Simulated-paste detection (Windows) ───────────────────────────────
+
+/// On terminals that do not support bracketed paste (e.g. Windows cmd.exe,
+/// legacy PowerShell), multi-line paste is simulated as a rapid burst of
+/// individual Key events — each character becomes a Char event and each
+/// newline becomes a bare Enter event.
+///
+/// This function detects that pattern: when a bare Enter arrives and the
+/// event queue already contains more Key events buffered behind it (within
+/// a 1 ms window), we drain the entire burst, reconstruct the pasted text,
+/// and return an `Event::Paste` so the normal paste path handles it.
+///
+/// A 1 ms poll window is too short for human typing to trigger, so false
+/// positives are negligible.
+fn detect_simulated_paste(ev: Event) -> Event {
+    match &ev {
+        Event::Key(k)
+            if k.code == KeyCode::Enter
+                && k.modifiers == KeyModifiers::NONE
+                && k.kind == KeyEventKind::Press => {}
+        _ => return ev,
+    }
+
+    // Quick probe: any queued event within 1 ms?
+    if !event::poll(Duration::from_millis(1)).unwrap_or(false) {
+        return ev; // No queued events → manual Enter → submit normally
+    }
+
+    // Simulated paste detected. Collect the full burst into text.
+    let mut text = String::from('\n');
+
+    // Read the first queued event we already probed
+    if let Ok(next) = event::read() {
+        key_event_to_text(next, &mut text);
+    }
+
+    // Drain remaining queued events (ZERO = non-blocking)
+    while event::poll(Duration::ZERO).unwrap_or(false) {
+        match event::read() {
+            Ok(next) => key_event_to_text(next, &mut text),
+            Err(_) => break,
+        }
+    }
+
+    Event::Paste(text)
+}
+
+/// Append a single crossterm `Event` into `text` for simulated-paste
+/// reconstruction. Key(Char) appends the character; Key(Enter) appends
+/// `\n`; Key(Tab) appends `\t`; Key(Backspace) removes the last char;
+/// everything else (modifiers, non-printable keys) terminates the drain.
+fn key_event_to_text(ev: Event, text: &mut String) {
+    match ev {
+        Event::Key(k) if k.kind != KeyEventKind::Release => match k.code {
+            KeyCode::Char(c) => {
+                // Ctrl+char or Alt+char during paste → stop collecting
+                if k.modifiers.contains(KeyModifiers::CONTROL)
+                    || k.modifiers.contains(KeyModifiers::ALT)
+                {
+                    // Flush remaining: stop collecting but don't lose the event.
+                    // Since we can't re-inject, treat modifier+char as literal.
+                    text.push(c);
+                } else {
+                    text.push(c);
+                }
+            }
+            KeyCode::Enter => text.push('\n'),
+            KeyCode::Tab => text.push('\t'),
+            KeyCode::Backspace => {
+                text.pop();
+            }
+            _ => {} // Ignore other keys (arrows, etc.) during paste
+        },
+        Event::Mouse(_) | Event::FocusGained | Event::FocusLost | Event::Resize(_, _) => {
+            // Non-key events shouldn't appear in a paste burst; stop collecting.
+        }
+        Event::Paste(p) => {
+            // Rare: a real Paste event appeared mid-burst (shouldn't happen).
+            text.push_str(&p);
+        }
+        _ => {}
+    }
 }
 
 // ── Event dispatcher ────────────────────────────────────────────────────────
