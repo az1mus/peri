@@ -1,8 +1,9 @@
 # 手动 /compact 后聊天区域长时间显示 loading 骨架屏
 
-**状态**：Open
+**状态**：Fixed
 **优先级**：高
 **创建日期**：2026-05-26
+**修复日期**：2026-05-26
 
 ## 问题描述
 
@@ -40,3 +41,16 @@
 ## 关联 Issue
 
 - `spec/issues/2026-05-25-compact-resubmit-missing-loading-spinner.md` — compact resubmit 时 spinner 缺失（相反方向的问题，都涉及 compact 与 loading 状态的协调）
+
+## 根因分析
+
+`handle_compact_completed()` 在 full compact 路径中故意不调用 `set_loading(false)`，注释说明"compact 在 ReAct 循环内原地执行，agent 仍在运行（即将 resubmit），spinner 应持续到真正 Done/Error"。这个设计对 auto-compact 正确（executor 循环继续 → Done 事件清除 loading），但对手动 `/compact` 错误——手动 compact 是独立操作，没有 agent 循环，不会有 Done 事件，loading 永远不会被清除。
+
+## 修复方案
+
+在 `AgentComm` 中添加 `compact_manual: bool` 标志，仅在 `CompactCommand::execute()` 中设为 `true`（手动 compact 入口），auto-compact 不经过此路径。`handle_compact_completed()` 检查该标志，手动 compact 时调用 `set_loading(false)`。
+
+**改动文件**：
+- `peri-tui/src/app/agent_comm.rs` — 添加 `compact_manual` 字段
+- `peri-tui/src/command/session/compact.rs` — 命令触发前设置标志
+- `peri-tui/src/app/agent_compact.rs` — 检查标志，手动 compact 时清除 loading；error 路径同步清除标志

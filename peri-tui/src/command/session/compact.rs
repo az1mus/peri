@@ -23,6 +23,10 @@ impl Command for CompactCommand {
                 ));
             return;
         }
+        // 标记为手动 compact，handle_compact_completed 据此调用 set_loading(false)
+        app.session_mgr.sessions[app.session_mgr.active]
+            .agent
+            .compact_manual = true;
         // 通过 ACP compact 通道触发手动压缩，而非将 /compact 当作普通消息发送
         if let Some(ref acp_client) = app.acp_client {
             let client = acp_client.clone();

@@ -81,6 +81,9 @@ pub struct AgentComm {
     pub cancel_sent_at: Option<std::time::Instant>,
     /// Pending ACP request ID for HITL/AskUser response routing
     pub pending_acp_request_id: Option<peri_acp::transport::types::RequestId>,
+    /// 标记当前 compact 是手动触发的（/compact 命令），而非 auto-compact
+    /// handle_compact_completed 据此决定是否调用 set_loading(false)
+    pub compact_manual: bool,
 }
 
 impl Default for AgentComm {
@@ -115,6 +118,7 @@ impl Default for AgentComm {
             shared_tools: None,
             pending_acp_request_id: None,
             cancel_sent_at: None,
+            compact_manual: false,
         }
     }
 }

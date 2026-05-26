@@ -34,8 +34,17 @@ impl App {
         }
 
         // Full compact: 清理 pipeline + 更新内部状态
-        // 不结束 loading 状态——compact 在 ReAct 循环内原地执行，
-        // agent 仍在运行（即将 resubmit），spinner 应持续到真正 Done/Error。
+        // Auto-compact 在 ReAct 循环内执行，agent 即将 resubmit，spinner 持续到 Done。
+        // Manual compact 是独立操作，无后续 Done 事件，必须在此结束 loading。
+        let is_manual = self.session_mgr.sessions[self.session_mgr.active]
+            .agent
+            .compact_manual;
+        if is_manual {
+            self.set_loading(false);
+            self.session_mgr.sessions[self.session_mgr.active]
+                .agent
+                .compact_manual = false;
+        }
         let mut label_lines = vec![format!("✻ {}", self.services.lc.tr("app-compact-done"))];
         for f in &files {
             label_lines.push(format!("  ⎿  Read {} ({} lines)", f.path, f.lines));
@@ -86,6 +95,9 @@ impl App {
 
     pub(crate) fn handle_compact_error(&mut self, msg: String) -> (bool, bool, bool) {
         self.set_loading(false);
+        self.session_mgr.sessions[self.session_mgr.active]
+            .agent
+            .compact_manual = false;
         let vm = MessageViewModel::system(
             self.services
                 .lc
