@@ -2830,8 +2830,13 @@ async fn test_background_task_notification() {
         .push(user_vm);
     app.render_rebuild();
 
-    // 先设置后台任务计数
-    app.session_mgr.sessions[app.session_mgr.active].background_task_count = 1;
+    // 先设置后台任务
+    app.session_mgr.sessions[app.session_mgr.active].background_agents =
+        vec![crate::app::RunningBgAgent {
+            agent_name: "code-reviewer".to_string(),
+            instance_id: "test-inst".to_string(),
+            started_at: std::time::Instant::now(),
+        }];
 
     let notified = handle.render_notify.notified();
 
@@ -2858,9 +2863,11 @@ async fn test_background_task_notification() {
     notified2.await;
 
     // 断言：后台任务计数递减
-    assert_eq!(
-        app.session_mgr.sessions[app.session_mgr.active].background_task_count, 0,
-        "BackgroundTaskCompleted should decrement background_task_count"
+    assert!(
+        app.session_mgr.sessions[app.session_mgr.active]
+            .background_agents
+            .is_empty(),
+        "BackgroundTaskCompleted should decrement background_agents"
     );
 
     // 断言：view_messages 包含后台任务 ToolBlock 通知
@@ -2895,7 +2902,18 @@ async fn test_background_task_status_bar() {
         .push(user_vm);
     app.render_rebuild();
 
-    app.session_mgr.sessions[app.session_mgr.active].background_task_count = 2;
+    app.session_mgr.sessions[app.session_mgr.active].background_agents = vec![
+        crate::app::RunningBgAgent {
+            agent_name: "reviewer-1".to_string(),
+            instance_id: "test-inst-1".to_string(),
+            started_at: std::time::Instant::now(),
+        },
+        crate::app::RunningBgAgent {
+            agent_name: "reviewer-2".to_string(),
+            instance_id: "test-inst-2".to_string(),
+            started_at: std::time::Instant::now(),
+        },
+    ];
 
     // Trigger a render via StateSnapshot + Done
     let notified = handle.render_notify.notified();
@@ -3530,7 +3548,12 @@ async fn test_diagnostic_bg_subagent_group_disappears() {
     bg_diag_print_vms(&app, "Step 4: After StateSnapshot");
 
     // Step 5: Done (with background task still running)
-    app.session_mgr.sessions[app.session_mgr.active].background_task_count = 1;
+    app.session_mgr.sessions[app.session_mgr.active].background_agents =
+        vec![crate::app::RunningBgAgent {
+            agent_name: "code-reviewer".to_string(),
+            instance_id: "test-inst".to_string(),
+            started_at: std::time::Instant::now(),
+        }];
     app.push_agent_event(AgentEvent::Done);
     app.process_pending_events();
     bg_diag_print_vms(&app, "Step 5: After Done");
@@ -3553,7 +3576,7 @@ async fn test_diagnostic_bg_subagent_group_disappears() {
         app.session_mgr.sessions[app.session_mgr.active]
             .agent
             .agent_done_pending_bg,
-        "Done with background_task_count > 0 should set agent_done_pending_bg = true"
+        "Done with !background_agents.is_empty() should set agent_done_pending_bg = true"
     );
 
     // Step 6: BackgroundTaskCompleted — 精确模拟真实场景
@@ -3653,10 +3676,10 @@ async fn test_diagnostic_bg_subagent_group_disappears() {
 /// 根因：当 LLM 发送 {fork:true, run_in_background:true} 时，
 /// invoke() 中 fork 检测优先于 background 检测（tool.rs:645-649），
 /// 走 invoke_fork 同步路径，但 map_executor_event 仍设置 is_background=true，
-/// 导致 background_task_count 被 +1 但永远不会被递减（无 BackgroundTaskCompleted 事件）。
+/// 导致 background_agents 被 push 但永远不会被移除（无 BackgroundTaskCompleted 事件）。
 ///
 /// 这导致：
-/// 1. Done 时 background_task_count > 0 → agent_done_pending_bg = true
+/// 1. Done 时 !background_agents.is_empty() → agent_done_pending_bg = true
 /// 2. agent_rx 被保持存活，但 agent 任务结束后通道断开
 /// 3. Disconnected 分支清理 pipeline → SubAgentGroup 可能丢失
 #[tokio::test]
@@ -3693,10 +3716,13 @@ async fn test_diagnostic_fork_plus_background_subagent_group() {
     app.process_pending_events();
     bg_diag_print_vms(&app, "Fork+BG Step 1: After SubAgentStart");
 
-    // 验证 background_task_count 被 +1
+    // 验证 background_agents 被 push
     assert_eq!(
-        app.session_mgr.sessions[app.session_mgr.active].background_task_count, 1,
-        "SubAgentStart with is_background=true should increment background_task_count"
+        app.session_mgr.sessions[app.session_mgr.active]
+            .background_agents
+            .len(),
+        1,
+        "SubAgentStart with is_background=true should push to background_agents"
     );
 
     // Step 3: SubAgentEnd — invoke_fork 同步完成后触发
@@ -3713,11 +3739,13 @@ async fn test_diagnostic_fork_plus_background_subagent_group() {
         "Fork+BG Step 2: After SubAgentEnd (fork completed synchronously)",
     );
 
-    // 验证 background_task_count 仍为 1（SubAgentEnd 不递减）
+    // 验证 background_agents 仍为 1（SubAgentEnd 不移除）
     assert_eq!(
-        app.session_mgr.sessions[app.session_mgr.active].background_task_count,
+        app.session_mgr.sessions[app.session_mgr.active]
+            .background_agents
+            .len(),
         1,
-        "SubAgentEnd should NOT decrement background_task_count (only BackgroundTaskCompleted does)"
+        "SubAgentEnd should NOT remove from background_agents (only BackgroundTaskCompleted does)"
     );
 
     // Step 4: StateSnapshot（包含 fork 的完整结果）
@@ -3744,17 +3772,17 @@ async fn test_diagnostic_fork_plus_background_subagent_group() {
     app.process_pending_events();
     bg_diag_print_vms(&app, "Fork+BG Step 3: After StateSnapshot");
 
-    // Step 5: Done — 此时 background_task_count=1，触发 agent_done_pending_bg
+    // Step 5: Done — 此时 background_agents.len()=1，触发 agent_done_pending_bg
     app.push_agent_event(AgentEvent::Done);
     app.process_pending_events();
     bg_diag_print_vms(&app, "Fork+BG Step 4: After Done");
 
-    // 验证 agent_done_pending_bg 被设置（因为 background_task_count > 0）
+    // 验证 agent_done_pending_bg 被设置（因为 !background_agents.is_empty()）
     assert!(
         app.session_mgr.sessions[app.session_mgr.active]
             .agent
             .agent_done_pending_bg,
-        "Done with background_task_count > 0 should set agent_done_pending_bg = true"
+        "Done with !background_agents.is_empty() should set agent_done_pending_bg = true"
     );
 
     // 验证 SubAgentGroup 在 Done 后存在
@@ -3772,7 +3800,7 @@ async fn test_diagnostic_fork_plus_background_subagent_group() {
 
     // 模拟通道断开（agent_rx 的 sender 被 drop）
     // 在 headless 模式中，我们直接模拟这个状态：
-    // agent_done_pending_bg = true, background_task_count = 1, 但没有 BackgroundTaskCompleted
+    // agent_done_pending_bg = true, background_agents.len() = 1, 但没有 BackgroundTaskCompleted
 
     // 模拟下一轮用户发消息（真实场景中用户可能等待后发新消息）
     app.session_mgr.sessions[app.session_mgr.active]
@@ -3799,16 +3827,16 @@ async fn test_diagnostic_fork_plus_background_subagent_group() {
     let count_final = bg_diag_count_subagent_groups(&app);
     assert!(
         count_final >= 1,
-        "BUG REPRODUCED: SubAgentGroup disappeared! fork+background causes phantom background_task_count. Before={}, After={}",
+        "BUG REPRODUCED: SubAgentGroup disappeared! fork+background causes phantom background_agents. Before={}, After={}",
         count_after_done,
         count_final
     );
 
-    // 验证 background_task_count 仍为 1（永远不会被清除）
+    // 验证 background_agents.len() 仍为 1（永远不会被清除）
     assert_eq!(
-        app.session_mgr.sessions[app.session_mgr.active].background_task_count,
+        app.session_mgr.sessions[app.session_mgr.active].background_agents.len(),
         1,
-        "background_task_count should still be 1 (no BackgroundTaskCompleted will ever arrive for fork path)"
+        "background_agents should still have 1 entry (no BackgroundTaskCompleted will ever arrive for fork path)"
     );
 }
 
@@ -4005,7 +4033,12 @@ async fn test_bg_completed_before_done_triggers_continuation() {
     let (mut app, _handle) = App::new_headless(120, 30).await;
 
     // 模拟后台任务已启动
-    app.session_mgr.sessions[app.session_mgr.active].background_task_count = 1;
+    app.session_mgr.sessions[app.session_mgr.active].background_agents =
+        vec![crate::app::RunningBgAgent {
+            agent_name: "code-reviewer".to_string(),
+            instance_id: "test-inst".to_string(),
+            started_at: std::time::Instant::now(),
+        }];
 
     // 竞态：BackgroundTaskCompleted 先于 Done 到达
     app.push_agent_event(AgentEvent::BackgroundTaskCompleted {
@@ -4043,7 +4076,18 @@ async fn test_bg_completed_before_done_triggers_continuation() {
 async fn test_multiple_bg_completed_before_done() {
     let (mut app, _handle) = App::new_headless(120, 30).await;
 
-    app.session_mgr.sessions[app.session_mgr.active].background_task_count = 2;
+    app.session_mgr.sessions[app.session_mgr.active].background_agents = vec![
+        crate::app::RunningBgAgent {
+            agent_name: "reviewer-1".to_string(),
+            instance_id: "test-inst-1".to_string(),
+            started_at: std::time::Instant::now(),
+        },
+        crate::app::RunningBgAgent {
+            agent_name: "reviewer-2".to_string(),
+            instance_id: "test-inst-2".to_string(),
+            started_at: std::time::Instant::now(),
+        },
+    ];
 
     // 第一个后台任务完成：count 2→1，不暂存（count > 0）
     app.push_agent_event(AgentEvent::BackgroundTaskCompleted {
@@ -4093,7 +4137,12 @@ async fn test_multiple_bg_completed_before_done() {
 async fn test_bg_completed_after_done_unchanged() {
     let (mut app, _handle) = App::new_headless(120, 30).await;
 
-    app.session_mgr.sessions[app.session_mgr.active].background_task_count = 1;
+    app.session_mgr.sessions[app.session_mgr.active].background_agents =
+        vec![crate::app::RunningBgAgent {
+            agent_name: "worker".to_string(),
+            instance_id: "test-inst".to_string(),
+            started_at: std::time::Instant::now(),
+        }];
 
     // 正常路径：Done 先到
     app.push_agent_event(AgentEvent::Done);

@@ -97,12 +97,12 @@ impl App {
             self.render_rebuild();
         }
         // 后台任务：保持通道存活
-        if self.session_mgr.sessions[self.session_mgr.active].background_task_count > 0 {
+        if !self.session_mgr.sessions[self.session_mgr.active].background_agents.is_empty() {
             self.session_mgr.sessions[self.session_mgr.active]
                 .agent
                 .agent_done_pending_bg = true;
             tracing::info!(
-                count = self.session_mgr.sessions[self.session_mgr.active].background_task_count,
+                count = self.session_mgr.sessions[self.session_mgr.active].background_agents.len(),
                 "agent done but background tasks still running, keeping channel alive"
             );
         } else {
@@ -326,7 +326,7 @@ impl App {
             .agent
             .reconcile_already_done = true;
         // 后台任务：保持通道存活
-        if self.session_mgr.sessions[self.session_mgr.active].background_task_count > 0 {
+        if !self.session_mgr.sessions[self.session_mgr.active].background_agents.is_empty() {
             self.session_mgr.sessions[self.session_mgr.active]
                 .agent
                 .agent_done_pending_bg = true;

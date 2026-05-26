@@ -34,6 +34,8 @@ pub struct UiState {
     pub panel_scrollbar_dragging: bool,
     /// @ 文件提及状态
     pub at_mention: AtMentionState,
+    /// 后台 Agent Bar 光标位置
+    pub bg_bar_cursor: Option<usize>,
 }
 
 impl UiState {
@@ -64,6 +66,7 @@ impl UiState {
             panel_scrollbar_metrics: None,
             panel_scrollbar_dragging: false,
             at_mention: AtMentionState::new(),
+            bg_bar_cursor: None,
         }
     }
 }

@@ -1,3 +1,5 @@
+use std::time::Instant;
+
 use peri_middlewares::prelude::SkillMetadata;
 use peri_middlewares::prelude::TodoItem;
 
@@ -10,6 +12,14 @@ use super::UiState;
 use crate::command::CommandRegistry;
 use crate::thread::ThreadId;
 
+/// 正在运行的后台 SubAgent
+#[derive(Clone, Debug)]
+pub(crate) struct RunningBgAgent {
+    pub agent_name: String,
+    pub instance_id: String,
+    pub started_at: Instant,
+}
+
 /// 独立聊天会话：封装一个对话的完整 UI 状态、Agent 通信状态和持久化上下文。
 pub struct ChatSession {
     pub ui: UiState,
@@ -21,8 +31,8 @@ pub struct ChatSession {
     pub current_thread_id: Option<ThreadId>,
     pub langfuse: LangfuseState,
     pub todo_items: Vec<TodoItem>,
-    /// 当前运行中的后台任务数量（状态栏指示器使用）
-    pub background_task_count: usize,
+    pub background_agents: Vec<RunningBgAgent>,
+    pub focused_instance_id: Option<String>,
     pub spinner_state: peri_widgets::SpinnerState,
 }
 
@@ -51,7 +61,8 @@ impl ChatSession {
             current_thread_id: None,
             langfuse: LangfuseState::default(),
             todo_items: Vec::new(),
-            background_task_count: 0,
+            background_agents: Vec::new(),
+            focused_instance_id: None,
             spinner_state: peri_widgets::SpinnerState::new(peri_widgets::SpinnerMode::Idle),
         }
     }

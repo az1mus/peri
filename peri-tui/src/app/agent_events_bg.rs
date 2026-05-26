@@ -58,18 +58,42 @@ impl App {
         tool_calls_count: usize,
         duration_ms: u64,
     ) -> (bool, bool, bool) {
-        // 递减后台任务计数
-        self.session_mgr.sessions[self.session_mgr.active].background_task_count =
+        // 检查被移除的 agent 是否���当前聚焦的
+        let was_focused = self.session_mgr.sessions[self.session_mgr.active]
+            .focused_instance_id
+            .as_deref()
+            .map(|id| {
+                self.session_mgr.sessions[self.session_mgr.active]
+                    .background_agents
+                    .iter()
+                    .any(|a| a.agent_name == agent_name && a.instance_id == id)
+            })
+            .unwrap_or(false);
+
+        // 按 agent_name 移除第一个匹配项
+        if let Some(pos) = self.session_mgr.sessions[self.session_mgr.active]
+            .background_agents
+            .iter()
+            .position(|a| a.agent_name == agent_name)
+        {
             self.session_mgr.sessions[self.session_mgr.active]
-                .background_task_count
-                .saturating_sub(1);
+                .background_agents
+                .remove(pos);
+        }
+
+        // 聚焦检查：如果被移除的是当前聚焦的 agent，退出聚焦
+        if was_focused {
+            self.session_mgr.sessions[self.session_mgr.active].focused_instance_id = None;
+            self.session_mgr.sessions[self.session_mgr.active].ui.bg_bar_cursor = None;
+            self.request_rebuild();
+        }
 
         tracing::info!(
             task_id = %task_id,
             agent_name = %agent_name,
             success = success,
-            bg_count_before = self.session_mgr.sessions[self.session_mgr.active].background_task_count + 1,
-            bg_count_after = self.session_mgr.sessions[self.session_mgr.active].background_task_count,
+            bg_count_before = self.session_mgr.sessions[self.session_mgr.active].background_agents.len() + 1,
+            bg_count_after = self.session_mgr.sessions[self.session_mgr.active].background_agents.len(),
             agent_done_pending = self.session_mgr.sessions[self.session_mgr.active].agent.agent_done_pending_bg,
             "[bg-diag] TUI: handle_background_task_completed called"
         );
@@ -223,7 +247,7 @@ impl App {
                 agent_name = %agent_name,
                 subagent_count_in_view = subagent_count,
                 frozen_count,
-                background_task_count = self.session_mgr.sessions[self.session_mgr.active].background_task_count,
+                background_agents_count = self.session_mgr.sessions[self.session_mgr.active].background_agents.len(),
                 agent_done_pending_bg = self.session_mgr.sessions[self.session_mgr.active].agent.agent_done_pending_bg,
                 "[bg-diag] after BackgroundTaskCompleted"
             );
@@ -233,7 +257,7 @@ impl App {
         if self.session_mgr.sessions[self.session_mgr.active]
             .agent
             .agent_done_pending_bg
-            && self.session_mgr.sessions[self.session_mgr.active].background_task_count == 0
+            && self.session_mgr.sessions[self.session_mgr.active].background_agents.is_empty()
         {
             tracing::info!("all background tasks completed, auto-submitting continuation");
             self.session_mgr.sessions[self.session_mgr.active]
@@ -259,7 +283,7 @@ impl App {
         } else if !self.session_mgr.sessions[self.session_mgr.active]
             .agent
             .agent_done_pending_bg
-            && self.session_mgr.sessions[self.session_mgr.active].background_task_count == 0
+            && self.session_mgr.sessions[self.session_mgr.active].background_agents.is_empty()
         {
             // 竞态修复：agent 尚未 Done，但所有后台任务已完成。
             // 暂存通知，待 Done 处理时检查此字段并设置 pending_bg_continuation。

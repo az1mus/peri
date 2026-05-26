@@ -167,7 +167,10 @@ fn render_second_row(f: &mut Frame, app: &App, area: Rect) {
     }
 
     // 后台任务指示器
-    if app.session_mgr.sessions[app.session_mgr.active].background_task_count > 0 {
+    if !app.session_mgr.sessions[app.session_mgr.active]
+        .background_agents
+        .is_empty()
+    {
         if has_content {
             left_spans.push(Span::styled(" · ", Style::default().fg(theme::MUTED)));
         }
@@ -176,7 +179,9 @@ fn render_second_row(f: &mut Frame, app: &App, area: Rect) {
                 "statusbar-bg-indicator",
                 &[(
                     "count".into(),
-                    (app.session_mgr.sessions[app.session_mgr.active].background_task_count as i64)
+                    (app.session_mgr.sessions[app.session_mgr.active]
+                        .background_agents
+                        .len() as i64)
                         .into(),
                 )],
             ),

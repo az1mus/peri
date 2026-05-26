@@ -132,22 +132,25 @@ impl App {
                     if self.session_mgr.sessions[self.session_mgr.active]
                         .agent
                         .agent_done_pending_bg
-                        || self.session_mgr.sessions[self.session_mgr.active].background_task_count
-                            > 0
+                        || !self.session_mgr.sessions[self.session_mgr.active]
+                            .background_agents
+                            .is_empty()
                     {
                         tracing::info!(
                             agent_done = self.session_mgr.sessions[self.session_mgr.active]
                                 .agent
                                 .agent_done_pending_bg,
                             bg_count = self.session_mgr.sessions[self.session_mgr.active]
-                                .background_task_count,
+                                .background_agents
+                                .len(),
                             "channel disconnected during background task flow, suppressing error"
                         );
                         self.session_mgr.sessions[self.session_mgr.active]
                             .agent
                             .agent_done_pending_bg = false;
-                        self.session_mgr.sessions[self.session_mgr.active].background_task_count =
-                            0;
+                        self.session_mgr.sessions[self.session_mgr.active]
+                            .background_agents
+                            .clear();
                         self.session_mgr.sessions[self.session_mgr.active]
                             .agent
                             .pre_done_bg_completions

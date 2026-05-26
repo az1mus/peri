@@ -72,7 +72,14 @@ impl App {
         is_background: bool,
     ) -> (bool, bool, bool) {
         if is_background {
-            self.session_mgr.sessions[self.session_mgr.active].background_task_count += 1;
+            use super::super::chat_session::RunningBgAgent;
+            self.session_mgr.sessions[self.session_mgr.active]
+                .background_agents
+                .push(RunningBgAgent {
+                    agent_name: agent_id.clone(),
+                    instance_id: instance_id.clone(),
+                    started_at: std::time::Instant::now(),
+                });
         }
         self.session_mgr.sessions[self.session_mgr.active]
             .agent

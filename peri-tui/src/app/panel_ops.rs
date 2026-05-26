@@ -98,7 +98,8 @@ impl App {
             langfuse: super::LangfuseState::default(),
             current_thread_id: None,
             todo_items: Vec::new(),
-            background_task_count: 0,
+            background_agents: Vec::new(),
+            focused_instance_id: None,
             spinner_state: peri_widgets::SpinnerState::new(peri_widgets::SpinnerMode::Idle),
         };
 
