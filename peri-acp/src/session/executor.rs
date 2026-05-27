@@ -71,6 +71,9 @@ pub struct FrozenSessionData {
     pub date: String,
     /// Whether cwd was a git repo at session creation time.
     pub is_git_repo: bool,
+    /// Session creation language preference (e.g. "zh-CN", "en").
+    /// None = auto-detect from user input (no explicit instruction).
+    pub language: Option<String>,
 }
 
 /// Shared agent execution pipeline with auto-compact support.
@@ -300,6 +303,11 @@ pub async fn execute_prompt(
             }
         }));
 
+    let language = frozen
+        .as_ref()
+        .and_then(|f| f.language.clone())
+        .or_else(|| peri_config.config.language.clone());
+
     let (
         system_prompt,
         frozen_claude_md,
@@ -318,7 +326,14 @@ pub async fn execute_prompt(
     } else {
         // Legacy: per-turn rebuild（子 Agent 等场景未提供 frozen 数据时使用）
         let features = PromptFeatures::detect();
-        let sp = build_system_prompt(None, cwd, features, &plugin_agent_dirs, None);
+        let sp = build_system_prompt(
+            None,
+            cwd,
+            features,
+            &plugin_agent_dirs,
+            None,
+            language.as_deref(),
+        );
         (sp, None, None, None, None)
     };
 

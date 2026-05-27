@@ -71,6 +71,7 @@ pub(crate) async fn handle_request(
                     frozen_claude_local_md: None,
                     frozen_skill_summary: None,
                     frozen_date: None,
+                    frozen_language: None,
                     recall_items: Vec::new(),
                     agent_pool: peri_acp::session::agent_pool::AgentPool::new(),
                 },
@@ -78,6 +79,7 @@ pub(crate) async fn handle_request(
 
             // ── Freeze system prompt data at session creation ──
             let frozen_date = chrono::Local::now().format("%Y-%m-%d").to_string();
+            let frozen_language = cfg.peri_config.read().config.language.clone();
 
             let (frozen_claude_md, frozen_claude_local_md) =
                 peri_middlewares::AgentsMdMiddleware::read_frozen_content(&cwd);
@@ -94,6 +96,7 @@ pub(crate) async fn handle_request(
                 features,
                 &cfg.plugin_agent_dirs,
                 Some(&frozen_date),
+                frozen_language.as_deref(),
             );
 
             let state = sessions.get_mut(&session_id).unwrap();
@@ -102,6 +105,7 @@ pub(crate) async fn handle_request(
             state.frozen_claude_local_md = frozen_claude_local_md;
             state.frozen_skill_summary = frozen_skill_summary;
             state.frozen_date = Some(frozen_date);
+            state.frozen_language = frozen_language;
             info!(session_id = %session_id, "ACP session created with ThreadStore");
             let modes = build_mode_state(&cfg.permission_mode);
             let models = {
@@ -262,6 +266,7 @@ pub(crate) async fn handle_request(
                         frozen_claude_local_md: None,
                         frozen_skill_summary: None,
                         frozen_date: None,
+                        frozen_language: None,
                         recall_items: Vec::new(),
                         agent_pool: peri_acp::session::agent_pool::AgentPool::new(),
                     },
@@ -370,6 +375,7 @@ pub(crate) async fn handle_request(
                         frozen_claude_local_md: None,
                         frozen_skill_summary: None,
                         frozen_date: None,
+                        frozen_language: None,
                         recall_items: Vec::new(),
                         agent_pool: peri_acp::session::agent_pool::AgentPool::new(),
                     },
@@ -417,6 +423,7 @@ pub(crate) async fn handle_request(
                     frozen_claude_local_md: None,
                     frozen_skill_summary: None,
                     frozen_date: None,
+                    frozen_language: None,
                     recall_items: Vec::new(),
                     agent_pool: peri_acp::session::agent_pool::AgentPool::new(),
                 },

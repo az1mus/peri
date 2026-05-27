@@ -49,6 +49,8 @@ pub(crate) struct SessionState {
     pub(crate) frozen_claude_local_md: Option<String>,
     pub(crate) frozen_skill_summary: Option<String>,
     pub(crate) frozen_date: Option<String>,
+    /// Frozen language preference (e.g. "zh-CN", "en").
+    pub(crate) frozen_language: Option<String>,
     /// Recall items from previous turn (injected as <system-reminder> in next user message).
     pub(crate) recall_items: Vec<String>,
     /// Session-scoped agent component pool for reusing heavy objects across prompts.

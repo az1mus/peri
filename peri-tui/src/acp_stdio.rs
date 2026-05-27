@@ -21,6 +21,8 @@ struct SessionInfo {
     frozen_skill_summary: Option<String>,
     /// Session creation date (YYYY-MM-DD).
     frozen_date: Option<String>,
+    /// Frozen language preference (e.g. "zh-CN", "en").
+    frozen_language: Option<String>,
     /// Session-scoped agent pool for LLM instance reuse.
     agent_pool: peri_acp::session::agent_pool::AgentPool,
 }
@@ -265,6 +267,7 @@ pub async fn run_acp_stdio(cwd: String) -> anyhow::Result<()> {
                     let frozen_date =
                         chrono::Local::now().format("%Y-%m-%d").to_string();
 
+                    let frozen_language = ctx.peri_config.read().config.language.clone();
                     let (frozen_claude_md, frozen_claude_local_md) =
                         peri_middlewares::AgentsMdMiddleware::read_frozen_content(&cwd_str);
 
@@ -281,6 +284,7 @@ pub async fn run_acp_stdio(cwd: String) -> anyhow::Result<()> {
                         features,
                         &ctx.plugin_agent_dirs,
                         Some(&frozen_date),
+                        frozen_language.as_deref(),
                     );
 
                     // Scan skills for AvailableCommands
@@ -305,6 +309,7 @@ pub async fn run_acp_stdio(cwd: String) -> anyhow::Result<()> {
                                 frozen_claude_local_md,
                                 frozen_skill_summary,
                                 frozen_date: Some(frozen_date),
+                                frozen_language,
                                 agent_pool: peri_acp::session::agent_pool::AgentPool::new(),
                             },
                         );
@@ -409,6 +414,7 @@ pub async fn run_acp_stdio(cwd: String) -> anyhow::Result<()> {
                                         is_git_repo: std::path::Path::new(&s.cwd)
                                             .join(".git")
                                             .exists(),
+                                        language: s.frozen_language.clone(),
                                     }
                                 });
                                 (
@@ -715,6 +721,7 @@ pub async fn run_acp_stdio(cwd: String) -> anyhow::Result<()> {
                                 frozen_claude_local_md: None,
                                 frozen_skill_summary: None,
                                 frozen_date: None,
+                                frozen_language: None,
                                 agent_pool: peri_acp::session::agent_pool::AgentPool::new(),
                             },
                         );
@@ -764,6 +771,7 @@ pub async fn run_acp_stdio(cwd: String) -> anyhow::Result<()> {
                                     frozen_claude_local_md: None,
                                     frozen_skill_summary: None,
                                     frozen_date: None,
+                                    frozen_language: None,
                                     agent_pool: peri_acp::session::agent_pool::AgentPool::new(),
                                 },
                             );
@@ -865,6 +873,7 @@ pub async fn run_acp_stdio(cwd: String) -> anyhow::Result<()> {
                                 frozen_claude_local_md: None,
                                 frozen_skill_summary: None,
                                 frozen_date: None,
+                                frozen_language: None,
                                 agent_pool: peri_acp::session::agent_pool::AgentPool::new(),
                             },
                         );

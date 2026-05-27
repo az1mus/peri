@@ -86,6 +86,7 @@ pub(crate) async fn execute_prompt(
         frozen_claude_local_md,
         frozen_skill_summary,
         frozen_date,
+        frozen_language,
         incoming_recalls,
     ) = {
         let mut sessions = sessions.lock().await;
@@ -102,6 +103,7 @@ pub(crate) async fn execute_prompt(
             state.frozen_claude_local_md.clone(),
             state.frozen_skill_summary.clone(),
             state.frozen_date.clone(),
+            state.frozen_language.clone(),
             std::mem::take(&mut state.recall_items),
         )
     };
@@ -122,6 +124,7 @@ pub(crate) async fn execute_prompt(
         skill_summary: frozen_skill_summary,
         date: frozen_date.unwrap_or_default(),
         is_git_repo: std::path::Path::new(&cwd).join(".git").exists(),
+        language: frozen_language,
     });
 
     // Keep a reference for the cancel-with-progress path (history is moved below)

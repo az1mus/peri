@@ -108,6 +108,7 @@ pub fn build_system_prompt(
     features: PromptFeatures,
     extra_agent_dirs: &[std::path::PathBuf],
     frozen_date: Option<&str>,
+    language: Option<&str>,
 ) -> String {
     let env = if let Some(date) = frozen_date {
         PromptEnv::with_frozen_date(cwd, date)
@@ -200,6 +201,15 @@ pub fn build_system_prompt(
         result.push_str("\n\n");
         result.push_str(section);
     }
+    // Language instruction (dynamic, after boundary to preserve cache prefix)
+    if let Some(lang) = language {
+        let lang_name = map_language_to_instruction(lang);
+        result.push_str("\n\n# Language\n\n");
+        result.push_str(&format!(
+            "Always respond in {}. Use {} for all explanations, comments, and communications with the user. Technical terms and code identifiers should remain in their original form.",
+            lang_name, lang_name
+        ));
+    }
 
     result
         .replace("{{cwd}}", &env.cwd)
@@ -267,6 +277,17 @@ fn os_version_string() -> String {
     #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     {
         std::env::consts::OS.to_string()
+    }
+}
+
+/// Map language code to human-readable instruction string.
+fn map_language_to_instruction(lang: &str) -> &str {
+    match lang {
+        "zh-CN" | "zh" => "Simplified Chinese",
+        "zh-TW" => "Traditional Chinese",
+        "ja" => "Japanese",
+        "ko" => "Korean",
+        _ => lang,
     }
 }
 

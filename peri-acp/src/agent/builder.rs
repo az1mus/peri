@@ -156,7 +156,14 @@ pub fn build_agent(
         || system_prompt.clone(),
         |ov| {
             let features = crate::prompt::PromptFeatures::detect();
-            crate::prompt::build_system_prompt(Some(ov), &cwd, features, &plugin_agent_dirs, None)
+            crate::prompt::build_system_prompt(
+                Some(ov),
+                &cwd,
+                features,
+                &plugin_agent_dirs,
+                None,
+                None,
+            )
         },
     );
 
@@ -247,6 +254,7 @@ pub fn build_agent(
     });
 
     // 系统提示构建器
+    let frozen_language_for_sub = peri_config.config.language.clone();
     let frozen_date_for_sub = frozen_date.clone();
     let system_builder: SystemPromptBuilder = Arc::new(move |overrides, cwd_dir| {
         let features = crate::prompt::PromptFeatures::detect();
@@ -256,6 +264,7 @@ pub fn build_agent(
             features,
             &[],
             frozen_date_for_sub.as_deref(),
+            frozen_language_for_sub.as_deref(),
         )
     });
 
