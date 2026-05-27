@@ -147,7 +147,13 @@ impl App {
 
         let (bg_event_tx, bg_event_rx) = tokio::sync::mpsc::channel(128);
 
-        let initial_session = ChatSession::new(cwd.clone(), command_registry, skills, &lc);
+        let diff_enabled = peri_config
+            .as_ref()
+            .map(|c| c.config.diff_enabled)
+            .unwrap_or(false);
+
+        let initial_session =
+            ChatSession::new(cwd.clone(), command_registry, skills, &lc, diff_enabled);
 
         let session_mgr = SessionManager::new(initial_session);
 
@@ -242,6 +248,9 @@ impl App {
             command_registry,
             skills,
             &self.services.lc,
+            self.session_mgr.sessions[self.session_mgr.active]
+                .ui
+                .diff_visible,
         );
         self.session_mgr.sessions.push(session);
         self.session_mgr.active = self.session_mgr.sessions.len() - 1;

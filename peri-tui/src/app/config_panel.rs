@@ -16,18 +16,20 @@ pub const ROW_GENERAL_HEADER: usize = 0;
 pub const ROW_AUTOCOMPACT: usize = 1;
 pub const ROW_THRESHOLD: usize = 2;
 pub const ROW_LANGUAGE: usize = 3;
-pub const ROW_PROACTIVENESS: usize = 4;
-pub const ROW_SEPARATOR: usize = 5;
-pub const ROW_OVERRIDES_HEADER: usize = 6;
-pub const ROW_PERSONA: usize = 7;
-pub const ROW_TONE: usize = 8;
-pub const ROW_COUNT: usize = 9;
+pub const ROW_DIFF: usize = 4;
+pub const ROW_PROACTIVENESS: usize = 5;
+pub const ROW_SEPARATOR: usize = 6;
+pub const ROW_OVERRIDES_HEADER: usize = 7;
+pub const ROW_PERSONA: usize = 8;
+pub const ROW_TONE: usize = 9;
+pub const ROW_COUNT: usize = 10;
 
 fn next_editable_row(current: usize, reverse: bool) -> usize {
     let editable: &[usize] = &[
         ROW_AUTOCOMPACT,
         ROW_THRESHOLD,
         ROW_LANGUAGE,
+        ROW_DIFF,
         ROW_PROACTIVENESS,
         ROW_PERSONA,
         ROW_TONE,
@@ -63,6 +65,7 @@ pub struct ConfigPanel {
     pub buf_tone: String,
     pub cur_tone: usize,
     pub buf_proactiveness: String, // "low" / "medium" / "high"
+    pub buf_diff: bool,
 }
 
 impl ConfigPanel {
@@ -79,6 +82,7 @@ impl ConfigPanel {
             .proactiveness
             .clone()
             .unwrap_or_else(|| "medium".to_string());
+        let diff_enabled = cfg.config.diff_enabled;
 
         Self {
             cursor: ROW_AUTOCOMPACT,
@@ -91,6 +95,7 @@ impl ConfigPanel {
             buf_tone: cfg.config.tone.clone().unwrap_or_default(),
             cur_tone: 0,
             buf_proactiveness: proactiveness,
+            buf_diff: diff_enabled,
         }
     }
 
@@ -112,6 +117,10 @@ impl ConfigPanel {
             "medium" => "high".to_string(),
             _ => "low".to_string(),
         };
+    }
+
+    pub fn cycle_diff(&mut self) {
+        self.buf_diff = !self.buf_diff;
     }
 
     /// 可选语言列表："" (auto) → "en" → "zh-CN" → ""
@@ -228,6 +237,9 @@ impl ConfigPanel {
         } else {
             Some(self.buf_proactiveness.clone())
         };
+
+        // diff
+        cfg.config.diff_enabled = self.buf_diff;
 
         Ok(())
     }
@@ -351,6 +363,7 @@ impl PanelComponent for ConfigPanel {
                     ROW_AUTOCOMPACT => self.cycle_autocompact(),
                     ROW_LANGUAGE => self.cycle_language(false),
                     ROW_PROACTIVENESS => self.cycle_proactiveness(),
+                    ROW_DIFF => self.cycle_diff(),
                     _ => self.input_char(' '),
                 }
                 EventResult::Consumed
@@ -364,6 +377,7 @@ impl PanelComponent for ConfigPanel {
                     ROW_AUTOCOMPACT => self.cycle_autocompact(),
                     ROW_LANGUAGE => self.cycle_language(true),
                     ROW_PROACTIVENESS => self.cycle_proactiveness(),
+                    ROW_DIFF => self.cycle_diff(),
                     _ => {
                         self.handle_text_key(input);
                     }
@@ -379,6 +393,7 @@ impl PanelComponent for ConfigPanel {
                     ROW_AUTOCOMPACT => self.cycle_autocompact(),
                     ROW_LANGUAGE => self.cycle_language(false),
                     ROW_PROACTIVENESS => self.cycle_proactiveness(),
+                    ROW_DIFF => self.cycle_diff(),
                     _ => {
                         self.handle_text_key(input);
                     }
@@ -419,6 +434,7 @@ impl PanelComponent for ConfigPanel {
                     ROW_AUTOCOMPACT
                         | ROW_THRESHOLD
                         | ROW_LANGUAGE
+                        | ROW_DIFF
                         | ROW_PROACTIVENESS
                         | ROW_PERSONA
                         | ROW_TONE
@@ -432,7 +448,7 @@ impl PanelComponent for ConfigPanel {
     }
 
     fn desired_height(&self, _screen_height: u16, _screen_width: u16) -> u16 {
-        14
+        16
     }
 
     fn render(&mut self, f: &mut Frame, app: &mut App, area: Rect) {

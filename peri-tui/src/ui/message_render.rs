@@ -161,6 +161,7 @@ pub fn render_view_model(
     vm: &MessageViewModel,
     _index: Option<usize>,
     _width: usize,
+    diff_visible: bool,
 ) -> Vec<Line<'static>> {
     match vm {
         MessageViewModel::UserBubble { rendered, .. } => {
@@ -338,9 +339,11 @@ pub fn render_view_model(
             } else if *is_error && !content.is_empty() {
                 lines.extend(error_summary_lines(content));
             }
-            // 内嵌 diff 视图（预渲染缓存）
-            if let Some(ref cached_lines) = diff_lines {
-                lines.extend(cached_lines.iter().cloned());
+            // 内嵌 diff 视图（预渲染缓存，默认关闭，Ctrl+O 切换）
+            if diff_visible {
+                if let Some(ref cached_lines) = diff_lines {
+                    lines.extend(cached_lines.iter().cloned());
+                }
             }
             lines
         }
@@ -458,7 +461,7 @@ pub fn render_view_model(
                     if matches!(inner_vm, MessageViewModel::AssistantBubble { .. }) {
                         continue;
                     }
-                    let inner_lines = render_view_model(inner_vm, None, _width);
+                    let inner_lines = render_view_model(inner_vm, None, _width, diff_visible);
                     if inner_lines.is_empty() {
                         continue;
                     }

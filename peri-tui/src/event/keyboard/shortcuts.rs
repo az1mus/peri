@@ -8,7 +8,7 @@ use crate::app::{App, MessageViewModel};
 
 use super::super::Action;
 
-/// 处理全局快捷键：BackTab（权限循环）、Ctrl+B（bg bar）、Ctrl+T（模型切换）、Ctrl+Shift+T（Provider 切换）
+/// 处理全局快捷键：BackTab（权限循环）、Ctrl+B（bg bar）、Ctrl+T（模型切换）、Ctrl+Shift+T（Provider 切换）、Ctrl+O（diff 切换）
 pub(super) fn handle_shortcuts(
     app: &mut App,
     key_event: &ratatui::crossterm::event::KeyEvent,
@@ -18,6 +18,18 @@ pub(super) fn handle_shortcuts(
         let _new_mode = app.services.permission_mode.cycle();
         app.global_ui.mode_highlight_until =
             Some(std::time::Instant::now() + std::time::Duration::from_millis(1500));
+        return Some(Action::Redraw);
+    }
+
+    // Ctrl+O: toggle inline diff (only when OAuth popup is NOT active)
+    if key_event
+        .modifiers
+        .contains(ratatui::crossterm::event::KeyModifiers::CONTROL)
+        && matches!(key_event.code, KeyCode::Char('o'))
+    {
+        if app.global_ui.oauth_prompt.is_none() {
+            app.toggle_diff();
+        }
         return Some(Action::Redraw);
     }
 

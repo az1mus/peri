@@ -1612,8 +1612,7 @@ async fn test_tool_call_widget_renders_completed() {
         diff_lines: None,
     };
 
-    let lines = crate::ui::message_render::render_view_model(&vm, Some(1), 80);
-    // Render into a visible area for verification
+    let lines = crate::ui::message_render::render_view_model(&vm, Some(1), 80, false); // Render into a visible area for verification
     use ratatui::widgets::Paragraph;
     let paragraph = Paragraph::new(lines);
     handle
@@ -2393,8 +2392,7 @@ fn test_tool_block_error_visible_when_collapsed() {
         color: crate::ui::theme::ERROR,
         diff_lines: None,
     };
-    let lines = render_view_model(&vm, Some(1), 80);
-    // header + 2 error summary lines (content has 2 lines)
+    let lines = render_view_model(&vm, Some(1), 80, false); // header + 2 error summary lines (content has 2 lines)
     assert!(
         lines.len() >= 3,
         "collapsed error ToolBlock should have header + error lines, got {}",
@@ -2426,7 +2424,7 @@ fn test_tool_block_success_no_summary_when_collapsed() {
         color: crate::ui::theme::SAGE,
         diff_lines: None,
     };
-    let lines = render_view_model(&vm, Some(1), 80);
+    let lines = render_view_model(&vm, Some(1), 80, false);
     assert_eq!(
         lines.len(),
         1,
@@ -2459,7 +2457,7 @@ fn test_tool_call_group_error_visible_when_collapsed() {
         ],
         collapsed: true,
     };
-    let lines = render_view_model(&vm, Some(1), 80);
+    let lines = render_view_model(&vm, Some(1), 80, false);
     let text: String = lines
         .iter()
         .flat_map(|l| l.spans.iter().map(|s| s.content.as_ref()))
@@ -2495,8 +2493,7 @@ fn test_subagent_group_error_red_title_and_summary() {
         batch_agents: Vec::new(),
         instance_id: None,
     };
-    let lines = render_view_model(&vm, Some(1), 80);
-    // 标题行 "Agent" 文字应为红色（第二个 span，第一个是 ❯ 符号）
+    let lines = render_view_model(&vm, Some(1), 80, false); // 标题行 "Agent" 文字应为红色（第二个 span，第一个是 ❯ 符号）
     let title_color = lines
         .first()
         .and_then(|l| l.spans.get(1).and_then(|s| s.style.fg));

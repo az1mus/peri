@@ -92,6 +92,19 @@ impl App {
             ));
     }
 
+    /// 切换 Write/Edit 工具结果内联 diff 的显隐
+    pub fn toggle_diff(&mut self) {
+        let active = self.session_mgr.active;
+        let new_visible = !self.session_mgr.sessions[active].ui.diff_visible;
+        self.session_mgr.sessions[active].ui.diff_visible = new_visible;
+
+        // ToggleDiff 会清空 hash 缓存并触发全量重渲染
+        let _ = self.session_mgr.sessions[active]
+            .messages
+            .render_tx
+            .send(RenderEvent::ToggleDiff(new_visible));
+    }
+
     /// 添加一个图片附件到待发送列表
     pub fn add_pending_attachment(&mut self, att: PendingAttachment) {
         self.session_mgr.sessions[self.session_mgr.active]

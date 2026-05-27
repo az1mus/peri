@@ -92,6 +92,8 @@ pub enum RenderEvent {
     Clear,
     /// 切换工具调用消息的显示状态
     ToggleToolMessages(bool),
+    /// 切换内联 diff 显示状态（强制全量重渲染）
+    ToggleDiff(bool),
 }
 
 /// 渲染线程，在后台执行渲染计算
@@ -109,6 +111,7 @@ struct RenderTask {
     notify: Arc<Notify>,
     width: u16,
     show_tool_messages: bool,
+    diff_visible: bool,
 }
 
 impl RenderTask {
@@ -155,7 +158,12 @@ impl RenderTask {
     }
 
     /// 渲染单条消息为 lines（含前后空行分隔）
-    fn render_one(vm: &mut MessageViewModel, index: usize, width: usize) -> Vec<Line<'static>> {
+    fn render_one(
+        vm: &mut MessageViewModel,
+        index: usize,
+        width: usize,
+        diff_visible: bool,
+    ) -> Vec<Line<'static>> {
         // 处理 dirty blocks（使用增量解析）
         if let MessageViewModel::AssistantBubble { blocks, .. } = vm {
             for block in blocks.iter_mut() {
@@ -170,7 +178,7 @@ impl RenderTask {
             *rendered = super::markdown::parse_markdown(content, width);
         }
 
-        let mut lines = render_view_model(vm, Some(index), width);
+        let mut lines = render_view_model(vm, Some(index), width, diff_visible);
         // 每条消息后追加空行分隔符（包括空内容消息，确保间距一致）
         lines.push(Line::from(""));
         lines
@@ -302,7 +310,7 @@ impl RenderTask {
                 self.message_lines[i] = std::mem::take(&mut old_message_lines[i]);
                 continue;
             }
-            self.message_lines[i] = Self::render_one(&mut vm, i + 1, width);
+            self.message_lines[i] = Self::render_one(&mut vm, i + 1, width, self.diff_visible);
         }
 
         self.message_hashes = new_hashes;
@@ -405,6 +413,16 @@ impl RenderTask {
                     // 需要 App 发送新的 Rebuild 事件来反映变化
                     // 这里只更新标志位，实际渲染由后续 Rebuild 驱动
                 }
+                RenderEvent::ToggleDiff(show) => {
+                    self.diff_visible = show;
+                    // diff_visible 不影响消息的语义 hash，必须清空 hash 缓存
+                    // 强制后续 Rebuild 全量重渲染
+                    self.message_hashes.clear();
+                    if !self.last_messages.is_empty() {
+                        let messages = std::mem::take(&mut self.last_messages);
+                        self.rebuild(messages);
+                    }
+                }
             }
 
             self.notify.notify_one();
@@ -435,6 +453,7 @@ pub fn spawn_render_thread(
         notify: Arc::clone(&notify),
         width,
         show_tool_messages: false,
+        diff_visible: false,
     };
 
     tokio::spawn(task.run(rx));

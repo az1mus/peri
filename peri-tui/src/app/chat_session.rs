@@ -42,12 +42,13 @@ impl ChatSession {
         command_registry: CommandRegistry,
         skills: Vec<SkillMetadata>,
         lc: &crate::i18n::LcRegistry,
+        diff_enabled: bool,
     ) -> Self {
         let (render_tx, render_cache, render_notify) =
             crate::ui::render_thread::spawn_render_thread(80);
         let commands = CommandSystem::new(command_registry, skills.clone(), lc);
         Self {
-            ui: UiState::new(super::build_textarea(false), &cwd),
+            ui: UiState::new(super::build_textarea(false), &cwd, diff_enabled),
             messages: MessageState::new(
                 cwd.clone(),
                 render_tx.clone(),

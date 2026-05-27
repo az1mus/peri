@@ -141,6 +141,9 @@ pub struct AppConfig {
     /// 是否启用 1M 上下文模式
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub context_1m: Option<bool>,
+    /// Write/Edit 工具结果内联 diff 默认是否可见
+    #[serde(default)]
+    pub diff_enabled: bool,
     /// 保留未知字段
     #[serde(flatten)]
     pub extra: Map<String, Value>,

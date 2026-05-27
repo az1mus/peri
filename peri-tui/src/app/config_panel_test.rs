@@ -25,6 +25,8 @@ fn test_config_panel_cursor_navigation() {
     panel.cursor_down();
     assert_eq!(panel.cursor, ROW_LANGUAGE);
     panel.cursor_down();
+    assert_eq!(panel.cursor, ROW_DIFF);
+    panel.cursor_down();
     assert_eq!(panel.cursor, ROW_PROACTIVENESS);
     panel.cursor_down();
     assert_eq!(panel.cursor, ROW_PERSONA);
@@ -40,6 +42,8 @@ fn test_config_panel_cursor_navigation() {
     assert_eq!(panel.cursor, ROW_PERSONA);
     panel.cursor_up();
     assert_eq!(panel.cursor, ROW_PROACTIVENESS);
+    panel.cursor_up();
+    assert_eq!(panel.cursor, ROW_DIFF);
     panel.cursor_up();
     assert_eq!(panel.cursor, ROW_LANGUAGE);
     panel.cursor_up();
@@ -178,4 +182,25 @@ fn test_config_panel_apply_edit_language_zh_cn() {
     panel.buf_language = "zh-CN".to_string();
     assert!(panel.apply_edit(&mut cfg, &lc).is_ok());
     assert_eq!(cfg.config.language.as_deref(), Some("zh-CN"));
+}
+
+#[test]
+fn test_config_panel_cycle_diff() {
+    let mut panel = ConfigPanel::from_config(&PeriConfig::default());
+    assert!(!panel.buf_diff);
+    panel.cycle_diff();
+    assert!(panel.buf_diff);
+    panel.cycle_diff();
+    assert!(!panel.buf_diff);
+}
+
+#[test]
+fn test_config_panel_apply_edit_diff_enabled() {
+    let lc = make_lc();
+    let mut cfg = PeriConfig::default();
+    assert!(!cfg.config.diff_enabled);
+    let mut panel = ConfigPanel::from_config(&cfg);
+    panel.buf_diff = true;
+    panel.apply_edit(&mut cfg, &lc).unwrap();
+    assert!(cfg.config.diff_enabled);
 }

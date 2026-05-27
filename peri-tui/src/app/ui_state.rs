@@ -42,10 +42,12 @@ pub struct UiState {
     pub bg_bar_cursor: Option<usize>,
     /// 后台 Agent Bar 渲染区域（用于鼠标点击检测）
     pub bg_bar_area: Option<ratatui::layout::Rect>,
+    /// Write/Edit 工具结果内联 diff 是否可见
+    pub diff_visible: bool,
 }
 
 impl UiState {
-    pub fn new(textarea: TextArea<'static>, cwd: &str) -> Self {
+    pub fn new(textarea: TextArea<'static>, cwd: &str, diff_enabled: bool) -> Self {
         let _ = cwd; // 历史路径已迁移至 ~/.peri/，cwd 保留用于未来扩展
         let input_history = super::history_persistence::load_input_history();
         Self {
@@ -76,6 +78,7 @@ impl UiState {
             at_mention: AtMentionState::new(),
             bg_bar_cursor: None,
             bg_bar_area: None,
+            diff_visible: diff_enabled,
         }
     }
 }
