@@ -1,32 +1,15 @@
 import { Daytona } from "@daytona/sdk";
-import type { Sandbox } from "@daytona/sdk";
-import fs from "node:fs";
-
-// ---------------------------------------------------------------------------
-// 常量
-// ---------------------------------------------------------------------------
-const SANDBOX_NAME = "Perihelion Sandbox";
-const MOUNT_DIR = "/home/daytona/code";
-const GIT_URL = "https://github.com/KonghaYao/peri.git";
-const DEFAULT_PERI_CONFIG_PATH = "./settings.json";
-
-// ---------------------------------------------------------------------------
-// 类型
-// ---------------------------------------------------------------------------
-interface CommandResult {
-    exitCode: number;
-    result: string;
-}
+import {
+    SANDBOX_NAME,
+    MOUNT_DIR,
+    PERI_BIN,
+    executeCommandList,
+    ensureRunning,
+} from "./daytona-helpers";
 
 export type PeriConfig = Record<string, unknown>;
 
-// ---------------------------------------------------------------------------
-// 全局单例
-// ---------------------------------------------------------------------------
 const daytona = new Daytona();
-const periConfig: PeriConfig = JSON.parse(
-    fs.readFileSync(DEFAULT_PERI_CONFIG_PATH, "utf-8"),
-);
 
 // ---------------------------------------------------------------------------
 // 工具函数
@@ -38,34 +21,6 @@ export function shellEscape(value: string): string {
 // ---------------------------------------------------------------------------
 // Sandbox 操作
 // ---------------------------------------------------------------------------
-
-/** 在 sandbox 内按顺序执行 shell 命令 */
-export async function executeCommandList(
-    sandbox: Sandbox,
-    commands: string[],
-    cwd: string,
-): Promise<CommandResult[]> {
-    if (commands.length === 0) return [];
-    const results: CommandResult[] = [];
-    for (const command of commands) {
-        const response = await sandbox.process.executeCommand(
-            command,
-            cwd,
-            undefined,
-            120,
-        );
-        console.log(
-            `[daytona] cmd: ${command}\n  exit=${response.exitCode} out=${response.result.slice(0, 200)}`,
-        );
-        if (response.exitCode !== 0) {
-            throw new Error(
-                `Command failed (exit ${response.exitCode}): ${command}\n${response.result}`,
-            );
-        }
-        results.push(response);
-    }
-    return results;
-}
 
 /** 初始化 sandbox：创建 sandbox → clone 仓库 → 安装 peri CLI → 写入配置 */
 export async function initSandbox(
@@ -89,7 +44,7 @@ export async function initSandbox(
             "curl -fsSL https://raw.githubusercontent.com/konghayao/peri/main/scripts/install.sh | bash",
             `mkdir -p ${MOUNT_DIR}/.peri && cat <<'EOF' > ${MOUNT_DIR}/.peri/settings.json\n${JSON.stringify(config, null, 2)}\nEOF`,
         ],
-        MOUNT_DIR,
+        { cwd: MOUNT_DIR },
     );
     console.log("[daytona] Sandbox initialized successfully");
 }
@@ -100,14 +55,13 @@ export async function askPeri(inputPrompt: string): Promise<string> {
     console.log(
         `[daytona] Sandbox: ${sandbox.id} (${sandbox.state})`,
     );
-    if (sandbox.state === "stopped") {
-        await sandbox.start();
-        console.log(`[daytona] Sandbox started: ${sandbox.id}`);
-    }
-    const results = await executeCommandList(
-        sandbox,
-        [`/home/daytona/.peri/peri -p ${shellEscape(inputPrompt)}`],
+    await ensureRunning(sandbox);
+
+    const { result } = await sandbox.process.executeCommand(
+        `${PERI_BIN} -p ${shellEscape(inputPrompt)}`,
         MOUNT_DIR,
+        undefined,
+        300,
     );
-    return results[0]!.result;
+    return result;
 }
