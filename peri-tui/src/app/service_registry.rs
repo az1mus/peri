@@ -80,4 +80,6 @@ pub struct ServiceRegistry {
     pub lc: crate::i18n::LcRegistry,
     /// Channel 共享状态（MCP handler ↔ TUI/broker 桥接）
     pub channel_state: Option<Arc<ChannelState>>,
+    /// panic hook 通知 receiver（TUI 模式专用，由 main.rs init_panic_notify 初始化）
+    pub panic_notify_rx: Option<tokio::sync::mpsc::UnboundedReceiver<String>>,
 }

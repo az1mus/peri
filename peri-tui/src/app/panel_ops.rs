@@ -128,6 +128,7 @@ impl App {
                 ),
                 lc: crate::i18n::LcRegistry::default(),
                 channel_state: None,
+                panic_notify_rx: None,
             },
             global_panels: PanelManager::new(),
             global_ui: super::GlobalUiState::new(),

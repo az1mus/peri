@@ -176,6 +176,36 @@ impl App {
         updated
     }
 
+    /// 轮询 panic hook 通知通道，返回是否有新消息。
+    /// panic 消息通过 tracing::error! 写入日志，同时通过通道通知 TUI 显示。
+    pub fn poll_panic_notifications(&mut self) -> bool {
+        // 先收集所有消息，释放 services 的借用
+        let messages: Vec<String> = {
+            let rx = match self.services.panic_notify_rx.as_mut() {
+                Some(rx) => rx,
+                None => return false,
+            };
+            let mut msgs = Vec::new();
+            loop {
+                match rx.try_recv() {
+                    Ok(msg) => msgs.push(msg),
+                    Err(tokio::sync::mpsc::error::TryRecvError::Empty) => break,
+                    Err(tokio::sync::mpsc::error::TryRecvError::Disconnected) => {
+                        self.services.panic_notify_rx = None;
+                        break;
+                    }
+                }
+            }
+            msgs
+        };
+        let updated = !messages.is_empty();
+        for msg in messages {
+            self.push_system_note(msg);
+            self.request_rebuild();
+        }
+        updated
+    }
+
     /// 每帧调用：检查 cron 触发事件，空闲时自动提交 prompt
     pub fn poll_cron_triggers(&mut self) {
         let cron_triggers: Vec<_> = self

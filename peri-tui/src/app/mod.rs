@@ -268,6 +268,7 @@ impl App {
             ),
             lc,
             channel_state: Some(channel_state.clone()),
+            panic_notify_rx: None,
         };
 
         Self {

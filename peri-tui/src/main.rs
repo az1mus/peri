@@ -13,6 +13,7 @@ use ratatui::{
     prelude::*,
 };
 use std::io;
+use std::sync::{Arc, OnceLock};
 use std::time::{Duration, Instant};
 
 use peri_acp::transport::mpsc::mpsc_transport_pair;
@@ -22,7 +23,6 @@ use peri_tui::{
     app::App,
     event, ui,
 };
-use std::sync::Arc;
 
 #[cfg(not(target_os = "windows"))]
 #[global_allocator]
@@ -32,6 +32,59 @@ mod acp_stdio;
 mod cli_args;
 mod cli_plugin;
 mod cli_print;
+
+// ─── Panic Hook（TUI 专用）───────────────────────────────────────────────────
+
+/// 全局 panic 通知通道 sender（OnceLock 保证只初始化一次）
+static PANIC_NOTIFY: OnceLock<tokio::sync::mpsc::UnboundedSender<String>> = OnceLock::new();
+
+/// 格式化 panic 信息为可读字符串（消息 + 位置 + backtrace）
+fn format_panic_message(panic_info: &std::panic::PanicHookInfo<'_>) -> String {
+    let payload = if let Some(s) = panic_info.payload().downcast_ref::<&str>() {
+        s.to_string()
+    } else if let Some(s) = panic_info.payload().downcast_ref::<String>() {
+        s.clone()
+    } else {
+        "unknown panic payload".to_string()
+    };
+
+    let location = panic_info
+        .location()
+        .map(|loc| format!("{}:{}:{}", loc.file(), loc.line(), loc.column()))
+        .unwrap_or_else(|| "unknown location".to_string());
+
+    // 自动捕获 backtrace（无需手动设置 RUST_BACKTRACE=1）
+    let backtrace = std::backtrace::Backtrace::capture();
+    let bt_str = match backtrace.status() {
+        std::backtrace::BacktraceStatus::Captured => format!("\n{}", backtrace),
+        _ => String::new(),
+    };
+
+    format!("'{}'\n  at {}{}", payload, location, bt_str)
+}
+
+/// 安装自定义 panic hook：
+/// - 通过 tracing::error! 记录到日志文件（不写 stderr）
+/// - 通过 PANIC_NOTIFY 通道通知 TUI
+fn install_panic_hook() {
+    std::panic::set_hook(Box::new(|panic_info| {
+        let msg = format_panic_message(panic_info);
+        tracing::error!("thread panicked at {}", msg);
+        if let Some(tx) = PANIC_NOTIFY.get() {
+            let _ = tx.send(msg);
+        }
+    }));
+}
+
+/// 创建 panic 通知通道并安装自定义 panic hook。
+/// 必须在 enable_raw_mode() 之前调用。
+/// 返回 UnboundedReceiver 供 TUI 消费。
+pub fn init_panic_notify() -> tokio::sync::mpsc::UnboundedReceiver<String> {
+    let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
+    let _ = PANIC_NOTIFY.set(tx);
+    install_panic_hook();
+    rx
+}
 
 // ─── CLI 定义 ──────────────────────────────────────────────────────────────
 
@@ -404,6 +457,10 @@ fn run_tui(opts: TuiOptions) -> Result<()> {
     // 的内部 runtime 与应用 runtime 完全隔离，避免嵌套 runtime drop panic。
     let _telemetry = peri_agent::telemetry::init_tracing("agent-tui");
 
+    // 安装自定义 panic hook，必须在 enable_raw_mode() 之前，
+    // 否则 Rust 默认 panic hook 的 stderr 输出会破坏 TUI 画面。
+    let panic_notify_rx = init_panic_notify();
+
     let rt = tokio::runtime::Builder::new_multi_thread()
         .worker_threads(4) // 限制 worker 数（默认=CPU 核数，18 核=72MB 栈空间浪费）
         .thread_stack_size(4 * 1024 * 1024) // 4 MB (default: 8 MB)
@@ -425,7 +482,7 @@ fn run_tui(opts: TuiOptions) -> Result<()> {
         let mut terminal = Terminal::new(backend)?;
 
         // 运行应用
-        let result = run_app(&mut terminal, &opts).await;
+        let result = run_app(&mut terminal, &opts, panic_notify_rx).await;
 
         // 恢复终端
         disable_raw_mode()?;
@@ -455,8 +512,12 @@ fn run_tui(opts: TuiOptions) -> Result<()> {
 async fn run_app(
     terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
     tui_opts: &TuiOptions,
+    panic_notify_rx: tokio::sync::mpsc::UnboundedReceiver<String>,
 ) -> Result<()> {
     let mut app = App::new().await;
+
+    // 接入 panic hook 通知通道
+    app.services.panic_notify_rx = Some(panic_notify_rx);
 
     // 根据环境变量/CLI 参数设置初始权限模式
     {
@@ -704,6 +765,8 @@ async fn run_app(
         agent_updated |= app.poll_at_mention();
         // 轮询后台事件（MCP OAuth 等）
         let bg_updated = app.poll_background_events();
+        // 轮询 panic hook 通知
+        let panic_updated = app.poll_panic_notifications();
         // 检查 cron 定时触发
         app.poll_cron_triggers();
 
@@ -734,7 +797,8 @@ async fn run_app(
                 let cache_updated =
                     cache_version != app.session_mgr.current_mut().messages.last_render_version;
                 let loading = app.session_mgr.current_mut().ui.loading;
-                let should_render = cache_updated || agent_updated || bg_updated || loading;
+                let should_render =
+                    cache_updated || agent_updated || bg_updated || panic_updated || loading;
                 if should_render {
                     let now = Instant::now();
                     // loading 路径：限制帧率到 TARGET_FRAME_INTERVAL，降低 CPU 开销

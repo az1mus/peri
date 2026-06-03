@@ -438,13 +438,13 @@ impl RenderTask {
         while let Some(event) = rx.recv().await {
             match event {
                 RenderEvent::Rebuild(messages) => {
-                    self.rebuild(messages);
+                    self.rebuild_safe(messages);
                 }
                 RenderEvent::RebuildWithAnchor {
                     messages,
                     anchor_message_idx,
                 } => {
-                    self.rebuild(messages);
+                    self.rebuild_safe(messages);
                     // 计算锚点消息在新布局中的视觉行起始位置
                     let anchor_visual_row =
                         if anchor_message_idx < self.cache.read().message_offsets.len() {
@@ -474,7 +474,7 @@ impl RenderTask {
                     // 用 last_messages 重新渲染（宽度变化需要重新计算所有行的 wrap）
                     if !self.last_messages.is_empty() {
                         let messages = std::mem::take(&mut self.last_messages);
-                        self.rebuild(messages);
+                        self.rebuild_safe(messages);
                     }
                 }
                 RenderEvent::Clear => {
@@ -507,12 +507,31 @@ impl RenderTask {
                     self.message_hashes.clear();
                     if !self.last_messages.is_empty() {
                         let messages = std::mem::take(&mut self.last_messages);
-                        self.rebuild(messages);
+                        self.rebuild_safe(messages);
                     }
                 }
             }
 
             self.notify.notify_one();
+        }
+    }
+
+    /// rebuild 的安全包装：捕获 panic 防止渲染线程死亡。
+    /// panic 信息通过全局 panic hook（main.rs）记录到日志并通知 TUI。
+    fn rebuild_safe(&mut self, messages: Vec<MessageViewModel>) {
+        use std::panic::AssertUnwindSafe;
+        let result = std::panic::catch_unwind(AssertUnwindSafe(|| {
+            self.rebuild(messages);
+        }));
+        if let Err(panic_payload) = result {
+            // panic hook 已处理日志和通知，这里只需确保渲染线程存活
+            tracing::error!(
+                "render task rebuild panicked: {:?}",
+                panic_payload
+                    .downcast_ref::<String>()
+                    .cloned()
+                    .unwrap_or_else(|| "unknown panic".to_string())
+            );
         }
     }
 }
