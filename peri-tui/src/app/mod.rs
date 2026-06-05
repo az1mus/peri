@@ -1,5 +1,6 @@
 // ── Panel Modules ────────────────────────────────────────────────────────────
 pub mod agent_panel;
+pub mod betas_panel;
 pub mod config_panel;
 pub mod hooks_panel;
 pub mod login_panel;
@@ -17,6 +18,7 @@ pub mod tasks_panel;
 
 // Panel private modules
 mod panel_agent;
+mod panel_betas;
 mod panel_config;
 mod panel_hooks;
 mod panel_login;

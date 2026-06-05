@@ -24,6 +24,7 @@ pub fn default_registry() -> CommandRegistry {
     r.register(Box::new(panel::memory::MemoryCommand));
     r.register(Box::new(panel::login::LoginCommand));
     r.register(Box::new(panel::tasks::TasksCommand));
+    r.register(Box::new(panel::betas::BetasCommand));
     r.register(Box::new(session::rename::RenameCommand));
     r.register(Box::new(session::channel::ChannelCommand));
     r.register(Box::new(session::context_cmd::ContextCommand));

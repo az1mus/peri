@@ -2,6 +2,7 @@ use tui_textarea::Input;
 
 use crate::{
     app::{
+        betas_panel::BetasPanel,
         panel_manager::{EventResult, PanelKind},
         App,
     },
@@ -58,6 +59,7 @@ pub(super) fn handle_panels(app: &mut App, input: &Input) -> Option<Action> {
             | Some(PanelKind::Mcp)
             | Some(PanelKind::Cron)
             | Some(PanelKind::Plugin)
+            | Some(PanelKind::Betas)
     ) {
         with_global_panels!(app, |pm, ctx| {
             let result = pm.dispatch_key(input.clone(), &mut ctx);
@@ -74,6 +76,19 @@ pub(super) fn handle_panels(app: &mut App, input: &Input) -> Option<Action> {
                     }
                     return Some(Action::Redraw);
                 }
+                EventResult::Consumed
+                    if global_kind == Some(PanelKind::Betas) && is_toggle_key(input) =>
+                {
+                    // Beta 切换后即时保存
+                    if let Some(panel) = pm.get::<BetasPanel>() {
+                        if let Some(ref mut cfg) = ctx.services.peri_config {
+                            panel.apply_to_config(cfg);
+                            let _ =
+                                App::save_config(cfg, ctx.services.config_path_override.as_deref());
+                            ctx.sync_acp_config();
+                        }
+                    }
+                }
                 _ => {}
             }
             result
@@ -82,4 +97,25 @@ pub(super) fn handle_panels(app: &mut App, input: &Input) -> Option<Action> {
     }
 
     None
+}
+
+/// 判断是否为切换键（Left/Right/Space）
+fn is_toggle_key(input: &Input) -> bool {
+    use tui_textarea::Key;
+    matches!(
+        input,
+        Input {
+            key: Key::Left,
+            ctrl: false,
+            ..
+        } | Input {
+            key: Key::Right,
+            ctrl: false,
+            ..
+        } | Input {
+            key: Key::Char(' '),
+            ctrl: false,
+            ..
+        }
+    )
 }

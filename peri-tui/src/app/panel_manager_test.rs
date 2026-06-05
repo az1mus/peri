@@ -13,6 +13,7 @@ fn test_panel_kind_scope() {
     assert_eq!(PanelKind::Cron.scope(), PanelScope::Global);
     assert_eq!(PanelKind::Status.scope(), PanelScope::Global);
     assert_eq!(PanelKind::Memory.scope(), PanelScope::Global);
+    assert_eq!(PanelKind::Betas.scope(), PanelScope::Global);
 }
 
 #[test]
@@ -30,18 +31,20 @@ fn test_panel_kind_priority_unique() {
         PanelKind::Cron,
         PanelKind::Status,
         PanelKind::Memory,
+        PanelKind::Tasks,
+        PanelKind::Betas,
     ]
     .iter()
     .map(|k| k.priority())
     .collect();
     assert_eq!(
         priorities.len(),
-        11,
-        "All 11 PanelKind variants must have unique priorities"
+        13,
+        "All 13 PanelKind variants must have unique priorities"
     );
     assert!(
-        priorities.iter().all(|&p| p <= 10),
-        "Priorities should be in range 0-10"
+        priorities.iter().all(|&p| p <= 12),
+        "Priorities should be in range 0-12"
     );
 }
 

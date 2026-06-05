@@ -1,4 +1,5 @@
 pub mod agent;
+pub mod betas;
 pub mod config;
 pub mod cron;
 pub mod hooks;

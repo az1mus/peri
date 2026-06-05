@@ -100,6 +100,14 @@ impl ThinkingConfig {
     }
 }
 
+/// Beta 功能开关配置
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct BetasConfig {
+    /// 启用 line edit 基于行号的编辑模式
+    #[serde(default)]
+    pub line_edit: bool,
+}
+
 /// 应用配置
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct AppConfig {
@@ -147,6 +155,9 @@ pub struct AppConfig {
     /// 流式渲染模式：streaming / block / none
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub streaming_mode: Option<String>,
+    /// Beta 功能开关
+    #[serde(default)]
+    pub betas: BetasConfig,
     /// 保留未知字段
     #[serde(flatten)]
     pub extra: Map<String, Value>,

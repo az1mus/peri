@@ -1,4 +1,5 @@
 pub mod agents;
+pub mod betas;
 pub mod cron;
 pub mod hooks;
 pub mod login;
@@ -9,6 +10,7 @@ pub mod plugin;
 pub mod tasks;
 
 pub use agents::{AgentItem, AgentsCommand};
+pub use betas::BetasCommand;
 pub use cron::CronCommand;
 pub use hooks::HooksCommand;
 pub use login::LoginCommand;
