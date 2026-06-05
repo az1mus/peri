@@ -1,6 +1,6 @@
 use tui_textarea::{Input, Key};
 
-use crate::app::{App, MessageViewModel, PendingAttachment};
+use crate::app::{App, PendingAttachment};
 
 use super::super::Action;
 
@@ -176,41 +176,12 @@ pub(super) fn handle_normal_keys(app: &mut App, input: Input) -> anyhow::Result<
                             tracing::debug!(skill_name, "Matched agent command, submitting to ACP");
                             return Ok(Some(Action::Submit(text)));
                         } else {
+                            // 未知命令/Skill：作为普通输入提交给 Agent
                             tracing::debug!(
                                 skill_name,
-                                agent_commands = ?app.session_mgr.current_mut()
-                                    .commands
-                                    .agent_commands,
-                                "Command not found in local registry, skills, or agent_commands"
+                                "Unknown slash command, submitting as normal input"
                             );
-                            // Distinguish "prefix ambiguity" from "completely unknown"
-                            let prefix = text.trim_start_matches('/').to_string();
-                            let cmd_matches = app
-                                .session_mgr
-                                .current_mut()
-                                .commands
-                                .command_registry
-                                .match_prefix(&prefix, &app.services.lc);
-                            let error_msg = if cmd_matches.len() > 1 {
-                                let names: Vec<&str> =
-                                    cmd_matches.iter().map(|(n, _)| n.as_str()).collect();
-                                format!(
-                                    "命令 '{}' 匹配多个: {}  （请输入完整命令名）",
-                                    text,
-                                    names
-                                        .iter()
-                                        .map(|n| format!("/{}", n))
-                                        .collect::<Vec<_>>()
-                                        .join(", ")
-                                )
-                            } else {
-                                format!("未知命令或 Skill: {}  （输入 /help 查看可用命令）", text)
-                            };
-                            app.session_mgr
-                                .current_mut()
-                                .messages
-                                .view_messages
-                                .push(MessageViewModel::system(error_msg));
+                            return Ok(Some(Action::Submit(text)));
                         }
                     }
                 } else {
