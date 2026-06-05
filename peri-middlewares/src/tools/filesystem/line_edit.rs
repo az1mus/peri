@@ -11,7 +11,8 @@ insert=true inserts before start_line; empty new_string deletes the range.
 
 Caution: new_string replaces the target range entirely — do not duplicate content from adjacent lines outside the edit range.
 Caution: start_word/end_word must be unique within the line. If the word matches multiple times (e.g., "foo" in "foo bar foo"), use a longer prefix (e.g., "foo bar") to disambiguate.
-Caution: when replacing an entire line, omit start_word/end_word and use only start_line. Using start_word/end_word for full-line replacement risks matching an unexpected position within the line and producing truncated output."#;
+Caution: when replacing an entire line, omit start_word/end_word and use only start_line. Using start_word/end_word for full-line replacement risks matching an unexpected position within the line and producing truncated output.
+Caution: the replacement range of start_word/end_word is from the START of start_word to the END of end_word — not the text between them. The anchor words themselves will be replaced, so keep them short and avoid including content you want to preserve."#;
 
 /// 单个编辑操作
 #[derive(Debug, Deserialize)]
