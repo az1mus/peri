@@ -330,3 +330,84 @@ async fn test_line_edit_best_effort部分失败() {
     let content = std::fs::read_to_string(dir.path().join("f.txt")).unwrap();
     assert_eq!(content, "AAA\nbbb\nccc\n");
 }
+// ─── CRLF 换行符保留测试 ──────────────────────────────────────────────────
+
+#[tokio::test]
+async fn test_line_edit_crlf文件保留换行符() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(dir.path().join("f.txt"), "aaa\r\nbbb\r\nccc\r\n").unwrap();
+    let tool = make_tool(&dir);
+    tool.invoke(serde_json::json!({
+        "edits": [make_edit("f.txt", 2, "BBB")]
+    }))
+    .await
+    .unwrap();
+    let content = std::fs::read_to_string(dir.path().join("f.txt")).unwrap();
+    assert_eq!(content, "aaa\r\nBBB\r\nccc\r\n", "CRLF 应被保留");
+}
+
+#[tokio::test]
+async fn test_line_edit_crlf多行替换保留换行符() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(dir.path().join("f.txt"), "aaa\r\nbbb\r\nccc\r\nddd\r\n").unwrap();
+    let tool = make_tool(&dir);
+    tool.invoke(serde_json::json!({
+        "edits": [{
+            "file_path": "f.txt",
+            "start_line": 2,
+            "end_line": 3,
+            "new_string": "XXX"
+        }]
+    }))
+    .await
+    .unwrap();
+    let content = std::fs::read_to_string(dir.path().join("f.txt")).unwrap();
+    assert_eq!(content, "aaa\r\nXXX\r\nddd\r\n", "CRLF 多行替换应保留");
+}
+
+#[tokio::test]
+async fn test_line_edit_crlf插入保留换行符() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(dir.path().join("f.txt"), "aaa\r\nbbb\r\n").unwrap();
+    let tool = make_tool(&dir);
+    tool.invoke(serde_json::json!({
+        "edits": [{
+            "file_path": "f.txt",
+            "start_line": 2,
+            "new_string": "xxx\nyyy",
+            "insert": true
+        }]
+    }))
+    .await
+    .unwrap();
+    let content = std::fs::read_to_string(dir.path().join("f.txt")).unwrap();
+    assert_eq!(content, "aaa\r\nxxx\r\nyyy\r\nbbb\r\n", "CRLF 插入应保留");
+}
+
+#[tokio::test]
+async fn test_line_edit_crlf删除保留换行符() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(dir.path().join("f.txt"), "aaa\r\nbbb\r\nccc\r\n").unwrap();
+    let tool = make_tool(&dir);
+    tool.invoke(serde_json::json!({
+        "edits": [make_edit("f.txt", 2, "")]
+    }))
+    .await
+    .unwrap();
+    let content = std::fs::read_to_string(dir.path().join("f.txt")).unwrap();
+    assert_eq!(content, "aaa\r\nccc\r\n", "CRLF 删除应保留");
+}
+
+#[tokio::test]
+async fn test_line_edit_lf文件不受影响() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(dir.path().join("f.txt"), "aaa\nbbb\nccc\n").unwrap();
+    let tool = make_tool(&dir);
+    tool.invoke(serde_json::json!({
+        "edits": [make_edit("f.txt", 2, "BBB")]
+    }))
+    .await
+    .unwrap();
+    let content = std::fs::read_to_string(dir.path().join("f.txt")).unwrap();
+    assert_eq!(content, "aaa\nBBB\nccc\n", "LF 文件应保持 LF");
+}

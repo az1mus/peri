@@ -6,29 +6,12 @@ use super::resolve_path;
 
 const LINE_EDIT_DESCRIPTION: &str = r#"Performs precise line-based edits in files.
 
-Usage:
-- Uses line numbers from Read output to target edits — no content matching needed
-- start_line and end_line refer to the line numbers shown in Read output (1-based)
-- Use start_word/end_word to target specific positions within a line (optional)
-- Supports multiple edits in a single call — they are applied bottom-to-top for stability
-- insert: true inserts new lines before start_line without replacing anything
-- Set new_string to empty string to delete lines
+Line numbers are 1-based (from Read output). Multiple edits are applied bottom-to-top.
+insert=true inserts before start_line; empty new_string deletes the range.
 
-Parameters:
-- file_path (required): absolute path to the file
-- start_line (required): line number to start editing (from Read output)
-- end_line (optional): line number to end editing, defaults to start_line
-- start_word (optional): text within start_line to begin replacement at — must be unique in that line
-- end_word (optional): text within end_line to end replacement at — must be unique in that line
-- new_string (required): replacement text (empty string = delete)
-- insert (optional): if true, insert new_string before start_line (no lines replaced)
-
-Error handling:
-- start_line exceeds file length: error with file line count
-- start_word/end_word not found in target line: error with line content hint
-- start_word/end_word matches multiple positions in line: error with match count, request longer word
-- File not found: error
-- end_line < start_line (non-insert): error"#;
+Caution: new_string replaces the target range entirely — do not duplicate content from adjacent lines outside the edit range.
+Caution: start_word/end_word must be unique within the line. If the word matches multiple times (e.g., "foo" in "foo bar foo"), use a longer prefix (e.g., "foo bar") to disambiguate.
+Caution: when replacing an entire line, omit start_word/end_word and use only start_line. Using start_word/end_word for full-line replacement risks matching an unexpected position within the line and producing truncated output."#;
 
 /// 单个编辑操作
 #[derive(Debug, Deserialize)]
@@ -147,6 +130,12 @@ impl BaseTool for LineEditTool {
 
             let mut lines: Vec<String> = content.lines().map(|l| l.to_string()).collect();
             let trailing_newline = content.ends_with('\n');
+            // 检测原始换行符风格：如果内容中包含 \r\n 则保留 CRLF
+            let line_ending = if content.contains("\r\n") {
+                "\r\n"
+            } else {
+                "\n"
+            };
 
             for edit in sorted_edits {
                 match apply_single_edit(&mut lines, edit) {
@@ -155,13 +144,13 @@ impl BaseTool for LineEditTool {
                 }
             }
 
-            // 构建新内容
+            // 构建新内容，保留原始换行符风格
             let new_content = if lines.is_empty() {
                 String::new()
             } else {
-                let mut s = lines.join("\n");
+                let mut s = lines.join(line_ending);
                 if trailing_newline {
-                    s.push('\n');
+                    s.push_str(line_ending);
                 }
                 s
             };
