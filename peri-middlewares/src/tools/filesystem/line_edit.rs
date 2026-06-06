@@ -21,7 +21,9 @@ Verification with expected_lines (recommended):
 
 Rules:
 - new_string replaces the ENTIRE target range — do not duplicate adjacent lines.
-- For whole-line edits, use start_line/end_line only.
+- For single-line edits, omit end_line (defaults to start_line) to avoid accidentally removing adjacent lines.
+- To add attributes/derives above a line, prefer action:"insert" over replace — it cannot accidentally drop existing lines.
+- expected_lines must cover the FULL range (start_line through end_line), not just the first line.
 - Multiple edits to the same file must not overlap.
 
 Common patterns:
