@@ -13,6 +13,8 @@ pub struct RunningBgAgent {
     pub agent_name: String,
     pub instance_id: String,
     pub started_at: Instant,
+    /// 已执行的工具调用数（由 BgToolStep 事件实时递增）
+    pub tool_count: usize,
 }
 
 /// 独立聊天会话：封装一个对话的完整 UI 状态、Agent 通信状态和持久化上下文。

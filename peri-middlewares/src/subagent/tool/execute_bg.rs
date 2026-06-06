@@ -74,9 +74,24 @@ impl super::SubAgentTool {
             )
             .await?;
 
-        let agent_builder = build_result.builder;
+        let mut agent_builder = build_result.builder;
         let agent_name = agent_id.clone();
         let prompt_summary: String = prompt.chars().take(100).collect();
+
+        // 转发 ToolStart 为轻量级 BgToolStep 事件，用于 TUI bg_agent_bar 实时计数
+        if let Some(ref sender) = self.bg_event_sender {
+            let step_sender = sender.clone();
+            let step_ctid = build_result.child_thread_id.clone();
+            agent_builder = agent_builder.with_event_handler(Arc::new(
+                peri_agent::agent::events::FnEventHandler(move |event: AgentEvent| {
+                    if matches!(event, AgentEvent::ToolStart { .. }) {
+                        let _ = step_sender.send(AgentEvent::BgToolStep {
+                            child_thread_id: step_ctid.clone(),
+                        });
+                    }
+                }),
+            ));
+        }
 
         let spawn_task_id = task_id.clone();
         let spawn_agent_name = agent_name.clone();
@@ -326,6 +341,20 @@ impl super::SubAgentTool {
         self.fire_subagent_lifecycle_hook(HookEvent::SubagentStart, &cwd, &agent_name, None)
             .await;
 
+        // 转发 ToolStart 为轻量级 BgToolStep 事件，用于 TUI bg_agent_bar 实时计数
+        if let Some(ref sender) = self.bg_event_sender {
+            let step_sender = sender.clone();
+            let step_ctid = bg_fork_child_thread_id.clone();
+            agent_builder = agent_builder.with_event_handler(Arc::new(
+                peri_agent::agent::events::FnEventHandler(move |event: AgentEvent| {
+                    if matches!(event, AgentEvent::ToolStart { .. }) {
+                        let _ = step_sender.send(AgentEvent::BgToolStep {
+                            child_thread_id: step_ctid.clone(),
+                        });
+                    }
+                }),
+            ));
+        }
         let handle = tokio::spawn(async move {
             let mut fork_state = if let Some(ref store) = spawn_thread_store {
                 AgentState::new(&cwd)

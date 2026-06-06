@@ -237,6 +237,21 @@ impl App {
             }
         }
 
+        // 同步更新管线状态（SubAgentState + frozen VM），
+        // 确保 reconcile/rebuild 产生的 SubAgentGroup 携带完成状态。
+        // 不依赖 child_thread_id——无则用 agent_name 兜底匹配。
+        self.session_mgr
+            .current_mut()
+            .messages
+            .pipeline
+            .notify_bg_completed(
+                child_thread_id.as_deref(),
+                &agent_name,
+                &output,
+                success,
+                tool_calls_count,
+            );
+
         if found_and_updated {
             // 成功更新 SubAgentGroup，触发 RebuildAll
             self.request_rebuild();
@@ -358,5 +373,18 @@ impl App {
         }
 
         (true, false, false)
+    }
+
+    /// 后台 agent 工具调用进度更新（BgToolStep 事件）
+    /// 递增 RunningBgAgent.tool_count，用于 bg_agent_bar 实时显示
+    pub(crate) fn handle_bg_tool_step(&mut self, child_thread_id: &str) {
+        let session = self.session_mgr.current_mut();
+        if let Some(agent) = session
+            .background_agents
+            .iter_mut()
+            .find(|a| a.instance_id == child_thread_id)
+        {
+            agent.tool_count += 1;
+        }
     }
 }

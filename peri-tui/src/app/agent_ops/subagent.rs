@@ -77,6 +77,7 @@ impl App {
                     agent_name: agent_id.clone(),
                     instance_id: instance_id.clone(),
                     started_at: std::time::Instant::now(),
+                    tool_count: 0,
                 });
         }
         self.session_mgr.current_mut().agent.subagent_depth += 1;

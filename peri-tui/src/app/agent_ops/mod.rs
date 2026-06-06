@@ -341,6 +341,10 @@ impl App {
                 self.session_mgr.current_mut().agent.lsp_files_with_errors = files_with_errors;
                 (true, false, false)
             }
+            AgentEvent::BgToolStep { child_thread_id } => {
+                self.handle_bg_tool_step(&child_thread_id);
+                (true, false, false)
+            }
         }
     }
 
