@@ -13,3 +13,8 @@ impl Command for PluginCommand {
         app.open_plugin_panel();
     }
 }
+
+#[cfg(test)]
+mod tests {
+    include!("plugin_test.rs");
+}
