@@ -212,7 +212,7 @@ fn verify_ast(file_path: &str, old_content: &str, new_content: &str) -> VerifyLe
         _ => return VerifyLevel::Skip,
     };
     let mut parser = tree_sitter::Parser::new();
-    if parser.set_language(&language).is_err() {}
+    let _ = parser.set_language(&language);
 
     let errors_before = count_ast_errors(&mut parser, old_content);
     let errors_after = count_ast_errors(&mut parser, new_content);

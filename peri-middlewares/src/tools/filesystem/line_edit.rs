@@ -200,7 +200,7 @@ impl BaseTool for LineEditTool {
         // 阶段 2: 应用编辑到内存
         let mut results: Vec<FileResult> = Vec::new();
 
-        for (file_key, _patch_list) in &groups {
+        for file_key in groups.keys() {
             let (lines, line_ending, trailing_newline, original_content) =
                 file_contents.get(file_key).unwrap();
             let mut lines = lines.clone();
@@ -216,7 +216,7 @@ impl BaseTool for LineEditTool {
 
             // 按匹配位置从后往前排序（稳定排序保持同位置 hunk 的原始顺序）
             let mut sorted_matched: Vec<&MatchedHunk> = matched.iter().collect();
-            sorted_matched.sort_by(|a, b| b.match_result.line_idx.cmp(&a.match_result.line_idx));
+            sorted_matched.sort_by_key(|b| std::cmp::Reverse(b.match_result.line_idx));
 
             for mh in &sorted_matched {
                 let line_idx = mh.match_result.line_idx;
