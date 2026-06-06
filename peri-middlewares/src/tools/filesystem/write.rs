@@ -15,7 +15,8 @@ Usage:
 Notes:
 - Uses atomic write (write to temp file then rename) to prevent data loss on crash
 - NEVER create documentation files (*.md) or README files unless explicitly requested by the User
-- Only use emojis if the User explicitly requests it. Avoid writing emojis to files unless asked"#;
+- Only use emojis if the User explicitly requests it. Avoid writing emojis to files unless asked
+- For files longer than 200 lines, consider writing in chunks: use Write for the first chunk, then Write with append=true for subsequent chunks. This reduces context window consumption significantly"#;
 
 /// Write tool - 与 TypeScript write_tool 对齐
 pub struct WriteFileTool {
@@ -49,6 +50,11 @@ impl BaseTool for WriteFileTool {
                 "content": {
                     "type": "string",
                     "description": "The full content to write to the file"
+                },
+                "append": {
+                    "type": "boolean",
+                    "description": "If true, append content to the end of the file instead of overwriting. Use this for writing large files in chunks: first call Write without append to create the file with the initial content, then call Write with append=true to add more content. This avoids sending the entire file content in a single tool call, saving context window space.",
+                    "default": false
                 }
             },
             "required": ["file_path", "content"]
@@ -66,6 +72,8 @@ impl BaseTool for WriteFileTool {
             .as_str()
             .ok_or("The 'content' parameter is required for the Write tool.")?;
 
+        let append = input["append"].as_bool().unwrap_or(false);
+
         let resolved = resolve_path(&self.cwd, file_path);
         let line_count = content.lines().count();
 
@@ -75,26 +83,53 @@ impl BaseTool for WriteFileTool {
             }
         }
 
-        // 原子写入：先写临时文件再 rename，防止崩溃时丢失数据
-        // 使用随机后缀避免并发写入冲突
-        let tmp_ext = format!("tmp.{}", uuid::Uuid::now_v7());
-        let tmp_path = resolved.with_extension(tmp_ext);
-        if let Err(e) = std::fs::write(&tmp_path, content) {
-            return Err(format!("Error writing file: {e}").into());
-        }
-        match std::fs::rename(&tmp_path, &resolved) {
-            Ok(_) => {
-                let rel = resolved
-                    .strip_prefix(&self.cwd)
-                    .unwrap_or(&resolved)
-                    .display()
-                    .to_string();
-                let lines_label = if line_count == 1 { "line" } else { "lines" };
-                Ok(format!("Wrote {} {} {}", line_count, lines_label, rel))
+        if append {
+            use std::io::Write;
+            let mut file = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(&resolved)
+                .map_err(|e| format!("Error opening file for append: {e}"))?;
+            file.write_all(content.as_bytes())
+                .map_err(|e| format!("Error appending to file: {e}"))?;
+            drop(file); // 确保句柄关闭后再读取文件
+
+            let total_lines = std::fs::read_to_string(&resolved)
+                .map(|s| s.lines().count())
+                .unwrap_or(line_count);
+
+            let rel = resolved
+                .strip_prefix(&self.cwd)
+                .unwrap_or(&resolved)
+                .display()
+                .to_string();
+            let lines_label = if line_count == 1 { "line" } else { "lines" };
+            Ok(format!(
+                "Appended {} {} to {} (file total: {} lines)",
+                line_count, lines_label, rel, total_lines
+            ))
+        } else {
+            // 原子写入：先写临时文件再 rename，防止崩溃时丢失数据
+            // 使用随机后缀避免并发写入冲突
+            let tmp_ext = format!("tmp.{}", uuid::Uuid::now_v7());
+            let tmp_path = resolved.with_extension(tmp_ext);
+            if let Err(e) = std::fs::write(&tmp_path, content) {
+                return Err(format!("Error writing file: {e}").into());
             }
-            Err(e) => {
-                let _ = std::fs::remove_file(&tmp_path);
-                Err(format!("Error renaming temp file: {e}").into())
+            match std::fs::rename(&tmp_path, &resolved) {
+                Ok(_) => {
+                    let rel = resolved
+                        .strip_prefix(&self.cwd)
+                        .unwrap_or(&resolved)
+                        .display()
+                        .to_string();
+                    let lines_label = if line_count == 1 { "line" } else { "lines" };
+                    Ok(format!("Wrote {} {} {}", line_count, lines_label, rel))
+                }
+                Err(e) => {
+                    let _ = std::fs::remove_file(&tmp_path);
+                    Err(format!("Error renaming temp file: {e}").into())
+                }
             }
         }
     }
