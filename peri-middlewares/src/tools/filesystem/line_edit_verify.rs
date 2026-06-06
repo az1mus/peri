@@ -410,21 +410,21 @@ mod tests {
     // ═══════════════════════════════════════════════════════════════
 
     #[test]
-    fn P0_转义引号不闭合字符串_不再误报() {
+    fn p0_转义引号不闭合字符串_不再误报() {
         let content = "let s = \"他说：\\\"你好\\\"\"; fn main() {}";
         let result = verify_brackets(content);
         assert_eq!(result, VerifyLevel::Ok, "转义引号 \\\" 不应提前关闭字符串");
     }
 
     #[test]
-    fn P0_双反斜杠后引号正常关闭() {
+    fn p0_双反斜杠后引号正常关闭() {
         let content = "let p = \"C:\\\\Users\\\\\"; fn main() {}";
         let result = verify_brackets(content);
         assert_eq!(result, VerifyLevel::Ok, "\\\\ 后的引号应正常关闭字符串");
     }
 
     #[test]
-    fn P0_转义引号内括号不计入平衡() {
+    fn p0_转义引号内括号不计入平衡() {
         let content = "let s = \"\\\"()\"; fn main() {}";
         let result = verify_brackets(content);
         assert_eq!(
@@ -435,28 +435,28 @@ mod tests {
     }
 
     #[test]
-    fn P0_转义反斜杠加引号不误关闭() {
+    fn p0_转义反斜杠加引号不误关闭() {
         let content = "let s = \"\\\\\\\"\"; fn main() {}";
         let result = verify_brackets(content);
         assert_eq!(result, VerifyLevel::Ok, "三重转义链 \\\\\\\" 应正确处理");
     }
 
     #[test]
-    fn P0_转义单引号在char字面量不误关闭() {
+    fn p0_转义单引号在char字面量不误关闭() {
         let content = "let c = '\\''; fn main() {}";
         let result = verify_brackets(content);
         assert_eq!(result, VerifyLevel::Ok, "char 字面量中的 \\' 不应提前关闭");
     }
 
     #[test]
-    fn P0_backtick内转义不误关闭() {
+    fn p0_backtick内转义不误关闭() {
         let content = "let s = `\\``; fn main() {}";
         let result = verify_brackets(content);
         assert_eq!(result, VerifyLevel::Ok, "backtick 内的 \\` 不应提前关闭");
     }
 
     #[test]
-    fn P0_format宏内转义引号不误关() {
+    fn p0_format宏内转义引号不误关() {
         let content = "let s = \"format!(\\\"hello\\\")\"; fn main() {}";
         let result = verify_brackets(content);
         assert_eq!(
@@ -467,7 +467,7 @@ mod tests {
     }
 
     #[test]
-    fn P0_真实不平衡在转义后仍被检出_缺花括号() {
+    fn p0_真实不平衡在转义后仍被检出_缺花括号() {
         let content = "let s = \"a\\\"b\"; {";
         let result = verify_brackets(content);
         assert!(
@@ -477,21 +477,21 @@ mod tests {
     }
 
     #[test]
-    fn P0_真实不平衡在转义后仍被检出_缺括号() {
+    fn p0_真实不平衡在转义后仍被检出_缺括号() {
         let content = "let s = \"a\\\"b\"; (";
         let result = verify_brackets(content);
         assert!(matches!(result, VerifyLevel::Error(_)), "缺失的 ) 应被检出");
     }
 
     #[test]
-    fn P0_常见转义序列不影响括号() {
+    fn p0_常见转义序列不影响括号() {
         let content = "let s = \"\\n\\t\\r\\\\\"; fn main() {}";
         let result = verify_brackets(content);
         assert_eq!(result, VerifyLevel::Ok);
     }
 
     #[test]
-    fn P0_字符串内括号完全忽略() {
+    fn p0_字符串内括号完全忽略() {
         let content = "let s = \"(){}\"; fn main() {}";
         let result = verify_brackets(content);
         assert_eq!(result, VerifyLevel::Ok);
@@ -502,28 +502,28 @@ mod tests {
     // ═══════════════════════════════════════════════════════════════
 
     #[test]
-    fn P1_行注释内所有括号忽略() {
+    fn p1_行注释内所有括号忽略() {
         let content = "// { [ ( unbalanced\nfn main() {}";
         let result = verify_brackets(content);
         assert_eq!(result, VerifyLevel::Ok);
     }
 
     #[test]
-    fn P1_块注释内所有括号忽略() {
+    fn p1_块注释内所有括号忽略() {
         let content = "/* { [ ( */ fn main() {}";
         let result = verify_brackets(content);
         assert_eq!(result, VerifyLevel::Ok);
     }
 
     #[test]
-    fn P1_跨行块注释内括号忽略() {
+    fn p1_跨行块注释内括号忽略() {
         let content = "/* \n { [ ( \n */ fn main() {}";
         let result = verify_brackets(content);
         assert_eq!(result, VerifyLevel::Ok);
     }
 
     #[test]
-    fn P1_行注释在块注释内() {
+    fn p1_行注释在块注释内() {
         let content = "/* // */ fn main() {}";
         let result = verify_brackets(content);
         assert_eq!(result, VerifyLevel::Ok);
@@ -534,14 +534,14 @@ mod tests {
     // ═══════════════════════════════════════════════════════════════
 
     #[test]
-    fn P2_url在字符串内不触发注释() {
+    fn p2_url在字符串内不触发注释() {
         let content = "let url = \"https://example.com/path\"; fn main() {}";
         let result = verify_brackets(content);
         assert_eq!(result, VerifyLevel::Ok);
     }
 
     #[test]
-    fn P2_除法后行注释不误判() {
+    fn p2_除法后行注释不误判() {
         let content = "let c = a / b; // {\nfn main() {}";
         let result = verify_brackets(content);
         assert_eq!(result, VerifyLevel::Ok);
@@ -552,7 +552,7 @@ mod tests {
     // ═══════════════════════════════════════════════════════════════
 
     #[test]
-    fn P3_缺少大括号检测() {
+    fn p3_缺少大括号检测() {
         let content = "fn main() { let x = 1;";
         let result = verify_brackets(content);
         assert!(
@@ -562,14 +562,14 @@ mod tests {
     }
 
     #[test]
-    fn P3_多出括号检测() {
+    fn p3_多出括号检测() {
         let content = "fn main() { let x = (1 + 2)); }";
         let result = verify_brackets(content);
         assert!(matches!(result, VerifyLevel::Error(_)));
     }
 
     #[test]
-    fn P3_方括号无匹配检测() {
+    fn p3_方括号无匹配检测() {
         let content = "fn main() { let x = [1, 2; }";
         let result = verify_brackets(content);
         assert!(matches!(result, VerifyLevel::Error(_)));
@@ -580,21 +580,21 @@ mod tests {
     // ═══════════════════════════════════════════════════════════════
 
     #[test]
-    fn P4_static_lifetime不误开字符串() {
+    fn p4_static_lifetime不误开字符串() {
         let content = "fn label() -> &'static str { \"hello\" }";
         let result = verify_brackets(content);
         assert_eq!(result, VerifyLevel::Ok, "'static 不应触发字符串模式");
     }
 
     #[test]
-    fn P4_static_lifetime后括号正常计数() {
+    fn p4_static_lifetime后括号正常计数() {
         let content = "fn f() -> &'static str { let x = (1 + 2); x }";
         let result = verify_brackets(content);
         assert_eq!(result, VerifyLevel::Ok, "'static 后面的括号应正常计数");
     }
 
     #[test]
-    fn P4_lifetime_param后括号正常() {
+    fn p4_lifetime_param后括号正常() {
         let content = "fn foo<'a, 'b>(x: &'a str) -> &'a str { x }";
         let result = verify_brackets(content);
         assert_eq!(
@@ -605,7 +605,7 @@ mod tests {
     }
 
     #[test]
-    fn P4_char_literal字母不误判为lifetime() {
+    fn p4_char_literal字母不误判为lifetime() {
         let content = "let c = 'm'; fn main() {}";
         let result = verify_brackets(content);
         assert_eq!(
@@ -616,7 +616,7 @@ mod tests {
     }
 
     #[test]
-    fn P4_char_literal字母内括号不泄露() {
+    fn p4_char_literal字母内括号不泄露() {
         let content = "KeyCode::Char('m'), fn main() {}";
         let result = verify_brackets(content);
         assert_eq!(
@@ -627,7 +627,7 @@ mod tests {
     }
 
     #[test]
-    fn P4_char_literal_unicode不误判() {
+    fn p4_char_literal_unicode不误判() {
         let content = "let c = 'µ'; fn main() {}";
         let result = verify_brackets(content);
         assert_eq!(
@@ -638,14 +638,14 @@ mod tests {
     }
 
     #[test]
-    fn P4_char_literal_中文不误判() {
+    fn p4_char_literal_中文不误判() {
         let content = "let c = '你'; fn main() {}";
         let result = verify_brackets(content);
         assert_eq!(result, VerifyLevel::Ok, "中文 char literal 应正常处理");
     }
 
     #[test]
-    fn P4_混合lifetime和char_literal() {
+    fn p4_混合lifetime和char_literal() {
         let content = "fn get_label() -> &'static str { let k = KeyCode::Char('m'); \"x\" }";
         let result = verify_brackets(content);
         assert_eq!(
@@ -656,7 +656,7 @@ mod tests {
     }
 
     #[test]
-    fn P4_真实Rust结构体片段() {
+    fn p4_真实rust结构体片段() {
         let content = r#"
 pub(super) static BINDING: KeyBinding = KeyBinding {
     label: &'static str,
@@ -673,28 +673,28 @@ fn main() {}"#;
     }
 
     #[test]
-    fn P4_多个lifetime参数泛型() {
+    fn p4_多个lifetime参数泛型() {
         let content = "struct Foo<'a, 'b, 'c> { x: &'a str, y: &'b str } fn main() {}";
         let result = verify_brackets(content);
         assert_eq!(result, VerifyLevel::Ok, "多个泛型 lifetime 参数");
     }
 
     #[test]
-    fn P4_lifetime在闭包中() {
+    fn p4_lifetime在闭包中() {
         let content = "let f: Box<dyn Fn() + 'static> = Box::new(|| { let x = 1; }); fn main() {}";
         let result = verify_brackets(content);
         assert_eq!(result, VerifyLevel::Ok, "闭包中的 'static lifetime");
     }
 
     #[test]
-    fn P4_lifetime在trait_bound中() {
+    fn p4_lifetime在trait_bound中() {
         let content = "fn process<T: Send + 'static>(t: T) { let _ = t; } fn main() {}";
         let result = verify_brackets(content);
         assert_eq!(result, VerifyLevel::Ok, "trait bound 中的 'static");
     }
 
     #[test]
-    fn P4_转义char_literal不提前关闭() {
+    fn p4_转义char_literal不提前关闭() {
         let content = "let c = '\\''; fn main() {}";
         let result = verify_brackets(content);
         assert_eq!(
@@ -705,14 +705,14 @@ fn main() {}"#;
     }
 
     #[test]
-    fn P4_impl块含lifetime() {
+    fn p4_impl块含lifetime() {
         let content = "impl<'a> Foo<'a> { fn bar(&self) -> &'a str { \"hi\" } }";
         let result = verify_brackets(content);
         assert_eq!(result, VerifyLevel::Ok, "impl 块中的 lifetime 参数");
     }
 
     #[test]
-    fn P4_超高复杂度_模拟真实文件片段() {
+    fn p4_超高复杂度_模拟真实文件片段() {
         let content = r#"
 use std::path::Path;
 
@@ -771,7 +771,7 @@ fn main() {
     }
 
     #[test]
-    fn P4_真实不平衡在复杂代码中仍被检出() {
+    fn p4_真实不平衡在复杂代码中仍被检出() {
         let content = r#"
 fn process<'a>(x: &'a str) -> &'static str {
     let c = 'x';
@@ -788,7 +788,7 @@ fn process<'a>(x: &'a str) -> &'static str {
     }
 
     #[test]
-    fn P4_真实不平衡在复杂代码中仍被检出_缺括号() {
+    fn p4_真实不平衡在复杂代码中仍被检出_缺括号() {
         let content = r#"
 fn calc<'a>(x: &'a [i32]) -> i32 {
     let c = 'z';

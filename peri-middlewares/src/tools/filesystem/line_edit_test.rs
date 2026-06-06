@@ -531,7 +531,7 @@ async fn test_复现_单hunk插入match臂_无冗余() {
      }
 "#;
 
-    let result = tool
+    let _result = tool
         .invoke(serde_json::json!({
             "patches": [{
                 "file_path": "test.rs",
@@ -584,7 +584,7 @@ async fn test_复现_单行通配臂_插入新arm() {
      }
 "#;
 
-    let result = tool
+    let _result = tool
         .invoke(serde_json::json!({
             "patches": [{
                 "file_path": "test.rs",
@@ -725,7 +725,7 @@ async fn test_复现_长上下文包含通配臂body闭合() {
          }
 "#;
 
-    let result = tool
+    let _result = tool
         .invoke(serde_json::json!({
             "patches": [{
                 "file_path": "test.rs",
@@ -805,7 +805,7 @@ fn handle(input: Input) {
  }
 "#;
 
-    let result = tool
+    let _result = tool
         .invoke(serde_json::json!({
             "patches": [{
                 "file_path": "test.rs",
@@ -855,7 +855,7 @@ async fn test_复现_空context尾行导致oldcount偏差() {
  line3
 "#;
 
-    let result = tool
+    let _result = tool
         .invoke(serde_json::json!({
             "patches": [{
                 "file_path": "test.txt",
@@ -912,7 +912,7 @@ async fn test_复现_remove然后add通配臂() {
      }
 "#;
 
-    let result = tool
+    let _result = tool
         .invoke(serde_json::json!({
             "patches": [{
                 "file_path": "test.rs",
