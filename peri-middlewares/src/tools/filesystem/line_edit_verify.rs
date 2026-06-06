@@ -1,4 +1,4 @@
-//! 3 层验证引擎
+//! 三层验证引擎
 //! 层 A: Diff Sanity Guard
 //! 层 B: 括号平衡 + 缩进一致性
 //! 层 C: Tree-sitter AST Guard
@@ -122,13 +122,18 @@ fn verify_brackets(content: &str) -> VerifyLevel {
     let mut prev_char: Option<char> = None;
     let mut escape_next = false;
 
-    for ch in content.chars() {
+    let chars: Vec<char> = content.chars().collect();
+    let mut i = 0;
+    while i < chars.len() {
+        let ch = chars[i];
+
         if in_line_comment {
             if ch == '\n' {
                 in_line_comment = false;
             }
             prev_prev_char = prev_char;
             prev_char = Some(ch);
+            i += 1;
             continue;
         }
         if in_block_comment {
@@ -137,6 +142,7 @@ fn verify_brackets(content: &str) -> VerifyLevel {
             }
             prev_prev_char = prev_char;
             prev_char = Some(ch);
+            i += 1;
             continue;
         }
         if let Some(quote) = in_string {
@@ -144,12 +150,14 @@ fn verify_brackets(content: &str) -> VerifyLevel {
                 escape_next = false;
                 prev_prev_char = prev_char;
                 prev_char = Some(ch);
+                i += 1;
                 continue;
             }
             if ch == '\\' {
                 escape_next = true;
                 prev_prev_char = prev_char;
                 prev_char = Some(ch);
+                i += 1;
                 continue;
             }
             if ch == quote {
@@ -157,11 +165,45 @@ fn verify_brackets(content: &str) -> VerifyLevel {
             }
             prev_prev_char = prev_char;
             prev_char = Some(ch);
+            i += 1;
             continue;
         }
 
         match ch {
-            '\'' | '"' | '`' => in_string = Some(ch),
+            '"' | '`' => in_string = Some(ch),
+            '\'' => {
+                // 区分 Rust lifetime（'ident）与 char literal（'x'）
+                // lifetime: ' 后跟标识符字符（a-z/A-Z/_），且后面没有闭合 '
+                // char literal: ' 后跟字符再跟闭合 '
+                let next_is_ident = chars
+                    .get(i + 1)
+                    .is_some_and(|c| c.is_ascii_alphabetic() || *c == '_');
+                let prev_is_delim =
+                    prev_char.is_none_or(|c| !c.is_ascii_alphanumeric() && c != '_' && c != '\'');
+
+                if next_is_ident && prev_is_delim {
+                    // peek 过标识符看后面是否有 ' 闭合（char literal: 'm'）
+                    let mut peek = i + 1;
+                    while peek < chars.len()
+                        && (chars[peek].is_ascii_alphabetic() || chars[peek] == '_')
+                    {
+                        peek += 1;
+                    }
+                    if peek < chars.len() && chars[peek] == '\'' {
+                        // char literal: 'm', 'x' 等
+                        in_string = Some(ch);
+                    } else {
+                        // Rust lifetime: 'static, 'a, 'b 等
+                        let before_lifetime = prev_char;
+                        i = peek; // skip past the entire lifetime identifier
+                        prev_prev_char = before_lifetime;
+                        prev_char = chars.get(i.wrapping_sub(1)).copied();
+                        continue; // i already points past lifetime, skip i += 1
+                    }
+                } else {
+                    in_string = Some(ch);
+                }
+            }
             '/' if prev_char == Some('/') && prev_prev_char != Some(':') => {
                 in_line_comment = true;
             }
@@ -176,6 +218,7 @@ fn verify_brackets(content: &str) -> VerifyLevel {
         }
         prev_prev_char = prev_char;
         prev_char = Some(ch);
+        i += 1;
     }
 
     let mut errors = Vec::new();
@@ -368,7 +411,6 @@ mod tests {
 
     #[test]
     fn P0_转义引号不闭合字符串_不再误报() {
-        // "他说：\"你好\"" — \" 是转义引号，不应提前关闭字符串
         let content = "let s = \"他说：\\\"你好\\\"\"; fn main() {}";
         let result = verify_brackets(content);
         assert_eq!(result, VerifyLevel::Ok, "转义引号 \\\" 不应提前关闭字符串");
@@ -376,7 +418,6 @@ mod tests {
 
     #[test]
     fn P0_双反斜杠后引号正常关闭() {
-        // "C:\\Users\\" — \\ 后跟 " 正常关闭字符串
         let content = "let p = \"C:\\\\Users\\\\\"; fn main() {}";
         let result = verify_brackets(content);
         assert_eq!(result, VerifyLevel::Ok, "\\\\ 后的引号应正常关闭字符串");
@@ -384,7 +425,6 @@ mod tests {
 
     #[test]
     fn P0_转义引号内括号不计入平衡() {
-        // 字符串内 \"() 不应被当作代码括号
         let content = "let s = \"\\\"()\"; fn main() {}";
         let result = verify_brackets(content);
         assert_eq!(
@@ -396,7 +436,6 @@ mod tests {
 
     #[test]
     fn P0_转义反斜杠加引号不误关闭() {
-        // "\\\"" — \\ 字面反斜杠 + \" 转义引号
         let content = "let s = \"\\\\\\\"\"; fn main() {}";
         let result = verify_brackets(content);
         assert_eq!(result, VerifyLevel::Ok, "三重转义链 \\\\\\\" 应正确处理");
@@ -404,7 +443,6 @@ mod tests {
 
     #[test]
     fn P0_转义单引号在char字面量不误关闭() {
-        // '\'' — \' 是转义引号，char 字面量不提前关闭
         let content = "let c = '\\''; fn main() {}";
         let result = verify_brackets(content);
         assert_eq!(result, VerifyLevel::Ok, "char 字面量中的 \\' 不应提前关闭");
@@ -412,7 +450,6 @@ mod tests {
 
     #[test]
     fn P0_backtick内转义不误关闭() {
-        // `\`` — 转义的反引号不提前关闭
         let content = "let s = `\\``; fn main() {}";
         let result = verify_brackets(content);
         assert_eq!(result, VerifyLevel::Ok, "backtick 内的 \\` 不应提前关闭");
@@ -431,7 +468,6 @@ mod tests {
 
     #[test]
     fn P0_真实不平衡在转义后仍被检出_缺花括号() {
-        // "a\"b"; {  — \" 不关字符串，{ 被正确计数，缺 }
         let content = "let s = \"a\\\"b\"; {";
         let result = verify_brackets(content);
         assert!(
@@ -442,7 +478,6 @@ mod tests {
 
     #[test]
     fn P0_真实不平衡在转义后仍被检出_缺括号() {
-        // "a\"b"; (  — \" 不关字符串，( 被正确计数
         let content = "let s = \"a\\\"b\"; (";
         let result = verify_brackets(content);
         assert!(matches!(result, VerifyLevel::Error(_)), "缺失的 ) 应被检出");
@@ -538,5 +573,234 @@ mod tests {
         let content = "fn main() { let x = [1, 2; }";
         let result = verify_brackets(content);
         assert!(matches!(result, VerifyLevel::Error(_)));
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // P4 — Rust lifetime 与 char literal 区分（回归防护）
+    // ═══════════════════════════════════════════════════════════════
+
+    #[test]
+    fn P4_static_lifetime不误开字符串() {
+        let content = "fn label() -> &'static str { \"hello\" }";
+        let result = verify_brackets(content);
+        assert_eq!(result, VerifyLevel::Ok, "'static 不应触发字符串模式");
+    }
+
+    #[test]
+    fn P4_static_lifetime后括号正常计数() {
+        let content = "fn f() -> &'static str { let x = (1 + 2); x }";
+        let result = verify_brackets(content);
+        assert_eq!(result, VerifyLevel::Ok, "'static 后面的括号应正常计数");
+    }
+
+    #[test]
+    fn P4_lifetime_param后括号正常() {
+        let content = "fn foo<'a, 'b>(x: &'a str) -> &'a str { x }";
+        let result = verify_brackets(content);
+        assert_eq!(
+            result,
+            VerifyLevel::Ok,
+            "泛型 lifetime 参数不应干扰括号计数"
+        );
+    }
+
+    #[test]
+    fn P4_char_literal字母不误判为lifetime() {
+        let content = "let c = 'm'; fn main() {}";
+        let result = verify_brackets(content);
+        assert_eq!(
+            result,
+            VerifyLevel::Ok,
+            "'m' 是 char literal，不应被当作 lifetime"
+        );
+    }
+
+    #[test]
+    fn P4_char_literal字母内括号不泄露() {
+        let content = "KeyCode::Char('m'), fn main() {}";
+        let result = verify_brackets(content);
+        assert_eq!(
+            result,
+            VerifyLevel::Ok,
+            "Char('m') 中的括号在 char literal 内"
+        );
+    }
+
+    #[test]
+    fn P4_char_literal_unicode不误判() {
+        let content = "let c = 'µ'; fn main() {}";
+        let result = verify_brackets(content);
+        assert_eq!(
+            result,
+            VerifyLevel::Ok,
+            "Unicode char literal 'µ' 应正常处理"
+        );
+    }
+
+    #[test]
+    fn P4_char_literal_中文不误判() {
+        let content = "let c = '你'; fn main() {}";
+        let result = verify_brackets(content);
+        assert_eq!(result, VerifyLevel::Ok, "中文 char literal 应正常处理");
+    }
+
+    #[test]
+    fn P4_混合lifetime和char_literal() {
+        let content = "fn get_label() -> &'static str { let k = KeyCode::Char('m'); \"x\" }";
+        let result = verify_brackets(content);
+        assert_eq!(
+            result,
+            VerifyLevel::Ok,
+            "混合 lifetime 和 char literal 的代码"
+        );
+    }
+
+    #[test]
+    fn P4_真实Rust结构体片段() {
+        let content = r#"
+pub(super) static BINDING: KeyBinding = KeyBinding {
+    label: &'static str,
+    macos_char: Some('µ'),
+    key: KeyCode::Char('m'),
+};
+fn main() {}"#;
+        let result = verify_brackets(content);
+        assert_eq!(
+            result,
+            VerifyLevel::Ok,
+            "真实 Rust 结构体含 lifetime + char literal"
+        );
+    }
+
+    #[test]
+    fn P4_多个lifetime参数泛型() {
+        let content = "struct Foo<'a, 'b, 'c> { x: &'a str, y: &'b str } fn main() {}";
+        let result = verify_brackets(content);
+        assert_eq!(result, VerifyLevel::Ok, "多个泛型 lifetime 参数");
+    }
+
+    #[test]
+    fn P4_lifetime在闭包中() {
+        let content = "let f: Box<dyn Fn() + 'static> = Box::new(|| { let x = 1; }); fn main() {}";
+        let result = verify_brackets(content);
+        assert_eq!(result, VerifyLevel::Ok, "闭包中的 'static lifetime");
+    }
+
+    #[test]
+    fn P4_lifetime在trait_bound中() {
+        let content = "fn process<T: Send + 'static>(t: T) { let _ = t; } fn main() {}";
+        let result = verify_brackets(content);
+        assert_eq!(result, VerifyLevel::Ok, "trait bound 中的 'static");
+    }
+
+    #[test]
+    fn P4_转义char_literal不提前关闭() {
+        let content = "let c = '\\''; fn main() {}";
+        let result = verify_brackets(content);
+        assert_eq!(
+            result,
+            VerifyLevel::Ok,
+            "转义 char literal '\\'' 应正常处理"
+        );
+    }
+
+    #[test]
+    fn P4_impl块含lifetime() {
+        let content = "impl<'a> Foo<'a> { fn bar(&self) -> &'a str { \"hi\" } }";
+        let result = verify_brackets(content);
+        assert_eq!(result, VerifyLevel::Ok, "impl 块中的 lifetime 参数");
+    }
+
+    #[test]
+    fn P4_超高复杂度_模拟真实文件片段() {
+        let content = r#"
+use std::path::Path;
+
+pub trait Handler: Send + Sync + 'static {
+    fn handle(&self, input: &str) -> &'static str;
+}
+
+pub struct KeyBinding {
+    label: &'static str,
+    macos_char: Option<char>,
+    modifiers: KeyModifiers,
+    key: KeyCode,
+}
+
+impl KeyBinding {
+    pub fn matches(&self, event: &KeyEvent) -> bool {
+        if let Some(ch) = self.macos_char {
+            if matches!(event.code, KeyCode::Char(c) if c == ch) {
+                return true;
+            }
+        }
+        let mods_ok = event.modifiers.contains(self.modifiers);
+        let key_ok = match (&self.key, &event.code) {
+            (KeyCode::Char(a), KeyCode::Char(b)) => a.eq_ignore_ascii_case(b),
+            (a, b) => a == b,
+        };
+        mods_ok && key_ok
+    }
+}
+
+fn process<'a, T: 'static>(items: &'a [T]) -> Vec<&'a T> {
+    let mut result = Vec::new();
+    for item in items {
+        if item.is_valid() {
+            result.push(item);
+        }
+    }
+    result
+}
+
+fn main() {
+    let c = 'x';
+    let s = "hello \"world\"";
+    let url = "https://example.com/path";
+    // { comment with braces
+    let t = ('a', 'b', 'c');
+    println!("{} {} {}", c, s, url);
+}
+"#;
+        let result = verify_brackets(content);
+        assert_eq!(
+            result,
+            VerifyLevel::Ok,
+            "高复杂度真实 Rust 代码片段：lifetime + char literal + 字符串 + URL + 注释"
+        );
+    }
+
+    #[test]
+    fn P4_真实不平衡在复杂代码中仍被检出() {
+        let content = r#"
+fn process<'a>(x: &'a str) -> &'static str {
+    let c = 'x';
+    let s = "hello";
+    if x.len() > 0 {
+        return s;
+    // 故意缺失 }
+"#;
+        let result = verify_brackets(content);
+        assert!(
+            matches!(result, VerifyLevel::Error(_)),
+            "缺失的 }} 应在复杂代码中被检出"
+        );
+    }
+
+    #[test]
+    fn P4_真实不平衡在复杂代码中仍被检出_缺括号() {
+        let content = r#"
+fn calc<'a>(x: &'a [i32]) -> i32 {
+    let c = 'z';
+    let result = x.iter().sum(
+    // 故意缺失 ) 和 ;
+    result
+}
+"#;
+        let result = verify_brackets(content);
+        assert!(
+            matches!(result, VerifyLevel::Error(_)),
+            "缺失的 ) 应在复杂代码中被检出"
+        );
     }
 }
