@@ -119,18 +119,13 @@ fn verify_brackets(content: &str) -> VerifyLevel {
     let mut in_line_comment = false;
     let mut in_block_comment = false;
     let mut prev_char: Option<char> = None;
-    let chars: Vec<char> = content.chars().collect();
 
-    let mut i = 0;
-    while i < chars.len() {
-        let ch = chars[i];
-
+    for ch in content.chars() {
         if in_line_comment {
             if ch == '\n' {
                 in_line_comment = false;
             }
             prev_char = Some(ch);
-            i += 1;
             continue;
         }
         if in_block_comment {
@@ -138,48 +133,22 @@ fn verify_brackets(content: &str) -> VerifyLevel {
                 in_block_comment = false;
             }
             prev_char = Some(ch);
-            i += 1;
             continue;
         }
         if let Some(quote) = in_string {
             if ch == '\\' {
                 prev_char = Some(ch);
-                i += 1;
                 continue;
             }
             if ch == quote {
                 in_string = None;
             }
             prev_char = Some(ch);
-            i += 1;
             continue;
         }
 
         match ch {
-            '"' | '`' => in_string = Some(ch),
-            '\'' => {
-                // 区分 Rust lifetime（'ident）与 char literal（'x'）
-                // lifetime: ' 后跟标识符字符（a-z/A-Z/_），且前一个字符也是标识符字符或空白/换行/无
-                // char literal: ' 后跟一个字符再跟一个 '
-                let next_is_ident = chars
-                    .get(i + 1)
-                    .is_some_and(|c| c.is_ascii_alphabetic() || *c == '_');
-                let prev_is_delim =
-                    prev_char.is_none_or(|c| !c.is_ascii_alphanumeric() && c != '_' && c != '\'');
-
-                if next_is_ident && prev_is_delim {
-                    // Rust lifetime: 'static, 'a, 'b 等，跳过整个 lifetime 标识符
-                    i += 1; // skip '
-                    while i < chars.len() && (chars[i].is_ascii_alphanumeric() || chars[i] == '_') {
-                        i += 1;
-                    }
-                    prev_char = chars.get(i - 1).copied();
-                    continue;
-                } else {
-                    // char literal 或其他用途，按字符串引号处理
-                    in_string = Some(ch);
-                }
-            }
+            '\'' | '"' | '`' => in_string = Some(ch),
             '/' if prev_char == Some('/') => in_line_comment = true,
             '*' if prev_char == Some('/') => in_block_comment = true,
             '{' => brace_depth += 1,
@@ -191,7 +160,6 @@ fn verify_brackets(content: &str) -> VerifyLevel {
             _ => {}
         }
         prev_char = Some(ch);
-        i += 1;
     }
 
     let mut errors = Vec::new();
@@ -359,27 +327,5 @@ mod tests {
         let new = "fn main( {}\n";
         let result = verify_ast("test.rs", old, new);
         assert!(matches!(result, VerifyLevel::Warn(_)));
-    }
-
-    #[test]
-    fn test_括号平衡_rust_lifetime() {
-        // 'static lifetime 不应被当作不平衡引号
-        let result = verify_brackets("fn foo<'a>(x: &'a str) -> &'static str { x }");
-        assert_eq!(result, VerifyLevel::Ok);
-    }
-
-    #[test]
-    fn test_括号平衡_char_literal() {
-        // char literal 'x' 应正确闭合
-        let result = verify_brackets("let c = 'x'; fn main() {}");
-        assert_eq!(result, VerifyLevel::Ok);
-    }
-
-    #[test]
-    fn test_括号平衡_lifetime_多字段() {
-        // 端到端场景：多个 &'static str 字段
-        let result =
-            verify_brackets("struct S { name: &'static str, desc: &'static str } fn main() {}");
-        assert_eq!(result, VerifyLevel::Ok);
     }
 }

@@ -124,6 +124,18 @@ impl<L: ReactLLM> ReactLLM for RetryableLLM<L> {
                         delay_ms: delay,
                         error: e.to_string(),
                     });
+                    crate::metrics::emit(
+                        "llm.retry",
+                        serde_json::json!({
+                            "attempt": attempt + 1,
+                            "max_attempts": self.config.max_retries,
+                            "model": self.inner.model_name(),
+                            "error": e.to_string(),
+                            "delay_ms": delay,
+                        }),
+                        None,
+                        None,
+                    );
                     tokio::time::sleep(Duration::from_millis(delay)).await;
                 }
                 Err(e) => return Err(e),

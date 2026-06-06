@@ -3153,6 +3153,7 @@ dependencies = [
  "chrono",
  "dirs-next",
  "futures",
+ "libc",
  "parking_lot",
  "rand 0.10.1",
  "reqwest",

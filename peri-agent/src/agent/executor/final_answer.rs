@@ -134,6 +134,49 @@ pub(crate) async fn handle_final_answer<L: ReactLLM, S: State>(
         "agent finished"
     );
 
+    {
+        let sid = state.get_context("session_id").map(|s| s.to_string());
+        let rid = state.get_context("run_id").map(|s| s.to_string());
+        let rss_mb = crate::metrics::current_rss_mb();
+
+        // threshold.memory：每个阈值每轮只报一次
+        if let Some(rss) = rss_mb {
+            let reported_100 = state.get_context("mem_reported_100").is_some();
+            let reported_200 = state.get_context("mem_reported_200").is_some();
+            if rss >= 100 && !reported_100 {
+                crate::metrics::emit(
+                    "threshold.memory",
+                    serde_json::json!({"rss_mb": rss, "level": 100}),
+                    sid.as_deref(),
+                    rid.as_deref(),
+                );
+                state.set_context("mem_reported_100", "1");
+            }
+            if rss >= 200 && !reported_200 {
+                crate::metrics::emit(
+                    "threshold.memory",
+                    serde_json::json!({"rss_mb": rss, "level": 200}),
+                    sid.as_deref(),
+                    rid.as_deref(),
+                );
+                state.set_context("mem_reported_200", "1");
+            }
+        }
+
+        // sample.agent_turn_end
+        crate::metrics::emit(
+            "sample.agent_turn_end",
+            serde_json::json!({
+                "rss_mb": rss_mb,
+                "iterations": state.current_step(),
+                "total_input_tokens": state.token_tracker().total_input_tokens,
+                "total_output_tokens": state.token_tracker().total_output_tokens,
+                "duration_secs": 0u64,
+            }),
+            sid.as_deref(),
+            rid.as_deref(),
+        );
+    }
     match agent.chain.run_after_agent(state, output).await {
         Ok(o) => {
             let start = index_after_id(state.messages(), *snapshot_anchor);

@@ -30,12 +30,25 @@ impl App {
             .session_token_tracker
             .cache_hit_rate();
         if rate < 0.8 {
+            let sid = self.session_mgr.current().metadata.session_id.to_string();
             let tracker = &self.session_mgr.current_mut().agent.session_token_tracker;
             tracing::warn!(
                 input = tracker.total_input_tokens,
                 cache_read = tracker.total_cache_read_tokens,
                 rate_pct = rate * 100.0,
                 "prompt cache hit rate below threshold"
+            );
+            peri_agent::metrics::emit(
+                "trap.cache_anomaly",
+                serde_json::json!({
+                    "rate": rate,
+                    "threshold": 0.80,
+                    "request_id": tracker.last_request_id.as_deref().unwrap_or("-"),
+                    "total_input_tokens": tracker.total_input_tokens,
+                    "total_cache_read_tokens": tracker.total_cache_read_tokens,
+                }),
+                Some(&sid),
+                None,
             );
             let percentage = (rate * 100.0) as u32;
             let req_id = tracker.last_request_id.as_deref().unwrap_or("-");

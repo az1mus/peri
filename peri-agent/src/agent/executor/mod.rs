@@ -365,6 +365,15 @@ impl<L: ReactLLM, S: State> ReActAgent<L, S> {
                     .collect::<Vec<_>>(),
                 "ReAct 循环达到最大迭代次数"
             );
+            crate::metrics::emit(
+                "threshold.llm_calls_exceeded",
+                serde_json::json!({
+                    "count": self.max_iterations,
+                    "limit": self.max_iterations,
+                }),
+                state.get_context("session_id"),
+                state.get_context("run_id"),
+            );
             return Err(AgentError::MaxIterationsExceeded(self.max_iterations));
         }
     }

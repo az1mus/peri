@@ -179,12 +179,22 @@ impl McpClientPool {
                 peer: None,
                 tools: vec![],
                 resources: vec![],
-                status: ClientStatus::Failed(reason),
+                status: ClientStatus::Failed(reason.clone()),
                 oauth_status: OAuthStatus::default(),
                 source,
                 url,
                 channel_capable: false,
             }),
+        );
+        peri_agent::metrics::emit(
+            "mcp.error",
+            serde_json::json!({
+                "server": name,
+                "tool": "connect",
+                "error": reason,
+            }),
+            None,
+            None,
         );
     }
 

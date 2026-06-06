@@ -370,6 +370,27 @@ async fn collect_tool_results<L: ReactLLM, S: State>(
                 error_len = result.output.len(),
                 "tool call failed"
             );
+            let rid = state.get_context("run_id").map(|s| s.to_owned());
+            let input_summary: String = modified_call
+                .input
+                .as_str()
+                .unwrap_or("")
+                .chars()
+                .take(200)
+                .collect();
+            crate::metrics::emit(
+                "tool.error",
+                serde_json::json!({
+                    "name": result.tool_name,
+                    "tool_call_id": modified_call.id,
+                    "error": result.output,
+                    "input_summary": input_summary,
+                    "duration_ms": (),
+                    "step": state.current_step(),
+                }),
+                state.get_context("session_id"),
+                rid.as_deref(),
+            );
         }
         agent.emit(AgentEvent::ToolEnd {
             message_id: ai_msg_id,

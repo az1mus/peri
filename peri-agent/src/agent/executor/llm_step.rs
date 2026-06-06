@@ -61,6 +61,24 @@ pub(crate) async fn call_llm<L: ReactLLM, S: State>(
                         usage: None,
                         stop_reason: None,
                     });
+                    let http_status = match &e {
+                        AgentError::LlmHttpError { status, .. } => Some(*status as u32),
+                        _ => None,
+                    };
+                    let rid = state.get_context("run_id").map(|s| s.to_owned());
+                    crate::metrics::emit(
+                        "llm.error",
+                        serde_json::json!({
+                            "model": agent.llm.model_name(),
+                            "provider": "unknown",
+                            "error": e.to_string(),
+                            "step": step,
+                            "http_status": http_status,
+                            "request_id": state.token_tracker().last_request_id,
+                        }),
+                        state.get_context("session_id"),
+                        rid.as_deref(),
+                    );
                     agent.chain.run_on_error(state, &e).await?;
                     return Err(e);
                 }
@@ -83,6 +101,18 @@ pub(crate) async fn call_llm<L: ReactLLM, S: State>(
         // 自动累积 token 用量到 state
         if let Some(ref usage) = reasoning.usage {
             state.token_tracker_mut().accumulate(usage);
+            if usage.output_tokens > 4000 {
+                crate::metrics::emit(
+                    "threshold.token_spike",
+                    serde_json::json!({
+                        "input_tokens": usage.input_tokens,
+                        "output_tokens": usage.output_tokens,
+                        "model": agent.llm.model_name(),
+                    }),
+                    state.get_context("session_id"),
+                    state.get_context("run_id"),
+                );
+            }
             // 使用 ContextBudget（若已设置）进行上下文用量监控
             if let Some(ref budget) = agent.context_budget {
                 let tracker = state.token_tracker();

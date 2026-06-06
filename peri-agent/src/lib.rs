@@ -10,6 +10,7 @@ pub mod hitl;
 pub mod interaction;
 pub mod llm;
 pub mod messages;
+pub mod metrics;
 pub mod middleware;
 pub mod telemetry;
 pub mod thread;

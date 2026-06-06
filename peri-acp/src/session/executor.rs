@@ -557,6 +557,8 @@ pub async fn execute_prompt(
 
     // Execute agent
     let mut agent_state = AgentState::with_messages(cwd.to_string(), history);
+    agent_state.set_context("session_id", &session_id);
+    agent_state.set_context("run_id", uuid::Uuid::now_v7().to_string());
     let result = agent_output
         .executor
         .execute(agent_input.clone(), &mut agent_state, Some(cancel.clone()))

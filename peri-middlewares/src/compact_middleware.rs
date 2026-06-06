@@ -299,7 +299,26 @@ impl<S: State> Middleware<S> for CompactMiddleware {
             (full, micro)
         };
 
-        // Step 2: 可变借用（tracker 引用已 drop）
+        // Step 2: emit compact trigger metric before mutating state
+        if should_full || should_micro {
+            let tracker = state.token_tracker();
+            let percentage = tracker
+                .context_usage_percent(self.budget.context_window)
+                .unwrap_or(0.0);
+            peri_agent::metrics::emit(
+                "trap.compact_trigger",
+                serde_json::json!({
+                    "trigger": if should_full { "full" } else { "micro" },
+                    "tokens_used": tracker.estimated_context_tokens().unwrap_or(0),
+                    "tokens_total": self.budget.context_window as u64,
+                    "percentage": percentage,
+                }),
+                state.get_context("session_id"),
+                state.get_context("run_id"),
+            );
+        }
+
+        // Step 3: 可变借用（tracker 引用已 drop）
         if should_full {
             self.do_full_compact(state).await?;
         } else if should_micro {

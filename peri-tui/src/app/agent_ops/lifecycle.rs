@@ -216,6 +216,16 @@ impl App {
             self.apply_pipeline_action(PipelineAction::AddMessage(vm));
             // 标记 reconcile 已完成，防止后续 Done 事件覆盖通知消息
             self.session_mgr.current_mut().agent.reconcile_already_done = true;
+            peri_agent::metrics::emit(
+                "trap.cancel_interrupt",
+                serde_json::json!({
+                    "subagent_depth": self.session_mgr.current().agent.subagent_depth,
+                    "messages_in_state": self.session_mgr.current().messages.view_messages.len(),
+                    "had_progress": has_tool_calls,
+                }),
+                Some(&self.session_mgr.current().metadata.session_id.to_string()),
+                None,
+            );
             return (true, false, false);
         }
 

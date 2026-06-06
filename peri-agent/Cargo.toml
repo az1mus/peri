@@ -22,6 +22,7 @@ tracing-subscriber.workspace = true
 tokio-util.workspace = true
 sqlx = { workspace = true }
 parking_lot.workspace = true
+libc = "0.2"
 rand = "0.10"
 
 [dev-dependencies]
