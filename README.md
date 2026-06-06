@@ -33,6 +33,12 @@ curl -fsSL https://raw.githubusercontent.com/konghayao/peri/main/scripts/install
 
 # Windows (PowerShell)
 irm https://raw.githubusercontent.com/konghayao/peri/main/scripts/install.ps1 | iex
+
+# start peri
+peri
+
+peri update
+
 ```
 
 ## How We Built Peri with Nobody Coding

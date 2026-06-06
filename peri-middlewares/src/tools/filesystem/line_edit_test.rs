@@ -3,670 +3,388 @@ fn make_tool(dir: &tempfile::TempDir) -> LineEditTool {
     LineEditTool::new(dir.path().to_str().unwrap())
 }
 
-fn make_edit(file: &str, start_line: usize, new_string: &str) -> serde_json::Value {
-    serde_json::json!({
-        "file_path": file,
-        "start_line": start_line,
-        "new_string": new_string
-    })
-}
-
-// ─── action 枚举测试 ─────────────────────────────────────────────────────
+// ─── 1. 基础功能：单 hunk 替换 ──────────────────────────────────────
 
 #[tokio::test]
-async fn test_action_replace_显式() {
+async fn test_单hunk替换() {
     let dir = tempfile::tempdir().unwrap();
     std::fs::write(dir.path().join("f.txt"), "aaa\nbbb\nccc\n").unwrap();
     let tool = make_tool(&dir);
-    tool.invoke(serde_json::json!({
-        "edits": [{
-            "file_path": "f.txt",
-            "start_line": 2,
-            "action": "replace",
-            "new_string": "BBB"
-        }]
-    }))
-    .await
-    .unwrap();
+    let result = tool
+        .invoke(serde_json::json!({
+            "patches": [{
+                "file_path": "f.txt",
+                "diff": "--- a/f.txt\n+++ b/f.txt\n@@ -1,3 +1,3 @@\n aaa\n-bbb\n+BBB\n ccc"
+            }]
+        }))
+        .await
+        .unwrap();
+    assert!(result.contains("✓"), "应标记成功: {result}");
     assert_eq!(
         std::fs::read_to_string(dir.path().join("f.txt")).unwrap(),
         "aaa\nBBB\nccc\n"
     );
 }
 
+// ─── 2. 多 hunk 同文件（从后往前应用）─────────────────────────────────
+
 #[tokio::test]
-async fn test_action_insert_不删除旧行() {
+async fn test_多hunk同文件() {
     let dir = tempfile::tempdir().unwrap();
-    std::fs::write(dir.path().join("f.txt"), "aaa\nbbb\n").unwrap();
+    std::fs::write(
+        dir.path().join("f.txt"),
+        "aaa\nbbb\nccc\nddd\neee\nfff\nggg\nhhh\n",
+    )
+    .unwrap();
     let tool = make_tool(&dir);
     let result = tool
         .invoke(serde_json::json!({
-            "edits": [{
+            "patches": [{
                 "file_path": "f.txt",
-                "start_line": 2,
-                "action": "insert",
-                "new_string": "xxx\nyyy"
+                "diff": "--- a/f.txt\n+++ b/f.txt\n@@ -1,3 +1,3 @@\n aaa\n-bbb\n+BBB\n ccc\n@@ -6,3 +6,3 @@\n fff\n-ggg\n+GGG\n hhh"
             }]
         }))
         .await
         .unwrap();
-    assert!(result.contains("insert"), "unexpected: {result}");
+    assert!(!result.contains("✗"), "不应有失败: {result}");
     assert_eq!(
         std::fs::read_to_string(dir.path().join("f.txt")).unwrap(),
-        "aaa\nxxx\nyyy\nbbb\n"
+        "aaa\nBBB\nccc\nddd\neee\nfff\nGGG\nhhh\n"
     );
 }
 
+// ─── 3. 跨文件多 patch ──────────────────────────────────────────────
+
 #[tokio::test]
-async fn test_action_delete_忽略new_string() {
+async fn test_跨文件多patch() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(dir.path().join("a.txt"), "aaa\nbbb\n").unwrap();
+    std::fs::write(dir.path().join("b.txt"), "xxx\nyyy\n").unwrap();
+    let tool = make_tool(&dir);
+    let result = tool
+        .invoke(serde_json::json!({
+            "patches": [
+                {"file_path": "a.txt", "diff": "--- a/a.txt\n+++ b/a.txt\n@@ -1,2 +1,2 @@\n aaa\n-bbb\n+BBB"},
+                {"file_path": "b.txt", "diff": "--- a/b.txt\n+++ b/b.txt\n@@ -1,2 +1,2 @@\n xxx\n-yyy\n+YYY"}
+            ]
+        }))
+        .await
+        .unwrap();
+    assert!(!result.contains("✗"), "不应有失败: {result}");
+    assert_eq!(
+        std::fs::read_to_string(dir.path().join("a.txt")).unwrap(),
+        "aaa\nBBB\n"
+    );
+    assert_eq!(
+        std::fs::read_to_string(dir.path().join("b.txt")).unwrap(),
+        "xxx\nYYY\n"
+    );
+}
+
+// ─── 4. 插入新行（纯 + 行在中间插入）─────────────────────────────────
+
+#[tokio::test]
+async fn test_插入新行() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(dir.path().join("f.txt"), "aaa\nbbb\nccc\n").unwrap();
+    let tool = make_tool(&dir);
+    let result = tool
+        .invoke(serde_json::json!({
+            "patches": [{
+                "file_path": "f.txt",
+                "diff": "--- a/f.txt\n+++ b/f.txt\n@@ -2,2 +2,3 @@\n bbb\n+xxx\n ccc"
+            }]
+        }))
+        .await
+        .unwrap();
+    assert!(!result.contains("✗"), "不应有失败: {result}");
+    assert_eq!(
+        std::fs::read_to_string(dir.path().join("f.txt")).unwrap(),
+        "aaa\nbbb\nxxx\nccc\n"
+    );
+}
+
+// ─── 5. 删除行（纯 - 行）─────────────────────────────────────────────
+
+#[tokio::test]
+async fn test_删除行() {
     let dir = tempfile::tempdir().unwrap();
     std::fs::write(dir.path().join("f.txt"), "aaa\nbbb\nccc\nddd\n").unwrap();
     let tool = make_tool(&dir);
-    tool.invoke(serde_json::json!({
-        "edits": [{
-            "file_path": "f.txt",
-            "start_line": 2,
-            "end_line": 3,
-            "action": "delete",
-            "new_string": "ignored content"
-        }]
-    }))
-    .await
-    .unwrap();
+    let result = tool
+        .invoke(serde_json::json!({
+            "patches": [{
+                "file_path": "f.txt",
+                "diff": "--- a/f.txt\n+++ b/f.txt\n@@ -1,4 +1,2 @@\n aaa\n-bbb\n-ccc\n ddd"
+            }]
+        }))
+        .await
+        .unwrap();
+    assert!(!result.contains("✗"), "不应有失败: {result}");
     assert_eq!(
         std::fs::read_to_string(dir.path().join("f.txt")).unwrap(),
         "aaa\nddd\n"
     );
 }
 
-#[tokio::test]
-async fn test_action_默认replace() {
-    let dir = tempfile::tempdir().unwrap();
-    std::fs::write(dir.path().join("f.txt"), "aaa\nbbb\n").unwrap();
-    let tool = make_tool(&dir);
-    tool.invoke(serde_json::json!({
-        "edits": [make_edit("f.txt", 2, "BBB")]
-    }))
-    .await
-    .unwrap();
-    assert_eq!(
-        std::fs::read_to_string(dir.path().join("f.txt")).unwrap(),
-        "aaa\nBBB\n"
-    );
-}
+// ─── 6. 原子性：匹配失败 ────────────────────────────────────────────
 
 #[tokio::test]
-async fn test_action_默认delete_空new_string() {
+async fn test_原子性_匹配失败() {
     let dir = tempfile::tempdir().unwrap();
-    std::fs::write(dir.path().join("f.txt"), "aaa\nbbb\nccc\n").unwrap();
+    std::fs::write(dir.path().join("a.txt"), "aaa\nbbb\n").unwrap();
+    std::fs::write(dir.path().join("b.txt"), "xxx\nyyy\n").unwrap();
     let tool = make_tool(&dir);
-    tool.invoke(serde_json::json!({
-        "edits": [make_edit("f.txt", 2, "")]
-    }))
-    .await
-    .unwrap();
-    assert_eq!(
-        std::fs::read_to_string(dir.path().join("f.txt")).unwrap(),
-        "aaa\nccc\n"
-    );
-}
-
-// ─── expected_lines 验证测试 ──────────────────────────────────────────────
-
-#[tokio::test]
-async fn test_expected_lines_匹配() {
-    let dir = tempfile::tempdir().unwrap();
-    std::fs::write(dir.path().join("f.txt"), "aaa\nbbb\nccc\n").unwrap();
-    let tool = make_tool(&dir);
+    // 第 2 个 patch 行号 99 远超文件长度，匹配失败
     let result = tool
         .invoke(serde_json::json!({
-            "edits": [{
-                "file_path": "f.txt",
-                "start_line": 2,
-                "end_line": 2,
-                "expected_lines": "bbb",
-                "new_string": "BBB"
-            }]
-        }))
-        .await
-        .unwrap();
-    assert!(result.contains("✓"), "应标记成功: {result}");
-    assert!(!result.contains("不匹配"), "不应有不匹配警告: {result}");
-    assert_eq!(
-        std::fs::read_to_string(dir.path().join("f.txt")).unwrap(),
-        "aaa\nBBB\nccc\n"
-    );
-}
-
-#[tokio::test]
-async fn test_expected_lines_不匹配_警告但执行() {
-    let dir = tempfile::tempdir().unwrap();
-    std::fs::write(dir.path().join("f.txt"), "aaa\nbbb\nccc\n").unwrap();
-    let tool = make_tool(&dir);
-    let result = tool
-        .invoke(serde_json::json!({
-            "edits": [{
-                "file_path": "f.txt",
-                "start_line": 2,
-                "end_line": 2,
-                "expected_lines": "wrong content",
-                "new_string": "BBB"
-            }]
-        }))
-        .await
-        .unwrap();
-    assert!(result.contains("⚠"), "应标记警告: {result}");
-    assert!(result.contains("不匹配"), "应包含不匹配信息: {result}");
-    assert!(result.contains("已执行"), "应继续执行: {result}");
-    assert_eq!(
-        std::fs::read_to_string(dir.path().join("f.txt")).unwrap(),
-        "aaa\nBBB\nccc\n"
-    );
-}
-
-#[tokio::test]
-async fn test_expected_lines_尾部空白归一化() {
-    let dir = tempfile::tempdir().unwrap();
-    std::fs::write(dir.path().join("f.txt"), "aaa\nbbb   \nccc\n").unwrap();
-    let tool = make_tool(&dir);
-    let result = tool
-        .invoke(serde_json::json!({
-            "edits": [{
-                "file_path": "f.txt",
-                "start_line": 2,
-                "expected_lines": "bbb",
-                "new_string": "BBB"
-            }]
-        }))
-        .await
-        .unwrap();
-    assert!(result.contains("✓"), "尾部空白应被归一化: {result}");
-}
-
-#[tokio::test]
-async fn test_expected_lines_多行验证() {
-    let dir = tempfile::tempdir().unwrap();
-    std::fs::write(dir.path().join("f.txt"), "aaa\nbbb\nccc\nddd\n").unwrap();
-    let tool = make_tool(&dir);
-    let result = tool
-        .invoke(serde_json::json!({
-            "edits": [{
-                "file_path": "f.txt",
-                "start_line": 2,
-                "end_line": 3,
-                "expected_lines": "bbb\nccc",
-                "new_string": "XXX"
-            }]
-        }))
-        .await
-        .unwrap();
-    assert!(result.contains("✓"), "多行验证应通过: {result}");
-    assert_eq!(
-        std::fs::read_to_string(dir.path().join("f.txt")).unwrap(),
-        "aaa\nXXX\nddd\n"
-    );
-}
-
-// ─── 原子性测试 ──────────────────────────────────────────────────────────
-
-#[tokio::test]
-async fn test_原子性_全有或全无() {
-    let dir = tempfile::tempdir().unwrap();
-    std::fs::write(dir.path().join("f.txt"), "aaa\nbbb\nccc\n").unwrap();
-    let tool = make_tool(&dir);
-    let result = tool
-        .invoke(serde_json::json!({
-            "edits": [
-                {"file_path": "f.txt", "start_line": 1, "new_string": "AAA"},
-                {"file_path": "f.txt", "start_line": 99, "new_string": "XXX"}
+            "patches": [
+                {"file_path": "a.txt", "diff": "--- a/a.txt\n+++ b/a.txt\n@@ -1,2 +1,2 @@\n aaa\n-bbb\n+BBB"},
+                {"file_path": "b.txt", "diff": "--- a/b.txt\n+++ b/b.txt\n@@ -99,1 +99,1 @@\n-zzz\n+YYY"}
             ]
         }))
         .await
         .unwrap();
-    assert!(result.contains("✗"), "应报告失败: {result}");
-    assert!(result.contains("未执行任何编辑"), "应声明未执行: {result}");
-    assert_eq!(
-        std::fs::read_to_string(dir.path().join("f.txt")).unwrap(),
-        "aaa\nbbb\nccc\n",
-        "原子性：文件不应被修改"
-    );
-}
-
-#[tokio::test]
-async fn test_原子性_跨文件() {
-    let dir = tempfile::tempdir().unwrap();
-    std::fs::write(dir.path().join("a.txt"), "aaa\n").unwrap();
-    std::fs::write(dir.path().join("b.txt"), "bbb\n").unwrap();
-    let tool = make_tool(&dir);
-    let result = tool
-        .invoke(serde_json::json!({
-            "edits": [
-                {"file_path": "a.txt", "start_line": 1, "new_string": "AAA"},
-                {"file_path": "b.txt", "start_line": 99, "new_string": "XXX"}
-            ]
-        }))
-        .await
-        .unwrap();
-    assert!(result.contains("✗"), "应报告失败: {result}");
+    assert!(result.contains("✗"), "匹配失败应含错误标记: {result}");
     assert_eq!(
         std::fs::read_to_string(dir.path().join("a.txt")).unwrap(),
-        "aaa\n",
-        "跨文件原子性：a.txt 不应被修改"
+        "aaa\nbbb\n",
+        "原子性：a.txt 不应被修改"
     );
     assert_eq!(
         std::fs::read_to_string(dir.path().join("b.txt")).unwrap(),
-        "bbb\n",
-        "跨文件原子性：b.txt 不应被修改"
+        "xxx\nyyy\n",
+        "原子性：b.txt 不应被修改"
     );
 }
 
-// ─── 重叠检测测试 ─────────────────────────────────────────────────────────
+// ─── 7. 原子性：验证失败（括号不平衡）─────────────────────────────────
 
 #[tokio::test]
-async fn test_重叠检测_拒绝() {
+async fn test_原子性_验证失败() {
     let dir = tempfile::tempdir().unwrap();
-    std::fs::write(dir.path().join("f.txt"), "a\nb\nc\nd\ne\n").unwrap();
+    std::fs::write(dir.path().join("f.txt"), "line1\nline2\nline3\n").unwrap();
     let tool = make_tool(&dir);
+    // 替换 line2 → { 导致花括号不平衡
     let result = tool
         .invoke(serde_json::json!({
-            "edits": [
-                {"file_path": "f.txt", "start_line": 2, "end_line": 4, "new_string": "X"},
-                {"file_path": "f.txt", "start_line": 3, "end_line": 5, "new_string": "Y"}
-            ]
+            "patches": [{
+                "file_path": "f.txt",
+                "diff": "--- a/f.txt\n+++ b/f.txt\n@@ -1,3 +1,3 @@\n line1\n-line2\n+{\n line3"
+            }]
         }))
         .await
         .unwrap();
-    assert!(result.contains("重叠"), "应报告重叠: {result}");
+    assert!(result.contains("✗") || result.contains("验证失败"), "验证失败应含错误标记: {result}");
     assert_eq!(
         std::fs::read_to_string(dir.path().join("f.txt")).unwrap(),
-        "a\nb\nc\nd\ne\n",
-        "重叠时文件不应被修改"
+        "line1\nline2\nline3\n",
+        "验证失败时文件不应被修改"
     );
 }
 
+// ─── 8. 匹配降级：L2 空白归一化 ────────────────────────────────────
+
 #[tokio::test]
-async fn test_重叠_不同文件不检测() {
+async fn test_匹配降级_空白() {
     let dir = tempfile::tempdir().unwrap();
-    std::fs::write(dir.path().join("a.txt"), "aaa\n").unwrap();
-    std::fs::write(dir.path().join("b.txt"), "bbb\n").unwrap();
+    // 文件中 bbb 后有 tab，diff 中没有 → L1 精确匹配失败，L2 空白归一化成功
+    std::fs::write(dir.path().join("f.txt"), "aaa\nbbb\t\nccc\n").unwrap();
     let tool = make_tool(&dir);
     let result = tool
         .invoke(serde_json::json!({
-            "edits": [
-                {"file_path": "a.txt", "start_line": 1, "end_line": 1, "new_string": "AAA"},
-                {"file_path": "b.txt", "start_line": 1, "end_line": 1, "new_string": "BBB"}
-            ]
+            "patches": [{
+                "file_path": "f.txt",
+                "diff": "--- a/f.txt\n+++ b/f.txt\n@@ -1,3 +1,3 @@\n aaa\n-bbb\n+BBB\n ccc"
+            }]
+        }))
+        .await
+        .unwrap();
+    assert!(result.contains("✓"), "应成功: {result}");
+    assert_eq!(
+        std::fs::read_to_string(dir.path().join("f.txt")).unwrap(),
+        "aaa\nBBB\nccc\n"
+    );
+}
+
+// ─── 9. 匹配降级：L5 行号兜底 ──────────────────────────────────────
+
+#[tokio::test]
+async fn test_匹配降级_行号兜底() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(dir.path().join("f.txt"), "aaa\nbbb\nccc\n").unwrap();
+    let tool = make_tool(&dir);
+    // diff 内容与文件完全不同，L1-L4 全部失败，L5 行号兜底成功
+    let result = tool
+        .invoke(serde_json::json!({
+            "patches": [{
+                "file_path": "f.txt",
+                "diff": "--- a/f.txt\n+++ b/f.txt\n@@ -2,1 +2,1 @@\n-wrong_content\n+BBB"
+            }]
+        }))
+        .await
+        .unwrap();
+    assert!(result.contains("✓"), "应成功: {result}");
+    assert_eq!(
+        std::fs::read_to_string(dir.path().join("f.txt")).unwrap(),
+        "aaa\nBBB\nccc\n"
+    );
+}
+
+// ─── 10. 匹配失败：行号超出文件长度 ────────────────────────────────
+
+#[tokio::test]
+async fn test_匹配失败_报错() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(dir.path().join("f.txt"), "aaa\n").unwrap();
+    let tool = make_tool(&dir);
+    // hunk header 行号 99 远超文件 1 行，L1-L5 全部失败
+    let result = tool
+        .invoke(serde_json::json!({
+            "patches": [{
+                "file_path": "f.txt",
+                "diff": "--- a/f.txt\n+++ b/f.txt\n@@ -99,1 +99,1 @@\n-xxx\n+BBB"
+            }]
+        }))
+        .await
+        .unwrap();
+    assert!(result.contains("✗"), "行号超出应含错误标记: {result}");
+    assert_eq!(
+        std::fs::read_to_string(dir.path().join("f.txt")).unwrap(),
+        "aaa\n",
+        "文件不应被修改"
+    );
+}
+
+// ─── 11. 反馈：含验证标签 ──────────────────────────────────────────
+
+#[tokio::test]
+async fn test_反馈_含验证标签() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(dir.path().join("f.txt"), "aaa\nbbb\nccc\n").unwrap();
+    let tool = make_tool(&dir);
+    let result = tool
+        .invoke(serde_json::json!({
+            "patches": [{
+                "file_path": "f.txt",
+                "diff": "--- a/f.txt\n+++ b/f.txt\n@@ -1,3 +1,3 @@\n aaa\n-bbb\n+BBB\n ccc"
+            }]
+        }))
+        .await
+        .unwrap();
+    assert!(result.contains("sanity:"), "应包含 sanity 标签: {result}");
+    assert!(
+        result.contains("brackets:"),
+        "应包含 brackets 标签: {result}"
+    );
+    assert!(result.contains("ast:"), "应包含 ast 标签: {result}");
+}
+
+// ─── 12. CRLF 换行符保留 ────────────────────────────────────────────
+
+#[tokio::test]
+async fn test_CRLF保留() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(dir.path().join("f.txt"), "aaa\r\nbbb\r\nccc\r\n").unwrap();
+    let tool = make_tool(&dir);
+    let result = tool
+        .invoke(serde_json::json!({
+            "patches": [{
+                "file_path": "f.txt",
+                "diff": "--- a/f.txt\n+++ b/f.txt\n@@ -1,3 +1,3 @@\n aaa\n-bbb\n+BBB\n ccc"
+            }]
         }))
         .await
         .unwrap();
     assert!(!result.contains("✗"), "不应有失败: {result}");
-}
-
-#[tokio::test]
-async fn test_重叠_首尾相接不算重叠() {
-    let dir = tempfile::tempdir().unwrap();
-    std::fs::write(dir.path().join("f.txt"), "a\nb\nc\nd\n").unwrap();
-    let tool = make_tool(&dir);
-    let result = tool
-        .invoke(serde_json::json!({
-            "edits": [
-                {"file_path": "f.txt", "start_line": 1, "end_line": 2, "new_string": "X"},
-                {"file_path": "f.txt", "start_line": 3, "end_line": 4, "new_string": "Y"}
-            ]
-        }))
-        .await
-        .unwrap();
-    assert!(!result.contains("✗"), "首尾相接不应报重叠: {result}");
     assert_eq!(
         std::fs::read_to_string(dir.path().join("f.txt")).unwrap(),
-        "X\nY\n"
+        "aaa\r\nBBB\r\nccc\r\n",
+        "CRLF 换行符应被保留"
     );
 }
 
+// ─── 13. 空 diff 报错 ──────────────────────────────────────────────
+
 #[tokio::test]
-async fn test_重叠_insert不参与重叠检测() {
+async fn test_空diff报错() {
     let dir = tempfile::tempdir().unwrap();
-    std::fs::write(dir.path().join("f.txt"), "a\nb\nc\n").unwrap();
+    std::fs::write(dir.path().join("f.txt"), "aaa\n").unwrap();
     let tool = make_tool(&dir);
     let result = tool
         .invoke(serde_json::json!({
-            "edits": [
-                {"file_path": "f.txt", "start_line": 2, "end_line": 2, "new_string": "X"},
-                {"file_path": "f.txt", "start_line": 2, "action": "insert", "new_string": "INSERTED"}
-            ]
+            "patches": [{"file_path": "f.txt", "diff": ""}]
         }))
-        .await
-        .unwrap();
-    assert!(!result.contains("重叠"), "insert 不参与重叠检测: {result}");
+        .await;
+    assert!(result.is_err(), "空 diff 应返回错误");
+    let msg = result.unwrap_err().to_string();
+    assert!(
+        msg.contains("空") || msg.contains("empty") || msg.contains("Empty"),
+        "错误信息应提及空内容: {msg}"
+    );
 }
 
-// ─── 反馈格式测试 ──────────────────────────────────────────────────────────
+// ─── 14. 文件不存在 ────────────────────────────────────────────────
 
 #[tokio::test]
-async fn test_反馈_含上下文diff() {
+async fn test_文件不存在() {
     let dir = tempfile::tempdir().unwrap();
-    std::fs::write(dir.path().join("f.txt"), "line1\nline2\nline3\nline4\nline5\n").unwrap();
     let tool = make_tool(&dir);
     let result = tool
         .invoke(serde_json::json!({
-            "edits": [{
-                "file_path": "f.txt",
-                "start_line": 3,
-                "new_string": "LINE3"
+            "patches": [{
+                "file_path": "ghost.txt",
+                "diff": "--- a/ghost.txt\n+++ b/ghost.txt\n@@ -1,1 +1,1 @@\n-old\n+new"
             }]
         }))
-        .await
-        .unwrap();
-    assert!(result.contains("✓"), "应标记成功: {result}");
-    assert!(result.contains("|-"), "应包含旧行标记: {result}");
-    assert!(result.contains("|+"), "应包含新行标记: {result}");
+        .await;
+    assert!(result.is_err(), "文件不存在应返回错误");
+    let msg = result.unwrap_err().to_string();
+    assert!(msg.contains("不存在"), "应报文件不存在: {msg}");
 }
 
-// ─── 基础操作测试 ──────────────────────────────────────────────────────────
-
-#[tokio::test]
-async fn test_替换多行() {
-    let dir = tempfile::tempdir().unwrap();
-    std::fs::write(dir.path().join("f.txt"), "aaa\nbbb\nccc\nddd\n").unwrap();
-    let tool = make_tool(&dir);
-    tool.invoke(serde_json::json!({
-        "edits": [{
-            "file_path": "f.txt",
-            "start_line": 2,
-            "end_line": 3,
-            "new_string": "XXX"
-        }]
-    }))
-    .await
-    .unwrap();
-    assert_eq!(
-        std::fs::read_to_string(dir.path().join("f.txt")).unwrap(),
-        "aaa\nXXX\nddd\n"
-    );
-}
-
-#[tokio::test]
-async fn test_insert_在行首() {
-    let dir = tempfile::tempdir().unwrap();
-    std::fs::write(dir.path().join("f.txt"), "aaa\nbbb\n").unwrap();
-    let tool = make_tool(&dir);
-    tool.invoke(serde_json::json!({
-        "edits": [{
-            "file_path": "f.txt",
-            "start_line": 1,
-            "action": "insert",
-            "new_string": "NEW"
-        }]
-    }))
-    .await
-    .unwrap();
-    assert_eq!(
-        std::fs::read_to_string(dir.path().join("f.txt")).unwrap(),
-        "NEW\naaa\nbbb\n"
-    );
-}
-
-#[tokio::test]
-async fn test_insert_在末尾() {
-    let dir = tempfile::tempdir().unwrap();
-    std::fs::write(dir.path().join("f.txt"), "aaa\nbbb\n").unwrap();
-    let tool = make_tool(&dir);
-    tool.invoke(serde_json::json!({
-        "edits": [{
-            "file_path": "f.txt",
-            "start_line": 3,
-            "action": "insert",
-            "new_string": "APPENDED"
-        }]
-    }))
-    .await
-    .unwrap();
-    assert_eq!(
-        std::fs::read_to_string(dir.path().join("f.txt")).unwrap(),
-        "aaa\nbbb\nAPPENDED\n"
-    );
-}
+// ─── 15. 替换整个文件 ──────────────────────────────────────────────
 
 #[tokio::test]
 async fn test_替换整个文件() {
     let dir = tempfile::tempdir().unwrap();
     std::fs::write(dir.path().join("f.txt"), "aaa\nbbb\nccc\n").unwrap();
     let tool = make_tool(&dir);
-    tool.invoke(serde_json::json!({
-        "edits": [{
-            "file_path": "f.txt",
-            "start_line": 1,
-            "end_line": 3,
-            "new_string": "brand new"
-        }]
-    }))
-    .await
-    .unwrap();
+    let result = tool
+        .invoke(serde_json::json!({
+            "patches": [{
+                "file_path": "f.txt",
+                "diff": "--- a/f.txt\n+++ b/f.txt\n@@ -1,3 +1,1 @@\n-aaa\n-bbb\n-ccc\n+brand new"
+            }]
+        }))
+        .await
+        .unwrap();
+    assert!(!result.contains("✗"), "不应有失败: {result}");
     assert_eq!(
         std::fs::read_to_string(dir.path().join("f.txt")).unwrap(),
         "brand new\n"
     );
 }
 
+// ─── 16. 末尾追加 ──────────────────────────────────────────────────
+
 #[tokio::test]
-async fn test_删除所有行() {
+async fn test_末尾追加() {
     let dir = tempfile::tempdir().unwrap();
     std::fs::write(dir.path().join("f.txt"), "aaa\nbbb\n").unwrap();
     let tool = make_tool(&dir);
-    tool.invoke(serde_json::json!({
-        "edits": [{
-            "file_path": "f.txt",
-            "start_line": 1,
-            "end_line": 2,
-            "action": "delete",
-            "new_string": ""
-        }]
-    }))
-    .await
-    .unwrap();
+    let result = tool
+        .invoke(serde_json::json!({
+            "patches": [{
+                "file_path": "f.txt",
+                "diff": "--- a/f.txt\n+++ b/f.txt\n@@ -2,1 +2,2 @@\n bbb\n+ccc"
+            }]
+        }))
+        .await
+        .unwrap();
+    assert!(!result.contains("✗"), "不应有失败: {result}");
     assert_eq!(
         std::fs::read_to_string(dir.path().join("f.txt")).unwrap(),
-        ""
-    );
-}
-
-#[tokio::test]
-async fn test_空文件插入() {
-    let dir = tempfile::tempdir().unwrap();
-    std::fs::write(dir.path().join("f.txt"), "").unwrap();
-    let tool = make_tool(&dir);
-    tool.invoke(serde_json::json!({
-        "edits": [{
-            "file_path": "f.txt",
-            "start_line": 1,
-            "action": "insert",
-            "new_string": "hello"
-        }]
-    }))
-    .await
-    .unwrap();
-    assert_eq!(
-        std::fs::read_to_string(dir.path().join("f.txt")).unwrap(),
-        "hello"
-    );
-}
-
-// ─── 多编辑测试 ──────────────────────────────────────────────────────────
-
-#[tokio::test]
-async fn test_同文件多编辑从后往前() {
-    let dir = tempfile::tempdir().unwrap();
-    std::fs::write(dir.path().join("f.txt"), "a\nb\nc\nd\ne\n").unwrap();
-    let tool = make_tool(&dir);
-    tool.invoke(serde_json::json!({
-        "edits": [
-            {"file_path": "f.txt", "start_line": 2, "new_string": "BBB"},
-            {"file_path": "f.txt", "start_line": 4, "new_string": "DDD"}
-        ]
-    }))
-    .await
-    .unwrap();
-    assert_eq!(
-        std::fs::read_to_string(dir.path().join("f.txt")).unwrap(),
-        "a\nBBB\nc\nDDD\ne\n"
-    );
-}
-
-#[tokio::test]
-async fn test_跨文件多编辑() {
-    let dir = tempfile::tempdir().unwrap();
-    std::fs::write(dir.path().join("a.txt"), "aaa\n").unwrap();
-    std::fs::write(dir.path().join("b.txt"), "bbb\n").unwrap();
-    let tool = make_tool(&dir);
-    tool.invoke(serde_json::json!({
-        "edits": [
-            {"file_path": "a.txt", "start_line": 1, "new_string": "AAA"},
-            {"file_path": "b.txt", "start_line": 1, "new_string": "BBB"}
-        ]
-    }))
-    .await
-    .unwrap();
-    assert_eq!(std::fs::read_to_string(dir.path().join("a.txt")).unwrap(), "AAA\n");
-    assert_eq!(std::fs::read_to_string(dir.path().join("b.txt")).unwrap(), "BBB\n");
-}
-
-// ─── 错误处理测试 ──────────────────────────────────────────────────────────
-
-#[tokio::test]
-async fn test_行号超出范围() {
-    let dir = tempfile::tempdir().unwrap();
-    std::fs::write(dir.path().join("f.txt"), "aaa\n").unwrap();
-    let tool = make_tool(&dir);
-    let result = tool.invoke(serde_json::json!({
-        "edits": [make_edit("f.txt", 99, "xxx")]
-    })).await.unwrap();
-    assert!(result.contains("✗"), "应标记失败: {result}");
-    assert!(result.contains("超出"), "应报告超出范围: {result}");
-    assert_eq!(
-        std::fs::read_to_string(dir.path().join("f.txt")).unwrap(),
-        "aaa\n",
-        "文件不应被修改"
-    );
-}
-
-#[tokio::test]
-async fn test_文件不存在() {
-    let dir = tempfile::tempdir().unwrap();
-    let tool = make_tool(&dir);
-    let result = tool.invoke(serde_json::json!({
-        "edits": [make_edit("ghost.txt", 1, "xxx")]
-    })).await;
-    let err = result.unwrap_err();
-    assert!(err.to_string().contains("不存在"), "应报文件不存在: {err}");
-}
-
-#[tokio::test]
-async fn test_end_line小于start_line() {
-    let dir = tempfile::tempdir().unwrap();
-    std::fs::write(dir.path().join("f.txt"), "aaa\nbbb\n").unwrap();
-    let tool = make_tool(&dir);
-    let result = tool.invoke(serde_json::json!({
-        "edits": [{
-            "file_path": "f.txt",
-            "start_line": 3,
-            "end_line": 1,
-            "new_string": "xxx"
-        }]
-    }))
-    .await
-    .unwrap();
-    assert!(result.contains("✗"), "应标记失败: {result}");
-    assert_eq!(
-        std::fs::read_to_string(dir.path().join("f.txt")).unwrap(),
-        "aaa\nbbb\n",
-        "文件不应被修改"
-    );
-}
-
-#[tokio::test]
-async fn test_start_line为零() {
-    let dir = tempfile::tempdir().unwrap();
-    std::fs::write(dir.path().join("f.txt"), "aaa\n").unwrap();
-    let tool = make_tool(&dir);
-    let result = tool.invoke(serde_json::json!({
-        "edits": [{
-            "file_path": "f.txt",
-            "start_line": 0,
-            "new_string": "xxx"
-        }]
-    }))
-    .await
-    .unwrap();
-    assert!(result.contains("✗"), "应标记失败: {result}");
-}
-
-// ─── CRLF 换行符保留测试 ──────────────────────────────────────────────────
-
-#[tokio::test]
-async fn test_crlf_替换保留() {
-    let dir = tempfile::tempdir().unwrap();
-    std::fs::write(dir.path().join("f.txt"), "aaa\r\nbbb\r\nccc\r\n").unwrap();
-    let tool = make_tool(&dir);
-    tool.invoke(serde_json::json!({
-        "edits": [make_edit("f.txt", 2, "BBB")]
-    }))
-    .await
-    .unwrap();
-    assert_eq!(
-        std::fs::read_to_string(dir.path().join("f.txt")).unwrap(),
-        "aaa\r\nBBB\r\nccc\r\n"
-    );
-}
-
-#[tokio::test]
-async fn test_crlf_insert保留() {
-    let dir = tempfile::tempdir().unwrap();
-    std::fs::write(dir.path().join("f.txt"), "aaa\r\nbbb\r\n").unwrap();
-    let tool = make_tool(&dir);
-    tool.invoke(serde_json::json!({
-        "edits": [{
-            "file_path": "f.txt",
-            "start_line": 2,
-            "action": "insert",
-            "new_string": "xxx\nyyy"
-        }]
-    }))
-    .await
-    .unwrap();
-    assert_eq!(
-        std::fs::read_to_string(dir.path().join("f.txt")).unwrap(),
-        "aaa\r\nxxx\r\nyyy\r\nbbb\r\n"
-    );
-}
-
-#[tokio::test]
-async fn test_crlf_delete保留() {
-    let dir = tempfile::tempdir().unwrap();
-    std::fs::write(dir.path().join("f.txt"), "aaa\r\nbbb\r\nccc\r\n").unwrap();
-    let tool = make_tool(&dir);
-    tool.invoke(serde_json::json!({
-        "edits": [make_edit("f.txt", 2, "")]
-    }))
-    .await
-    .unwrap();
-    assert_eq!(
-        std::fs::read_to_string(dir.path().join("f.txt")).unwrap(),
-        "aaa\r\nccc\r\n"
-    );
-}
-
-#[tokio::test]
-async fn test_lf_不受影响() {
-    let dir = tempfile::tempdir().unwrap();
-    std::fs::write(dir.path().join("f.txt"), "aaa\nbbb\nccc\n").unwrap();
-    let tool = make_tool(&dir);
-    tool.invoke(serde_json::json!({
-        "edits": [make_edit("f.txt", 2, "BBB")]
-    }))
-    .await
-    .unwrap();
-    assert_eq!(
-        std::fs::read_to_string(dir.path().join("f.txt")).unwrap(),
-        "aaa\nBBB\nccc\n"
+        "aaa\nbbb\nccc\n"
     );
 }

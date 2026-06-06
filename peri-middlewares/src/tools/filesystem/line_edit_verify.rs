@@ -85,7 +85,7 @@ fn verify_diff_sanity(old_content: &str, new_content: &str) -> VerifyLevel {
     let new_lines: Vec<&str> = new_content.lines().collect();
 
     // 简单统计：新文件比旧文件少了多少行
-    let removals = old_lines.len().saturating_sub(new_lines.len());
+    let _removals = old_lines.len().saturating_sub(new_lines.len());
 
     // 改动幅度检查：如果旧文件远大于新文件（删除过多）
     if !old_lines.is_empty() && old_lines.len() > 3 && new_lines.len() * 3 < old_lines.len() {

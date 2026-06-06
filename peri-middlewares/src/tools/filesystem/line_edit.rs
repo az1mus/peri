@@ -8,109 +8,52 @@ use serde_json::Value;
 
 use super::resolve_path;
 
-const LINE_EDIT_DESCRIPTION: &str = r#"Performs precise line-based edits in files.
+const LINE_EDIT_DESCRIPTION: &str = r#"Applies unified diff patches to files with 5-level fuzzy matching and 3-layer verification.
 
-Line numbers are 1-based (from Read output). Multiple edits are applied bottom-to-top.
-All edits in one call are atomic — if any edit fails, no changes are written.
+Provide patches as an array of {file_path, diff} objects. The diff format follows standard unified diff:
 
-Actions (set "action" field):
-- "replace" (default): Replace lines start_line..end_line with new_string.
-- "insert": Insert new_string BEFORE start_line. No existing lines are removed.
-- "delete": Remove lines start_line..end_line. new_string is ignored, can be "".
+```
+--- a/file
++++ b/file
+@@ -L,N +L,N @@
+ context
+-old
++new
+ context
+```
 
-Verification with expected_lines (recommended):
-- Set to the content you expect at start_line..end_line from your last Read.
-- If actual content differs, a warning is returned but the edit still proceeds.
-- This catches stale line numbers after concurrent changes.
+Features:
+- **5-level fuzzy matching**: L1 exact → L2 whitespace-normalized → L3 similarity → L4 anchor → L5 line-number fallback
+- **3-layer verification**: sanity check → bracket balance → tree-sitter AST guard
+- **Atomic writes**: all patches to a file are applied in-memory first, verified, then written atomically
+- **Multiple hunks**: multiple hunks per file are applied bottom-to-top to preserve line numbers
+- **CRLF preservation**: detects and preserves original line endings
 
-Rules:
-- new_string replaces the ENTIRE target range — do not duplicate adjacent lines.
-- For single-line edits, omit end_line (defaults to start_line) to avoid accidentally removing adjacent lines.
-- To add attributes/derives above a line, prefer action:"insert" over replace — it cannot accidentally drop existing lines.
-- expected_lines must cover the FULL range (start_line through end_line), not just the first line.
-- Multiple edits to the same file must not overlap.
+The tool is designed for LLM-generated edits. Matching is fuzzy by default — exact match is preferred but not required."#;
 
-Common patterns:
-- Replace lines: {start_line: 42, end_line: 44, expected_lines: "...", new_string: "..."}
-- Insert before line: {start_line: 42, action: "insert", new_string: "new line"}
-- Delete lines: {start_line: 42, end_line: 44, action: "delete", new_string: ""}
-- Single line: {start_line: 42, new_string: "replacement content"}"#;
-
-/// 编辑动作
-#[derive(Debug, Clone, PartialEq)]
-enum EditAction {
-    Replace,
-    Insert,
-    Delete,
-}
-
-/// 单个编辑操作
+/// 单个 patch 条目
 #[derive(Debug, Deserialize)]
-pub struct EditEntry {
+pub struct PatchEntry {
     pub file_path: String,
-    pub start_line: usize,
-    #[serde(default)]
-    pub end_line: Option<usize>,
-    #[serde(default)]
-    pub action: Option<String>,
-    pub new_string: String,
-    #[serde(default)]
-    pub expected_lines: Option<String>,
+    pub diff: String,
 }
 
-impl EditEntry {
-    fn resolve_action(&self) -> EditAction {
-        if let Some(ref action) = self.action {
-            match action.as_str() {
-                "insert" => EditAction::Insert,
-                "delete" => EditAction::Delete,
-                _ => EditAction::Replace,
-            }
-        } else if self.new_string.is_empty() {
-            EditAction::Delete
-        } else {
-            EditAction::Replace
-        }
-    }
-
-    fn effective_end_line(&self) -> usize {
-        self.end_line.unwrap_or(self.start_line)
-    }
+/// 匹配好的 hunk（用于后续应用）
+struct MatchedHunk {
+    hunk: Hunk,
+    match_result: MatchResult,
 }
 
-/// expected_lines 验证结果
-enum ExpectedLinesResult {
-    Match,
-    Mismatch { expected: String, actual: String },
-}
-
-#[derive(Clone)]
-enum ValidateOutcome {
-    Ok,
-    Warn { expected: String, actual: String },
-}
-
-struct ValidateError {
-    edit_index: usize,
-    message: String,
-}
-
-/// 编辑应用结果
-struct EditResult {
+/// 文件应用结果
+struct FileResult {
     file_path: String,
-    start_line: usize,
-    end_line: usize,
-    action: EditAction,
-    old_line_count: usize,
-    new_line_count: usize,
-    validation: ValidateOutcome,
-    context_before: Vec<String>,
-    context_after: Vec<String>,
-    old_lines: Vec<String>,
-    new_lines: Vec<String>,
+    hunk_count: usize,
+    additions: usize,
+    deletions: usize,
+    verify_result: VerifyResult,
 }
 
-/// LineEdit 工具 — 基于行号的精确编辑
+/// LineEdit 工具 — 基于 unified diff 的精确编辑
 pub struct LineEditTool {
     pub cwd: String,
 }
@@ -119,109 +62,6 @@ impl LineEditTool {
     pub fn new(cwd: impl Into<String>) -> Self {
         Self { cwd: cwd.into() }
     }
-}
-
-fn verify_expected_lines(
-    lines: &[String],
-    start_idx: usize,
-    end_idx: usize,
-    expected: &str,
-) -> ExpectedLinesResult {
-    let actual: String = lines[start_idx..=end_idx]
-        .iter()
-        .map(|l| l.trim_end().to_string())
-        .collect::<Vec<_>>()
-        .join("\n");
-    let expected_norm: String = expected
-        .lines()
-        .map(|l| l.trim_end())
-        .collect::<Vec<_>>()
-        .join("\n");
-
-    if actual == expected_norm {
-        ExpectedLinesResult::Match
-    } else {
-        ExpectedLinesResult::Mismatch {
-            expected: expected_norm,
-            actual,
-        }
-    }
-}
-
-fn truncate_str(s: &str, max_chars: usize) -> String {
-    if s.chars().count() <= max_chars {
-        s.to_string()
-    } else {
-        s.chars().take(max_chars).collect::<String>() + "..."
-    }
-}
-
-fn format_results(results: &[EditResult]) -> String {
-    let mut output = Vec::new();
-
-    for r in results {
-        let action_str = match r.action {
-            EditAction::Replace => "replace",
-            EditAction::Insert => "insert",
-            EditAction::Delete => "delete",
-        };
-
-        let status = match &r.validation {
-            ValidateOutcome::Ok => "✓",
-            ValidateOutcome::Warn { .. } => "⚠",
-        };
-
-        let line_range = if r.start_line == r.end_line {
-            format!("{}", r.start_line)
-        } else {
-            format!("{}-{}", r.start_line, r.end_line)
-        };
-
-        if matches!(&r.validation, ValidateOutcome::Warn { .. }) {
-            if let ValidateOutcome::Warn { expected, actual } = &r.validation {
-                output.push(format!(
-                    "{} {}:{} {} ({}→{} lines) expected_lines 不匹配",
-                    status, r.file_path, line_range, action_str, r.old_line_count, r.new_line_count
-                ));
-                output.push(format!("  预期: {}", truncate_str(expected, 80)));
-                output.push(format!("  实际: {}", truncate_str(actual, 80)));
-                output.push("  编辑已执行，建议 Re-read 确认结果".to_string());
-            }
-        } else {
-            output.push(format!(
-                "{} {}:{} {} ({}→{} lines)",
-                status, r.file_path, line_range, action_str, r.old_line_count, r.new_line_count
-            ));
-        }
-
-        // 上下文 diff
-        let total_lines = r.context_before.len()
-            + r.old_lines.len().max(r.new_lines.len())
-            + r.context_after.len();
-        if total_lines <= 30 {
-            let before_start = r.start_line.saturating_sub(r.context_before.len());
-            for (i, line) in r.context_before.iter().enumerate() {
-                output.push(format!("{:>4} | {}", before_start + i, line));
-            }
-            for (i, line) in r.old_lines.iter().enumerate() {
-                output.push(format!("{:>4} |-{}", r.start_line + i, line));
-            }
-            for line in r.new_lines.iter() {
-                output.push(format!("{:>4} |+{}", r.start_line, line));
-            }
-            let after_start = r.start_line + r.new_lines.len();
-            for (i, line) in r.context_after.iter().enumerate() {
-                output.push(format!("{:>4} | {}", after_start + i, line));
-            }
-        } else {
-            output.push(format!(
-                "  ... ({} 行变更，已省略) ...",
-                r.old_lines.len().max(r.new_lines.len())
-            ));
-        }
-    }
-
-    output.join("\n")
 }
 
 #[async_trait::async_trait]
@@ -238,42 +78,25 @@ impl BaseTool for LineEditTool {
         serde_json::json!({
             "type": "object",
             "properties": {
-                "edits": {
+                "patches": {
                     "type": "array",
                     "items": {
                         "type": "object",
                         "properties": {
                             "file_path": {
                                 "type": "string",
-                                "description": "Absolute path to the file to modify"
+                                "description": "Absolute path to the file to patch"
                             },
-                            "start_line": {
-                                "type": "integer",
-                                "description": "1-based line number to start editing at (from Read output)"
-                            },
-                            "end_line": {
-                                "type": "integer",
-                                "description": "Line number to end editing at. Defaults to start_line. Ignored when action=insert."
-                            },
-                            "action": {
+                            "diff": {
                                 "type": "string",
-                                "enum": ["replace", "insert", "delete"],
-                                "description": "Edit action. 'replace' (default): replace lines start_line..end_line with new_string. 'insert': insert new_string before start_line, no lines removed. 'delete': remove lines start_line..end_line, new_string ignored."
-                            },
-                            "new_string": {
-                                "type": "string",
-                                "description": "Replacement text. For replace: the new content. For insert: content to insert. For delete: ignored, can be empty string."
-                            },
-                            "expected_lines": {
-                                "type": "string",
-                                "description": "Optional but recommended: content you expect at start_line..end_line from your last Read. If actual content differs, a warning is returned but edit still proceeds."
+                                "description": "Unified diff string for this file. Format: --- a/file\\n+++ b/file\\n@@ -L,N +L,N @@\\n context\\n-old\\n+new\\n context"
                             }
                         },
-                        "required": ["file_path", "start_line", "new_string"]
+                        "required": ["file_path", "diff"]
                     }
                 }
             },
-            "required": ["edits"]
+            "required": ["patches"]
         })
     }
 
@@ -281,25 +104,31 @@ impl BaseTool for LineEditTool {
         &self,
         input: Value,
     ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
-        let edits: Vec<EditEntry> = serde_json::from_value(input["edits"].clone())
-            .map_err(|e| format!("edits 参数解析失败: {}", e))?;
+        let patches: Vec<PatchEntry> = serde_json::from_value(input["patches"].clone())
+            .map_err(|e| format!("patches 参数解析失败: {}", e))?;
 
-        if edits.is_empty() {
-            return Err("edits 不能为空".into());
+        if patches.is_empty() {
+            return Err("patches 不能为空".into());
         }
 
-        // 按文件分组
-        let mut groups: std::collections::BTreeMap<String, Vec<usize>> =
+        // 按文件分组：file_key → Vec<(patch_index, ParsedPatch)>
+        let mut groups: std::collections::BTreeMap<String, Vec<(usize, ParsedPatch)>> =
             std::collections::BTreeMap::new();
-        for (i, edit) in edits.iter().enumerate() {
-            let resolved = resolve_path(&self.cwd, &edit.file_path);
-            let key = resolved.to_string_lossy().to_string();
-            groups.entry(key).or_default().push(i);
+
+        // 解析所有 diff
+        for (i, patch) in patches.iter().enumerate() {
+            let resolved = resolve_path(&self.cwd, &patch.file_path);
+            let file_key = resolved.to_string_lossy().to_string();
+            let parsed = parse_unified_diff(&patch.diff)
+                .map_err(|e| format!("Patch {} 解析失败: {}", i + 1, e))?;
+            groups.entry(file_key).or_default().push((i, parsed));
         }
 
         // 读取所有文件内容
-        let mut file_contents: std::collections::HashMap<String, (Vec<String>, &str, bool)> =
-            std::collections::HashMap::new();
+        let mut file_contents: std::collections::HashMap<
+            String,
+            (Vec<String>, &str, bool, String),
+        > = std::collections::HashMap::new();
         for file_key in groups.keys() {
             let content = match std::fs::read_to_string(file_key) {
                 Ok(c) => c,
@@ -315,225 +144,132 @@ impl BaseTool for LineEditTool {
                 "\n"
             };
             let lines: Vec<String> = content.lines().map(|l| l.to_string()).collect();
-            file_contents.insert(file_key.clone(), (lines, line_ending, trailing_newline));
+            let original_content = content.clone();
+            file_contents.insert(
+                file_key.clone(),
+                (lines, line_ending, trailing_newline, original_content),
+            );
         }
 
-        // 阶段 1: 验证所有编辑
-        let mut validation_errors: Vec<ValidateError> = Vec::new();
-        let mut validation_warnings: Vec<Option<ValidateOutcome>> =
-            (0..edits.len()).map(|_| None).collect();
+        // 阶段 1: 匹配所有 hunk
+        let mut all_matched: std::collections::HashMap<String, Vec<MatchedHunk>> =
+            std::collections::HashMap::new();
+        let mut match_errors: Vec<String> = Vec::new();
 
-        for (file_key, edit_indices) in &groups {
-            let (lines, _, _) = file_contents.get(file_key).unwrap();
+        for (file_key, patch_list) in &groups {
+            let (lines, _, _, _) = file_contents.get(file_key).unwrap();
+            let mut file_matched = Vec::new();
 
-            // 检查重叠
-            let mut sorted_by_line: Vec<usize> = edit_indices.clone();
-            sorted_by_line.sort_by_key(|&i| std::cmp::Reverse(edits[i].start_line));
-            for window in sorted_by_line.windows(2) {
-                let a_idx = window[0];
-                let b_idx = window[1];
-                let a = &edits[a_idx];
-                let b = &edits[b_idx];
-                let a_action = a.resolve_action();
-                let b_action = b.resolve_action();
-                if a_action != EditAction::Insert && b_action != EditAction::Insert {
-                    let a_start = a.start_line;
-                    let a_end = a.effective_end_line();
-                    let b_start = b.start_line;
-                    let b_end = b.effective_end_line();
-                    if a_start <= b_end {
-                        validation_errors.push(ValidateError {
-                            edit_index: a_idx,
-                            message: format!(
-                                "第 {}-{} 行与第 {}-{} 行重叠，请调整范围",
-                                a_start, a_end, b_start, b_end
-                            ),
-                        });
-                    }
-                }
-            }
-
-            // 验证每个编辑
-            for &i in edit_indices {
-                let edit = &edits[i];
-                let action = edit.resolve_action();
-                let end_line = edit.effective_end_line();
-
-                if edit.start_line == 0 {
-                    validation_errors.push(ValidateError {
-                        edit_index: i,
-                        message: "start_line 必须 >= 1".to_string(),
-                    });
-                    continue;
-                }
-
-                match action {
-                    EditAction::Insert => {
-                        if edit.start_line > lines.len() + 1 {
-                            validation_errors.push(ValidateError {
-                                edit_index: i,
-                                message: format!(
-                                    "insert 位置 {} 超出范围 (文件共 {} 行，最大可插入到 {})",
-                                    edit.start_line,
-                                    lines.len(),
-                                    lines.len() + 1
-                                ),
-                            });
+            for (patch_idx, parsed) in patch_list {
+                for (hunk_idx, hunk) in parsed.hunks.iter().enumerate() {
+                    match match_hunk(lines, hunk) {
+                        Ok(mr) => file_matched.push(MatchedHunk {
+                            hunk: hunk.clone(),
+                            match_result: mr,
+                        }),
+                        Err(MatchError::NotFound { searched_content }) => {
+                            match_errors.push(format!(
+                                "✗ Patch {} hunk {}: 未找到匹配位置\n  搜索内容: {}",
+                                patch_idx + 1,
+                                hunk_idx + 1,
+                                truncate_str(&searched_content, 120)
+                            ));
                         }
-                    }
-                    EditAction::Replace | EditAction::Delete => {
-                        if end_line < edit.start_line {
-                            validation_errors.push(ValidateError {
-                                edit_index: i,
-                                message: format!(
-                                    "end_line ({}) 不能小于 start_line ({})",
-                                    end_line, edit.start_line
-                                ),
-                            });
-                            continue;
-                        }
-                        if edit.start_line > lines.len() {
-                            validation_errors.push(ValidateError {
-                                edit_index: i,
-                                message: format!(
-                                    "start_line {} 超出文件行数 (共 {} 行)",
-                                    edit.start_line,
-                                    lines.len()
-                                ),
-                            });
-                            continue;
-                        }
-                        if end_line > lines.len() {
-                            validation_errors.push(ValidateError {
-                                edit_index: i,
-                                message: format!(
-                                    "end_line {} 超出文件行数 (共 {} 行)",
-                                    end_line,
-                                    lines.len()
-                                ),
-                            });
-                            continue;
-                        }
-
-                        // expected_lines 验证（警告但继续）
-                        if let Some(ref expected) = edit.expected_lines {
-                            let start_idx = edit.start_line - 1;
-                            let end_idx = end_line - 1;
-                            match verify_expected_lines(lines, start_idx, end_idx, expected) {
-                                ExpectedLinesResult::Match => {
-                                    validation_warnings[i] = Some(ValidateOutcome::Ok);
-                                }
-                                ExpectedLinesResult::Mismatch {
-                                    expected: exp,
-                                    actual,
-                                } => {
-                                    validation_warnings[i] = Some(ValidateOutcome::Warn {
-                                        expected: exp,
-                                        actual,
-                                    });
-                                }
-                            }
+                        Err(MatchError::MultipleLocations { positions }) => {
+                            match_errors.push(format!(
+                                "✗ Patch {} hunk {}: 多个匹配位置 ({:?})",
+                                patch_idx + 1,
+                                hunk_idx + 1,
+                                positions.iter().map(|p| p + 1).collect::<Vec<_>>()
+                            ));
                         }
                     }
                 }
             }
+
+            all_matched.insert(file_key.clone(), file_matched);
         }
 
-        // 如果有验证错误 → 全部拒绝
-        if !validation_errors.is_empty() {
-            let mut msgs: Vec<String> = Vec::new();
-            for err in &validation_errors {
-                msgs.push(format!("✗ Edit {}: {}", err.edit_index + 1, err.message));
-            }
+        // 匹配失败 → 全部拒绝
+        if !match_errors.is_empty() {
+            let mut msgs = match_errors;
             msgs.push("未执行任何编辑。修正后重试。".to_string());
             return Ok(msgs.join("\n"));
         }
 
-        // 阶段 2: 应用所有编辑
-        let mut results: Vec<EditResult> = Vec::new();
+        // 阶段 2: 应用编辑到内存
+        let mut results: Vec<FileResult> = Vec::new();
 
-        for (file_key, edit_indices) in &groups {
-            let (lines, line_ending, trailing_newline) = file_contents.get(file_key).unwrap();
+        for (file_key, _patch_list) in &groups {
+            let (lines, line_ending, trailing_newline, original_content) =
+                file_contents.get(file_key).unwrap();
             let mut lines = lines.clone();
             let line_ending = *line_ending;
             let trailing_newline = *trailing_newline;
+            let original = original_content.clone();
 
-            // 按行号降序排列
-            let mut sorted: Vec<usize> = edit_indices.clone();
-            sorted.sort_by_key(|&i| std::cmp::Reverse(edits[i].start_line));
+            let matched = all_matched.get(file_key).unwrap();
 
-            for i in sorted {
-                let edit = &edits[i];
-                let action = edit.resolve_action();
-                let start_line = edit.start_line;
-                let end_line = edit.effective_end_line();
-                let start_idx = start_line - 1;
-                let end_idx = end_line - 1;
+            // 统计
+            let mut total_additions = 0usize;
+            let mut total_deletions = 0usize;
 
-                // 保存上下文用于反馈（前后各 2 行）
-                let ctx_before: Vec<String> =
-                    lines[start_idx.saturating_sub(2)..start_idx].to_vec();
+            // 按匹配位置从后往前排序（稳定排序保持同位置 hunk 的原始顺序）
+            let mut sorted_matched: Vec<&MatchedHunk> = matched.iter().collect();
+            sorted_matched.sort_by(|a, b| b.match_result.line_idx.cmp(&a.match_result.line_idx));
 
-                let old_lines: Vec<String> = match action {
-                    EditAction::Insert => vec![],
-                    _ => lines[start_idx..=end_idx].to_vec(),
-                };
-                let old_line_count = old_lines.len();
+            for mh in &sorted_matched {
+                let line_idx = mh.match_result.line_idx;
 
-                // 应用编辑
-                let new_lines_vec: Vec<String>;
-                match action {
-                    EditAction::Replace => {
-                        new_lines_vec = if edit.new_string.is_empty() {
-                            vec![]
-                        } else {
-                            edit.new_string.lines().map(|s| s.to_string()).collect()
-                        };
-                        lines.splice(start_idx..=end_idx, new_lines_vec.clone());
-                    }
-                    EditAction::Insert => {
-                        new_lines_vec = if edit.new_string.is_empty() {
-                            vec![]
-                        } else {
-                            edit.new_string.lines().map(|s| s.to_string()).collect()
-                        };
-                        for (j, line) in new_lines_vec.iter().enumerate() {
-                            lines.insert(start_idx + j, line.clone());
-                        }
-                    }
-                    EditAction::Delete => {
-                        new_lines_vec = vec![];
-                        lines.splice(start_idx..=end_idx, std::iter::empty());
-                    }
+                // old_count = context + remove 行数（文件中需要被替换的行数）
+                let old_count: usize = mh
+                    .hunk
+                    .lines
+                    .iter()
+                    .filter(|dl| matches!(dl, DiffLine::Context(_) | DiffLine::Remove(_)))
+                    .count();
+
+                // replacement_lines = context + add（移除 remove 行）
+                let replacement_lines: Vec<String> = mh
+                    .hunk
+                    .lines
+                    .iter()
+                    .filter_map(|dl| match dl {
+                        DiffLine::Context(s) => Some(s.clone()),
+                        DiffLine::Add(s) => Some(s.clone()),
+                        DiffLine::Remove(_) => None,
+                    })
+                    .collect();
+
+                let removes = mh
+                    .hunk
+                    .lines
+                    .iter()
+                    .filter(|dl| matches!(dl, DiffLine::Remove(_)))
+                    .count();
+                total_deletions += removes;
+                total_additions += replacement_lines
+                    .len()
+                    .saturating_sub(old_count.saturating_sub(removes));
+
+                // 边界检查
+                let end_idx = line_idx + old_count;
+                if end_idx > lines.len() {
+                    return Err(format!(
+                        "Hunk 应用越界: 文件 {} 共 {} 行，需要 {}-{}",
+                        file_key,
+                        lines.len(),
+                        line_idx + 1,
+                        end_idx
+                    )
+                    .into());
                 }
 
-                // 保存编辑后上下文
-                let new_end_idx = start_idx + new_lines_vec.len().saturating_sub(1);
-                let ctx_after_end = (new_end_idx + 3).min(lines.len());
-                let ctx_after: Vec<String> = if ctx_after_end > new_end_idx + 1 {
-                    lines[new_end_idx + 1..ctx_after_end].to_vec()
-                } else {
-                    vec![]
-                };
-
-                results.push(EditResult {
-                    file_path: edit.file_path.clone(),
-                    start_line,
-                    end_line,
-                    action,
-                    old_line_count,
-                    new_line_count: new_lines_vec.len(),
-                    validation: validation_warnings[i]
-                        .clone()
-                        .unwrap_or(ValidateOutcome::Ok),
-                    context_before: ctx_before,
-                    context_after: ctx_after,
-                    old_lines,
-                    new_lines: new_lines_vec,
-                });
+                // splice 替换
+                lines.splice(line_idx..end_idx, replacement_lines);
             }
 
-            // 写入文件
+            // 验证
             let new_content = if lines.is_empty() {
                 String::new()
             } else {
@@ -543,7 +279,36 @@ impl BaseTool for LineEditTool {
                 }
                 s
             };
+
+            let verify_result = verify(file_key, &original, &new_content);
+
+            if verify_result.has_error() {
+                return Ok(format!(
+                    "✗ {} 验证失败 [{}]\n  编辑已取消，文件未被修改。",
+                    file_key,
+                    verify_result.format_tags()
+                ));
+            }
+
+            // 写入文件
             atomic_write(std::path::Path::new(file_key), &new_content)?;
+
+            results.push(FileResult {
+                file_path: patches
+                    .iter()
+                    .find(|p| {
+                        resolve_path(&self.cwd, &p.file_path)
+                            .to_string_lossy()
+                            .as_ref()
+                            == file_key.as_str()
+                    })
+                    .map(|p| p.file_path.clone())
+                    .unwrap_or_else(|| file_key.clone()),
+                hunk_count: matched.len(),
+                additions: total_additions,
+                deletions: total_deletions,
+                verify_result,
+            });
         }
 
         // 构建反馈
@@ -563,6 +328,58 @@ fn atomic_write(path: &std::path::Path, content: &str) -> Result<(), std::io::Er
             Err(e)
         }
     }
+}
+
+fn truncate_str(s: &str, max_chars: usize) -> String {
+    if s.chars().count() <= max_chars {
+        s.to_string()
+    } else {
+        s.chars().take(max_chars).collect::<String>() + "..."
+    }
+}
+
+fn format_results(results: &[FileResult]) -> String {
+    let mut output = Vec::new();
+    let mut total_hunks = 0usize;
+    let mut total_additions = 0usize;
+    let mut total_deletions = 0usize;
+
+    for r in results {
+        let icon = if r.verify_result.has_error() {
+            "✗"
+        } else {
+            match (&r.verify_result.brackets, &r.verify_result.ast) {
+                (VerifyLevel::Warn(_), _) | (_, VerifyLevel::Warn(_)) => "⚠",
+                _ => "✓",
+            }
+        };
+
+        output.push(format!(
+            "{} {} ({})",
+            icon,
+            r.file_path,
+            r.verify_result.format_tags()
+        ));
+        output.push(format!(
+            "  {} hunks applied ({} additions, {} deletions)",
+            r.hunk_count, r.additions, r.deletions
+        ));
+
+        total_hunks += r.hunk_count;
+        total_additions += r.additions;
+        total_deletions += r.deletions;
+    }
+
+    // 汇总行
+    output.push(format!(
+        "\n{} files, {} hunks ({}+, {}-)",
+        results.len(),
+        total_hunks,
+        total_additions,
+        total_deletions
+    ));
+
+    output.join("\n")
 }
 
 #[cfg(test)]
