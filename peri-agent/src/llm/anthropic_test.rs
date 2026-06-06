@@ -1046,7 +1046,7 @@ fn test_tool_result_and_tool_error_both_have_id_field() {
             tr
         );
         assert!(
-            tr["id"].as_str().unwrap_or("").len() > 0,
+            !tr["id"].as_str().unwrap_or("").is_empty(),
             "第 {} 个 tool_result 的 id 为空字符串: {:?}",
             i,
             tr
