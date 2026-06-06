@@ -2,6 +2,7 @@ use peri_widgets::ScrollbarMetrics;
 use tui_textarea::TextArea;
 
 use super::at_mention::AtMentionState;
+use super::hint_ops::SlashHintState;
 use crate::app::text_selection::{PanelTextSelection, TextSelection};
 
 /// UI 交互状态：会话级的输入、滚动、选区、历史等。
@@ -38,6 +39,8 @@ pub struct UiState {
     pub panel_scrollbar_dragging: bool,
     /// @ 文件提及状态
     pub at_mention: AtMentionState,
+    /// / skill/command 内联补全状态
+    pub slash_hint: SlashHintState,
     /// 后台 Agent Bar 光标位置
     pub bg_bar_cursor: Option<usize>,
     /// 后台 Agent Bar 渲染区域（用于鼠标点击检测）
@@ -76,6 +79,7 @@ impl UiState {
             panel_scrollbar_metrics: None,
             panel_scrollbar_dragging: false,
             at_mention: AtMentionState::new(),
+            slash_hint: SlashHintState::default(),
             bg_bar_cursor: None,
             bg_bar_area: None,
             diff_visible: diff_enabled,

@@ -204,6 +204,45 @@ pub(super) fn update_at_mention_detection(app: &mut App) {
     }
 }
 
+/// 检测 textarea 中 / skill/command token，更新 slash_hint 状态。
+/// 参考 update_at_mention_detection 模式：将 (row, col) 转为字节偏移后调用 detect。
+/// 当 @mention 活跃时自动 deactivate 避免双弹窗。
+pub(super) fn update_slash_hint_detection(app: &mut App) {
+    let (text, cursor_pos) = {
+        let textarea = &app.session_mgr.current_mut().ui.textarea;
+        let text = textarea.lines().join("\n");
+        let (row, col) = textarea.cursor();
+        let mut pos = 0usize;
+        for (i, line) in textarea.lines().iter().enumerate() {
+            if i == row {
+                pos += line.chars().take(col).map(|c| c.len_utf8()).sum::<usize>();
+                break;
+            }
+            pos += line.len() + 1; // +1 for newline
+        }
+        (text, pos)
+    }; // textarea mutable borrow 在此结束 ← 关键：Rust NLL 通过作用域释放
+
+    // 先检查 at_mention 状态（不可变借用）
+    let at_mention_active = app.session_mgr.current().ui.at_mention.active;
+
+    let slash = &mut app.session_mgr.current_mut().ui.slash_hint;
+
+    if at_mention_active {
+        slash.deactivate();
+        return;
+    }
+
+    if let Some((prefix, start)) = crate::app::SlashHintState::detect(&text, cursor_pos) {
+        if slash.active && slash.prefix == prefix && slash.token_start == start {
+            return; // 未变化
+        }
+        slash.activate(prefix, start);
+    } else {
+        slash.deactivate();
+    }
+}
+
 /// 将选中的 @ 提及路径注入 textarea
 pub(super) fn inject_at_mention_path(app: &mut App) {
     let at = &app.session_mgr.current_mut().ui.at_mention;

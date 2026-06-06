@@ -19,22 +19,14 @@ enum HintItem<'a> {
 
 const MAX_VIEWPORT: usize = 10;
 
-/// 统一提示浮层：输入 / 前缀时展示命令和 Skills 候选（前缀匹配优先，再按字母顺序排列）
+/// 统一提示浮层：基于 slash_hint 状态展示命令和 Skills 候选（前缀匹配优先，再按字母顺序排列）
 pub(crate) fn render_unified_hint(f: &mut Frame, app: &App, input_area: Rect) {
-    let first_line = app
-        .session_mgr
-        .current()
-        .ui
-        .textarea
-        .lines()
-        .first()
-        .map(|s| s.as_str())
-        .unwrap_or("");
-    if !first_line.starts_with('/') {
+    let slash_hint = &app.session_mgr.current().ui.slash_hint;
+    if !slash_hint.active {
         return;
     }
+    let prefix = slash_hint.prefix.as_str();
 
-    let prefix = first_line.trim_start_matches('/');
     let cmd_candidates: Vec<(String, String)> = app
         .session_mgr
         .current()

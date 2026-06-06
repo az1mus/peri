@@ -61,6 +61,7 @@ pub use ask_user_prompt::AskUserBatchPrompt;
 mod cron_ops;
 mod cron_state;
 mod hint_ops;
+pub use hint_ops::SlashHintState;
 mod history_ops;
 mod history_persistence;
 mod hitl_ops;

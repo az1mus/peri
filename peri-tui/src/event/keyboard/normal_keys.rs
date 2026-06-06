@@ -6,6 +6,7 @@ use super::super::Action;
 
 /// Normal mode key handling: main match block arm bodies
 pub(super) fn handle_normal_keys(app: &mut App, input: Input) -> anyhow::Result<Option<Action>> {
+    use super::update_slash_hint_detection;
     use super::{inject_at_mention_path, update_at_mention_detection};
 
     match input {
@@ -43,6 +44,12 @@ pub(super) fn handle_normal_keys(app: &mut App, input: Input) -> anyhow::Result<
         // Esc: 关闭 @ 提及弹窗
         Input { key: Key::Esc, .. } if app.session_mgr.current_mut().ui.at_mention.active => {
             app.session_mgr.current_mut().ui.at_mention.close();
+            app.session_mgr.current_mut().ui.at_mention.close();
+        }
+        // Esc: 关闭 slash hint 弹窗
+        Input { key: Key::Esc, .. } if app.session_mgr.current_mut().ui.slash_hint.active => {
+            app.session_mgr.current_mut().ui.slash_hint.deactivate();
+            app.session_mgr.current_mut().ui.hint_cursor = None;
         }
 
         // Esc: 双击触发 rewind 选择器（仅空闲时）
@@ -267,9 +274,9 @@ pub(super) fn handle_normal_keys(app: &mut App, input: Input) -> anyhow::Result<
             if !app.session_mgr.current_mut().ui.loading {
                 app.session_mgr.current_mut().ui.hint_cursor = None;
                 update_at_mention_detection(app);
+                update_slash_hint_detection(app);
             }
         }
-
         _ => {
             // Any other key cancels quit-pending state (Ctrl+C double-tap)
             app.global_ui.quit_pending_since = None;

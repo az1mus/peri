@@ -1479,6 +1479,11 @@ async fn test_unified_hint_shows_commands_and_skills() {
     // 设置输入框内容为 /
     app.session_mgr.current_mut().ui.textarea = crate::app::build_textarea(false);
     app.session_mgr.current_mut().ui.textarea.insert_str("/");
+    app.session_mgr
+        .current_mut()
+        .ui
+        .slash_hint
+        .activate(String::new(), 0);
 
     // 注入 2 个 Skills
     app.session_mgr
@@ -1538,6 +1543,11 @@ async fn test_unified_hint_filters_by_prefix() {
 
     app.session_mgr.current_mut().ui.textarea = crate::app::build_textarea(false);
     app.session_mgr.current_mut().ui.textarea.insert_str("/mo");
+    app.session_mgr
+        .current_mut()
+        .ui
+        .slash_hint
+        .activate("mo".to_string(), 0);
 
     app.session_mgr
         .current_mut()
