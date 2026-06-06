@@ -992,3 +992,159 @@ fn test_system_blocks_single_cached_block_no_duplicate() {
         "Single already-cached block should keep cache_control"
     );
 }
+
+/// 验证 tool_result 和 tool_error 消息序列化后都包含 id 字段（GLM 兼容性）
+#[test]
+fn test_tool_result_and_tool_error_both_have_id_field() {
+    let messages = vec![
+        BaseMessage::human("do something"),
+        BaseMessage::ai_with_tool_calls(
+            "",
+            vec![crate::messages::ToolCallRequest::new(
+                "call_1".to_string(),
+                "Read".to_string(),
+                json!({"file_path": "test.rs"}),
+            )],
+        ),
+        BaseMessage::tool_result("call_1", "file content"),
+        BaseMessage::ai_with_tool_calls(
+            "",
+            vec![crate::messages::ToolCallRequest::new(
+                "call_2".to_string(),
+                "Write".to_string(),
+                json!({"file_path": "test.rs"}),
+            )],
+        ),
+        BaseMessage::tool_error("call_2", "permission denied"),
+    ];
+
+    let (msgs, _) = super::invoke::messages_to_anthropic(&messages);
+
+    // 找到所有 tool_result block
+    let mut tool_results: Vec<&serde_json::Value> = Vec::new();
+    for msg in &msgs {
+        if let Some(content) = msg.get("content").and_then(|c| c.as_array()) {
+            for block in content {
+                if block["type"] == "tool_result" {
+                    tool_results.push(block);
+                }
+            }
+        }
+    }
+
+    assert_eq!(
+        tool_results.len(),
+        2,
+        "应有 2 个 tool_result block（一个 success 一个 error）"
+    );
+
+    for (i, tr) in tool_results.iter().enumerate() {
+        assert!(
+            tr.get("id").is_some(),
+            "第 {} 个 tool_result 缺少 id 字段: {:?}",
+            i,
+            tr
+        );
+        assert!(
+            tr["id"].as_str().unwrap_or("").len() > 0,
+            "第 {} 个 tool_result 的 id 为空字符串: {:?}",
+            i,
+            tr
+        );
+    }
+
+    // 验证 is_error 标志正确
+    let success_tr = tool_results
+        .iter()
+        .find(|t| t["tool_use_id"] == "call_1")
+        .unwrap();
+    assert_eq!(
+        success_tr["is_error"], false,
+        "tool_result 的 is_error 应为 false"
+    );
+
+    let error_tr = tool_results
+        .iter()
+        .find(|t| t["tool_use_id"] == "call_2")
+        .unwrap();
+    assert_eq!(
+        error_tr["is_error"], true,
+        "tool_error 的 is_error 应为 true"
+    );
+}
+
+/// 端到端验证：多轮工具调用（含 tool_error）后的完整请求体中，
+/// 所有 tool_result block 都包含 id 字段
+#[test]
+fn test_multiturn_with_errors_all_tool_results_have_id() {
+    // 模拟场景：3 轮工具调用，第 2 轮和第 3 轮有 tool_error
+    let messages = vec![
+        BaseMessage::human("read a file"),
+        BaseMessage::ai_with_tool_calls(
+            "",
+            vec![crate::messages::ToolCallRequest::new(
+                "call_1".to_string(),
+                "Read".to_string(),
+                json!({"file_path": "test.rs"}),
+            )],
+        ),
+        BaseMessage::tool_result("call_1", "fn main() {}"),
+        BaseMessage::ai_with_tool_calls(
+            "Let me write to it",
+            vec![crate::messages::ToolCallRequest::new(
+                "call_2".to_string(),
+                "Write".to_string(),
+                json!({"file_path": "test.rs", "content": "new content"}),
+            )],
+        ),
+        BaseMessage::tool_error("call_2", "Error: permission denied"),
+        BaseMessage::ai_with_tool_calls(
+            "",
+            vec![
+                crate::messages::ToolCallRequest::new(
+                    "call_3a".to_string(),
+                    "Grep".to_string(),
+                    json!({"pattern": "TODO"}),
+                ),
+                crate::messages::ToolCallRequest::new(
+                    "call_3b".to_string(),
+                    "Bash".to_string(),
+                    json!({"command": "ls"}),
+                ),
+            ],
+        ),
+        BaseMessage::tool_error("call_3a", "Error: Search timed out"),
+        BaseMessage::tool_result("call_3b", "file1.rs\nfile2.rs"),
+    ];
+
+    let (msgs, _) = super::invoke::messages_to_anthropic(&messages);
+
+    // 收集所有 tool_result block
+    let mut tool_results: Vec<serde_json::Value> = Vec::new();
+    for msg in &msgs {
+        if let Some(content) = msg.get("content").and_then(|c| c.as_array()) {
+            for block in content {
+                if block["type"] == "tool_result" {
+                    tool_results.push(block.clone());
+                }
+            }
+        }
+    }
+
+    // 应该有 4 个 tool_result（call_1 success, call_2 error, call_3a error, call_3b success）
+    assert_eq!(
+        tool_results.len(),
+        4,
+        "应有 4 个 tool_result block，实际: {}",
+        tool_results.len()
+    );
+
+    for (i, tr) in tool_results.iter().enumerate() {
+        let has_id = tr
+            .get("id")
+            .and_then(|v| v.as_str())
+            .map(|s| !s.is_empty())
+            .unwrap_or(false);
+        assert!(has_id, "第 {} 个 tool_result 缺少非空 id 字段: {:?}", i, tr);
+    }
+}
