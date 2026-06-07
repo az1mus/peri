@@ -7,8 +7,8 @@ impl App {
         self.session_mgr.current_mut().focused_instance_id = None;
         self.session_mgr.current_mut().ui.bg_bar_cursor = None;
 
-        // 标记手动 compact（/compact 命令），handle_compact_completed 依赖此标志结束 loading
-        self.session_mgr.current_mut().agent.compact_manual = true;
+        // 清理 text_selection：compact 将重建所有消息，旧 visual 坐标失效
+        self.session_mgr.current_mut().ui.text_selection.clear();
 
         // 显示 loading 状态（spinner + 禁用输入）
         self.set_loading(true);
@@ -37,13 +37,13 @@ impl App {
         }
 
         // Full compact: 清理 pipeline + 更新内部状态
-        // Auto-compact 在 ReAct 循环内执行，agent 即将 resubmit，spinner 持续到 Done。
-        // Manual compact 是独立操作，无后续 Done 事件，必须在此结束 loading。
-        let is_manual = self.session_mgr.current_mut().agent.compact_manual;
-        if is_manual {
-            self.set_loading(false);
-            self.session_mgr.current_mut().agent.compact_manual = false;
-        }
+        // loading 不在此结束——auto-compact 和 manual compact 统一由 Done 事件结束 loading。
+        // Manual compact 是 CommandKind::Immediate，executor 执行后调用 push_done() 发送 Done。
+        // Auto-compact 在 ReAct 循环内，Done 在循环结束时自然到达。
+
+        // 清理 text_selection：RebuildAll 后 wrap_map 完全重建，旧坐标失效
+        self.session_mgr.current_mut().ui.text_selection.clear();
+
         let mut label_lines = vec![format!("✻ {}", self.services.lc.tr("app-compact-done"))];
         for f in &files {
             label_lines.push(format!("  ⎿  Read {} ({} lines)", f.path, f.lines));
@@ -86,7 +86,6 @@ impl App {
 
     pub(crate) fn handle_compact_error(&mut self, msg: String) -> (bool, bool, bool) {
         self.set_loading(false);
-        self.session_mgr.current_mut().agent.compact_manual = false;
         let vm = MessageViewModel::system(
             self.services
                 .lc

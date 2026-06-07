@@ -3282,3 +3282,72 @@ async fn test_background_agents_lifecycle() {
         "聚焦的 agent 完成后应自动退出聚焦"
     );
 }
+
+// ── Compact Loading / TextSelection 修复回归 ──────────────────────────────
+
+/// 验证 compact completed 后 loading 保持（统一由 Done 事件结束）
+#[tokio::test]
+async fn test_compact_completed_preserves_loading() {
+    use peri_agent::messages::BaseMessage;
+
+    let (mut app, _handle) = App::new_headless(80, 24).await;
+
+    // compact started
+    let (consume, _, _) = app.handle_compact_started();
+    assert!(consume);
+    assert!(app.session_mgr.current().ui.loading);
+
+    // compact completed
+    let msgs = vec![BaseMessage::human("summary")];
+    let (consume, _, _) = app.handle_compact_completed("summary".into(), vec![], vec![], 0, msgs);
+    assert!(consume);
+    // compact completed 后 loading 应保持（等待 Done 事件）
+    assert!(
+        app.session_mgr.current().ui.loading,
+        "compact completed 后 loading 应保持，由 Done 事件结束"
+    );
+}
+
+/// 验证 compact 后 text_selection 被清理
+#[tokio::test]
+async fn test_compact_clears_text_selection() {
+    use peri_agent::messages::BaseMessage;
+
+    let (mut app, _handle) = App::new_headless(80, 24).await;
+
+    // 模拟用户有活跃的 text_selection
+    app.session_mgr
+        .current_mut()
+        .ui
+        .text_selection
+        .start_drag(50, 10);
+    app.session_mgr
+        .current_mut()
+        .ui
+        .text_selection
+        .update_drag(60, 20);
+    assert!(app.session_mgr.current_mut().ui.text_selection.is_active());
+
+    // compact started 应清理选区
+    app.handle_compact_started();
+    assert!(
+        !app.session_mgr.current().ui.text_selection.is_active(),
+        "text_selection 应在 compact_started 时被清理"
+    );
+
+    // 再次设置选区
+    app.session_mgr
+        .current_mut()
+        .ui
+        .text_selection
+        .start_drag(5, 3);
+    assert!(app.session_mgr.current_mut().ui.text_selection.is_active());
+
+    // compact completed 也应清理选区
+    let msgs = vec![BaseMessage::human("summary")];
+    app.handle_compact_completed("summary".into(), vec![], vec![], 0, msgs);
+    assert!(
+        !app.session_mgr.current().ui.text_selection.is_active(),
+        "text_selection 应在 compact_completed 时被清理"
+    );
+}
