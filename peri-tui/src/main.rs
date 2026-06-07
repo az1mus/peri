@@ -695,6 +695,11 @@ async fn run_app(
 
             let flat_hooks: Vec<peri_middlewares::hooks::RegisteredHook> =
                 hook_groups.iter().flatten().cloned().collect();
+            tracing::info!(
+                groups = hook_groups.len(),
+                total_hooks = flat_hooks.len(),
+                "Hook groups assembled for ACP server"
+            );
 
             // Create session-level tool_search_index and shared_tools
             let tool_search_index = Arc::new(peri_middlewares::tool_search::ToolSearchIndex::new());

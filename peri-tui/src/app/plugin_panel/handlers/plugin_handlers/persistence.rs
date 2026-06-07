@@ -26,42 +26,12 @@ impl PluginPanel {
     /// 持久化删除 marketplace
     pub(super) fn persist_marketplace_delete(&self, name: &str) -> anyhow::Result<()> {
         use peri_middlewares::plugin::{
-            load_known_marketplaces, save_known_marketplaces, MarketplaceSource,
+            load_known_marketplaces, save_known_marketplaces, MarketplaceManager,
         };
         let marketplaces = load_known_marketplaces(None).unwrap_or_default();
         let filtered: Vec<_> = marketplaces
             .into_iter()
-            .filter(|km| {
-                let km_name = match &km.source {
-                    MarketplaceSource::GitHub { repo } => {
-                        repo.split('/').next_back().unwrap_or(repo).to_string()
-                    }
-                    MarketplaceSource::Git { url } => url
-                        .split('/')
-                        .next_back()
-                        .and_then(|s| s.strip_suffix(".git"))
-                        .unwrap_or("marketplace")
-                        .to_string(),
-                    MarketplaceSource::Url { url } => {
-                        let last = url.split('/').next_back().unwrap_or("marketplace");
-                        last.strip_suffix(".json").unwrap_or(last).to_string()
-                    }
-                    MarketplaceSource::File { path } => std::path::Path::new(path)
-                        .file_name()
-                        .and_then(|s| s.to_str())
-                        .unwrap_or("marketplace")
-                        .to_string(),
-                    MarketplaceSource::Directory { path } => std::path::Path::new(path)
-                        .file_name()
-                        .and_then(|s| s.to_str())
-                        .unwrap_or("marketplace")
-                        .to_string(),
-                    MarketplaceSource::Npm { package } => {
-                        package.split('@').next().unwrap_or(package).to_string()
-                    }
-                };
-                km_name != name
-            })
+            .filter(|km| MarketplaceManager::extract_name(&km.source) != name)
             .collect();
         save_known_marketplaces(&filtered, None)?;
         Ok(())

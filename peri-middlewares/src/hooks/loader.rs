@@ -32,15 +32,17 @@ pub fn load_global_settings_hooks() -> Vec<RegisteredHook> {
     let claude_dir = match dirs_next::home_dir() {
         Some(d) => d.join(".claude"),
         None => {
-            tracing::debug!("Cannot determine home directory for global settings");
+            tracing::warn!("Cannot determine home directory for global hooks");
             return Vec::new();
         }
     };
     let settings_path = claude_dir.join("settings.json");
     if !settings_path.exists() {
-        tracing::debug!("No settings.json at {}", settings_path.display());
+        tracing::warn!("No settings.json at {}", settings_path.display());
         return Vec::new();
     }
+
+    tracing::info!("Reading hooks from {}", settings_path.display());
 
     let content = match fs::read_to_string(&settings_path) {
         Ok(c) => c,
@@ -60,7 +62,26 @@ pub fn load_global_settings_hooks() -> Vec<RegisteredHook> {
 
     let hooks_value = match value.get("hooks") {
         Some(h) if h.is_object() => h,
-        _ => return Vec::new(),
+        None => {
+            tracing::warn!("No 'hooks' field in {}", settings_path.display());
+            return Vec::new();
+        }
+        Some(h) => {
+            tracing::warn!(
+                "'hooks' field in {} is not an object (type: {})",
+                settings_path.display(),
+                if h.is_array() {
+                    "array"
+                } else if h.is_string() {
+                    "string"
+                } else if h.is_null() {
+                    "null"
+                } else {
+                    "other"
+                }
+            );
+            return Vec::new();
+        }
     };
 
     let hooks_config: HooksConfig = match serde_json::from_value(hooks_value.clone()) {

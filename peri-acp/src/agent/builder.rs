@@ -437,6 +437,12 @@ pub fn build_agent(
     // Hook middleware groups
     // 收集所有 hooks（在 hook_groups 被 move 之前，供 CompactMiddleware 和 HookMiddleware 共用）
     let all_hooks: Vec<RegisteredHook> = hook_groups.iter().flatten().cloned().collect();
+    tracing::info!(
+        groups = hook_groups.len(),
+        total_hooks = all_hooks.len(),
+        session_start = hook_session_start,
+        "Builder: assembling HookMiddleware from groups"
+    );
     let mut executor = executor;
     if !hook_groups.is_empty() {
         let hook_llm_factory: Arc<
@@ -449,6 +455,7 @@ pub fn build_agent(
             if group.is_empty() {
                 continue;
             }
+            let group_size = group.len();
             let mw = peri_middlewares::hooks::HookMiddleware::with_session_start(
                 group,
                 hook_llm_factory.clone(),
@@ -458,6 +465,13 @@ pub fn build_agent(
                 permission_mode.clone(),
                 provider_name.clone(),
                 hook_session_start && i == 0,
+            );
+            tracing::info!(
+                group_index = i,
+                group_size,
+                "Builder: HookMiddleware group {} created with {} hooks",
+                i,
+                group_size
             );
             executor = executor.add_middleware(Box::new(mw));
         }

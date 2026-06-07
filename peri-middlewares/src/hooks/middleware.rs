@@ -257,6 +257,18 @@ impl HookMiddleware {
                         new_input: new_input.clone(),
                     };
                 }
+                HookAction::PermissionOverride { decision, reason } => {
+                    // Phase 2: 权限覆盖决策暂不改变实际权限行为，仅记录
+                    tracing::debug!(
+                        "PermissionOverride from hook: {:?} (reason: {:?})",
+                        decision,
+                        reason
+                    );
+                    final_action = HookAction::PermissionOverride {
+                        decision: decision.clone(),
+                        reason: reason.clone(),
+                    };
+                }
                 _ => {}
             }
         }

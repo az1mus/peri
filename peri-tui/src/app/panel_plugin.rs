@@ -635,8 +635,8 @@ impl App {
         marketplace: &str,
     ) -> anyhow::Result<()> {
         use peri_middlewares::plugin::{
-            install_plugin, load_installed_plugins, load_known_marketplaces, marketplaces_cache_dir,
-            InstallScope, MarketplaceManager,
+            install_plugin, load_installed_plugins, load_known_marketplaces,
+            marketplaces_cache_dir, InstallScope, MarketplaceManager,
         };
 
         // 1. 检查 marketplace 是否存在
@@ -655,26 +655,19 @@ impl App {
         let installed = load_installed_plugins(None).unwrap_or_default();
         let plugin_id = format!("{}@{}", name, marketplace);
         if installed.plugins.iter().any(|p| p.id == plugin_id) {
-            self.session_mgr
-                .current_mut()
-                .messages
-                .view_messages
-                .push(crate::app::MessageViewModel::system(format!(
+            self.session_mgr.current_mut().messages.view_messages.push(
+                crate::app::MessageViewModel::system(format!(
                     "插件 '{}' 已安装，无需重复安装",
                     plugin_id
-                )));
+                )),
+            );
             return Ok(());
         }
 
         // 3. 推送进度消息
-        self.session_mgr
-            .current_mut()
-            .messages
-            .view_messages
-            .push(crate::app::MessageViewModel::system(format!(
-                "正在安装 {}@{} ...",
-                name, marketplace
-            )));
+        self.session_mgr.current_mut().messages.view_messages.push(
+            crate::app::MessageViewModel::system(format!("正在安装 {}@{} ...", name, marketplace)),
+        );
 
         // 4. Spawn 异步安装
         let name = name.to_string();
@@ -687,8 +680,14 @@ impl App {
 
         tokio::spawn(async move {
             let result = install_plugin(
-                &name, &mkt, InstallScope::User, &cache_dir, &claude_dir, None,
-            ).await;
+                &name,
+                &mkt,
+                InstallScope::User,
+                &cache_dir,
+                &claude_dir,
+                None,
+            )
+            .await;
             let plugin_id = format!("{}@{}", name, mkt);
             let (success, msg) = match &result {
                 Ok(r) => (true, format!("已安装: {} v{}", r.id, r.version)),
@@ -730,14 +729,9 @@ impl App {
         };
 
         // 2. 推送进度消息
-        self.session_mgr
-            .current_mut()
-            .messages
-            .view_messages
-            .push(crate::app::MessageViewModel::system(format!(
-                "正在刷新 marketplace '{}' ...",
-                name
-            )));
+        self.session_mgr.current_mut().messages.view_messages.push(
+            crate::app::MessageViewModel::system(format!("正在刷新 marketplace '{}' ...", name)),
+        );
 
         // 3. Spawn 后台刷新
         let name = name.to_string();
@@ -748,9 +742,10 @@ impl App {
             match refresh_marketplace(&source, &name).await {
                 Ok((_manifest, install_location)) => {
                     if let Ok(mut marketplaces) = load_known_marketplaces(None) {
-                        if let Some(entry) = marketplaces.iter_mut().find(|km| {
-                            MarketplaceManager::extract_name(&km.source) == name
-                        }) {
+                        if let Some(entry) = marketplaces
+                            .iter_mut()
+                            .find(|km| MarketplaceManager::extract_name(&km.source) == name)
+                        {
                             entry.install_location = install_location;
                             entry.last_updated = chrono::Utc::now().to_rfc3339();
                             let _ = save_known_marketplaces(&marketplaces, None);
