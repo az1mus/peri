@@ -94,7 +94,7 @@ pub(crate) fn build_subagent_middlewares(
 }
 
 /// 独立（非方法）版本的 SubagentStart/SubagentStop hook 触发逻辑
-async fn fire_subagent_lifecycle_hooks_static(
+pub(crate) async fn fire_subagent_lifecycle_hooks_static(
     registered_hooks: &[RegisteredHook],
     event: HookEvent,
     cwd: &str,

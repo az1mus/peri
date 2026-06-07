@@ -1,3 +1,4 @@
+pub mod bg;
 pub mod channel;
 pub mod context_cmd;
 pub mod cost;

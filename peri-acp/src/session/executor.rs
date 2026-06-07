@@ -165,6 +165,38 @@ pub async fn execute_prompt(
             .or_else(|| Some(provider.clone().into_model().into()))
     };
 
+    // Context window (前置计算，供 bg event pump 和 compact 使用)
+    let context_window = provider.context_window();
+    let context_1m = peri_config.config.context_1m.unwrap_or(false);
+    let effective_context_window = if context_1m {
+        1_000_000
+    } else {
+        context_window
+    };
+
+    // 前置创建 bg 通道（BgCommand 等 Immediate 命令依赖）
+    let (bg_event_tx_for_cmd, mut bg_event_rx_for_cmd) =
+        tokio::sync::mpsc::unbounded_channel::<ExecutorEvent>();
+    let (bg_notification_tx_for_cmd, _bg_notification_rx_for_cmd) =
+        tokio::sync::mpsc::unbounded_channel();
+    let bg_registry_for_cmd = Arc::new(peri_middlewares::subagent::BackgroundTaskRegistry::new(
+        bg_notification_tx_for_cmd,
+    ));
+
+    // BgCommand 事件的 bg event pump（必须在命令拦截之前启动，Immediate 命令才能发事件）
+    {
+        let bg_cmd_sink = Arc::clone(&event_sink);
+        let bg_cmd_sid = session_id.clone();
+        let bg_cmd_cw = effective_context_window;
+        tokio::spawn(async move {
+            while let Some(bg_event) = bg_event_rx_for_cmd.recv().await {
+                bg_cmd_sink
+                    .push_event(&bg_cmd_sid, &bg_event, bg_cmd_cw)
+                    .await;
+            }
+        });
+    }
+
     // Command interception — check if content is a slash command before building agent.
     if let Some(text) = content.text_content().strip_prefix('/') {
         if !text.is_empty() {
@@ -187,6 +219,8 @@ pub async fn execute_prompt(
                         cancel_token: cancel.clone(),
                         thread_store: thread_store.clone(),
                         thread_id: thread_id.clone(),
+                        bg_event_sender: Some(bg_event_tx_for_cmd.clone()),
+                        bg_registry: Some(bg_registry_for_cmd.clone()),
                     };
                     let result = tokio::select! {
                         r = cmd.execute(ctx) => r,
@@ -228,13 +262,6 @@ pub async fn execute_prompt(
     };
 
     // Context budget (computed once, uses compact_config from above)
-    let context_window = provider.context_window();
-    let context_1m = peri_config.config.context_1m.unwrap_or(false);
-    let effective_context_window = if context_1m {
-        1_000_000
-    } else {
-        context_window
-    };
     let budget = ContextBudget::new(effective_context_window)
         .with_auto_compact_threshold(compact_config.auto_compact_threshold)
         .with_warning_threshold(compact_config.micro_compact_threshold);

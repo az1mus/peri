@@ -260,6 +260,8 @@ mod tests {
             cancel_token: peri_agent::agent::AgentCancellationToken::new(),
             thread_store: None,
             thread_id: None,
+            bg_event_sender: None,
+            bg_registry: None,
         }
     }
 

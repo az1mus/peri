@@ -3,11 +3,13 @@ mod background;
 mod built_in_agents;
 mod fork;
 mod skill_preload;
+pub mod spawner;
 mod tool;
 pub use agent_result::AgentResultTool;
 pub use background::{BackgroundTask, BackgroundTaskRegistry, BackgroundTaskStatus};
 pub use built_in_agents::{get_built_in_agent, list_built_in_agents, BuiltInAgent};
 pub use skill_preload::SkillPreloadMiddleware;
+pub use spawner::{spawn_background_fork, BgForkConfig, BgForkDirectiveKind, BgForkSpawned};
 pub use tool::SubAgentTool;
 
 use parking_lot::RwLock;

@@ -3,6 +3,7 @@
 //! 定义命令 trait、注册表、执行上下文和结果类型。
 //! 命令在 executor 入口拦截，`Immediate` 类型不构建 agent 直接执行。
 
+pub mod bg;
 pub mod clear;
 pub mod compact;
 pub mod rewind;
@@ -46,6 +47,13 @@ pub struct CommandContext {
     pub thread_store: Option<Arc<dyn peri_agent::thread::ThreadStore>>,
     /// 当前会话的 thread ID，配合 thread_store 使用。
     pub thread_id: Option<String>,
+    /// 后台任务事件的发送通道（BgCommand 等 Immediate 命令依赖）。
+    /// Option 因为非 bg 命令路径不需要。BgCommand 总是 expect 它是 Some。
+    pub bg_event_sender:
+        Option<tokio::sync::mpsc::UnboundedSender<peri_agent::agent::events::AgentEvent>>,
+    /// 后台任务注册中心（BgCommand 等 Immediate 命令依赖）。
+    /// Option 因为非 bg 命令路径不需要。BgCommand 总是 expect 它是 Some。
+    pub bg_registry: Option<Arc<peri_middlewares::subagent::BackgroundTaskRegistry>>,
 }
 
 /// 命令执行结果。
@@ -133,6 +141,7 @@ impl Default for CommandRegistry {
 /// 创建包含所有内置命令的默认注册表。
 pub fn default_command_registry() -> CommandRegistry {
     let mut reg = CommandRegistry::new();
+    reg.register(Box::new(bg::BgCommand));
     reg.register(Box::new(compact::CompactCommand));
     reg.register(Box::new(clear::ClearCommand));
     reg.register(Box::new(rewind::RewindCommand));
