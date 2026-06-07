@@ -232,6 +232,7 @@ fn test_load_from_real_project_dir() {
 }
 
 #[test]
+#[ignore = "需要 ~/.claude/settings.json 真实文件，CI 环境不存在"]
 fn test_load_global_settings_hooks_real_file() {
     // 读取真实 ~/.claude/settings.json 并验证 hooks 解析
     let settings_path = dirs_next::home_dir()
