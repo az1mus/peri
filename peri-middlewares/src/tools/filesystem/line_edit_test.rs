@@ -24,6 +24,7 @@ async fn test_单hunk替换() {
         std::fs::read_to_string(dir.path().join("f.txt")).unwrap(),
         "aaa\nBBB\nccc\n"
     );
+    assert!(result.contains("@@ L1-3:"), "应包含 hunk 行号范围: {result}");
 }
 
 // ─── 2. 多 hunk 同文件（从后往前应用）─────────────────────────────────
@@ -51,6 +52,9 @@ async fn test_多hunk同文件() {
         std::fs::read_to_string(dir.path().join("f.txt")).unwrap(),
         "aaa\nBBB\nccc\nddd\neee\nfff\nGGG\nhhh\n"
     );
+    // 验证 tool_result 包含两个 hunk 的行号
+    assert!(result.contains("@@ L1-3:"), "应包含第一个 hunk 行号: {result}");
+    assert!(result.contains("@@ L6-8:"), "应包含第二个 hunk 行号: {result}");
 }
 
 // ─── 3. 跨文件多 patch ──────────────────────────────────────────────
@@ -102,6 +106,8 @@ async fn test_插入新行() {
         std::fs::read_to_string(dir.path().join("f.txt")).unwrap(),
         "aaa\nbbb\nxxx\nccc\n"
     );
+    // 插入后行号范围应反映实际变化
+    assert!(result.contains("@@ L"), "应包含行号信息: {result}");
 }
 
 // ─── 5. 删除行（纯 - 行）─────────────────────────────────────────────
@@ -433,6 +439,78 @@ fn handle_keys(app: &mut App, input: Input) {
     }
 }
 
+// ─── 单行 hunk 行号格式（非范围） ──────────────────────────────────
+
+#[tokio::test]
+async fn test_单行hunk行号格式() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(dir.path().join("f.txt"), "aaa\nbbb\nccc\nddd\n").unwrap();
+    let tool = make_tool(&dir);
+    let result = tool
+        .invoke(serde_json::json!({
+            "patches": [{
+                "file_path": "f.txt",
+                "diff": "--- a/f.txt\n+++ b/f.txt\n@@ -2,1 +2,1 @@\n-bbb\n+BBB"
+            }]
+        }))
+        .await
+        .unwrap();
+    assert!(result.contains("✓"), "应成功: {result}");
+    // 单行 hunk 应显示 L2 而非 L2-L2
+    assert!(result.contains("@@ L2:"), "单行应显示 L2: {result}");
+    assert!(!result.contains("L2-L2"), "单行不应显示范围: {result}");
+}
+
+// ─── 文件首行 hunk 的上下文不越界 ──────────────────────────────────
+
+#[tokio::test]
+async fn test_首行hunk上下文不越界() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(dir.path().join("f.txt"), "aaa\nbbb\nccc\n").unwrap();
+    let tool = make_tool(&dir);
+    let result = tool
+        .invoke(serde_json::json!({
+            "patches": [{
+                "file_path": "f.txt",
+                "diff": "--- a/f.txt\n+++ b/f.txt\n@@ -1,1 +1,1 @@\n-aaa\n+AAA"
+            }]
+        }))
+        .await
+        .unwrap();
+    assert!(result.contains("✓"), "应成功: {result}");
+    assert!(result.contains("@@ L1:"), "首行 hunk 应显示 L1: {result}");
+}
+
+// ─── 多 hunk 输出包含行号 ──────────────────────────────────────────
+
+#[tokio::test]
+async fn test_多hunk输出包含行号() {
+    let lines: Vec<String> = (0..100).map(|i| format!("line{}", i)).collect();
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(dir.path().join("big.txt"), format!("{}\n", lines.join("\n"))).unwrap();
+    let tool = make_tool(&dir);
+
+    // 10 个 hunk，每个替换 1 行
+    let mut hunks = String::new();
+    for i in (0..10).rev() {
+        let line_no = i * 10 + 1;
+        hunks.push_str(&format!(
+            "@@ -{line_no},1 +{line_no},1 @@\n line{}\n+LINE{}\n",
+            i * 10, i * 10
+        ));
+    }
+    let result = tool
+        .invoke(serde_json::json!({
+            "patches": [{
+                "file_path": "big.txt",
+                "diff": format!("--- a/big.txt\n+++ b/big.txt\n{hunks}")
+            }]
+        }))
+        .await
+        .unwrap();
+    assert!(!result.contains("✗"), "不应有失败: {result}");
+    assert!(result.contains("@@ L"), "应包含行号: {result}");
+}
 fn update_hints(app: &mut App) {
     // existing hint update
 }
