@@ -52,11 +52,14 @@ pub(super) fn handle_popups(app: &mut App, input: &Input) -> Option<Action> {
             // Up/Down move option cursor within current question
             Input { key: Key::Up, .. } => app.ask_user_move(-1),
             Input { key: Key::Down, .. } => app.ask_user_move(1),
-            // Space toggles selection
+            // Space: custom input 模式插入空格，否则切换选项
             Input {
                 key: Key::Char(' '),
                 ..
-            } => app.ask_user_toggle(),
+            } => {
+                app.ask_user_edit_key(input.clone());
+                app.ask_user_toggle();
+            }
             // Text input (custom input mode) — use shared edit function
             _ => {
                 app.ask_user_edit_key(input.clone());
