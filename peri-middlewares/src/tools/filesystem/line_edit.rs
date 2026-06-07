@@ -230,14 +230,24 @@ impl BaseTool for LineEditTool {
                     .count();
 
                 // replacement_lines = context + add（移除 remove 行）
+                // Context 行使用文件当前行内容，避免 bottom-to-top 应用时
+                // 被后续（更高 line_idx）hunk 修改的内容被还原为原值
+                let mut old_pos = 0usize; // Context+Remove 在原文件中的偏移
                 let replacement_lines: Vec<String> = mh
                     .hunk
                     .lines
                     .iter()
                     .filter_map(|dl| match dl {
-                        DiffLine::Context(s) => Some(s.clone()),
+                        DiffLine::Context(_) => {
+                            let pos = old_pos;
+                            old_pos += 1;
+                            Some(lines.get(line_idx + pos).cloned().unwrap_or_default())
+                        }
                         DiffLine::Add(s) => Some(s.clone()),
-                        DiffLine::Remove(_) => None,
+                        DiffLine::Remove(_) => {
+                            old_pos += 1;
+                            None
+                        }
                     })
                     .collect();
 

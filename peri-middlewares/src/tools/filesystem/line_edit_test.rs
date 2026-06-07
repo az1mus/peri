@@ -1074,7 +1074,7 @@ async fn test_复现_共享context行两hunk同位置() {
 @@ -3,1 +5,1 @@
 -BBB
 +DDD
- "#;
+"#;
 
     let result = tool
         .invoke(serde_json::json!({
