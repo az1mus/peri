@@ -60,11 +60,10 @@
 
 > SubAgent 的调用效率和产出质量。按 SubAgent 类型分层分析。
 
-1. ✅ **空转 SubAgent** —— 编辑型 SubAgent（general-purpose 等）中无 Write/LineEdit/Edit 产出却消耗 N≥5 条消息的比例。非编辑型（explore/web-researcher/verification/hello-agent/plan）排除在外——其本职不含编辑任务。类型通过父线程 Agent 工具调用的 `subagent_type` 参数判定
+1. ✅ **内置 Agent 分类分析** —— 按 `subagent_type` 分组，统计各类数量、均消息数、工具使用模式（搜索/编辑/执行占比）、Top 工具。编辑型中无 Write/LineEdit/Edit 产出的判定为空转。非编辑型（explore/web-researcher/verification/hello-agent/plan）排除在空转检测外。类型通过父线程 Agent 工具调用的 `subagent_type` 参数判定
 2. ✅ **SubAgent 消息量** —— `threads.message_count` 分布（P50/P95/max）
 3. ✅ **SubAgent 工具错误率** —— tool 消息 is_error 占比
-4. ✅ **SubAgent 产出比** —— 编辑类工具调用 / 总 tool_use block 数。按类型分层：编辑型与探索型分别统计，避免探索型拉低整体产出比
-5. ✅ **SubAgent 类型分布** —— 各 subagent_type 的数量、均消息数、工具使用模式（搜索类 vs 编辑类占比），用于识别特化机会
+4. ✅ **SubAgent 产出比** —— 编辑类工具调用 / 总 tool_use block 数。按类型分层：编辑型与探索型分别统计
 
 ## 使用方式
 
