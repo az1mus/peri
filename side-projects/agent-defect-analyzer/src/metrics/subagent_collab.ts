@@ -820,6 +820,135 @@ function analyzeGeneralPurposeResearch(
 }
 
 // ═══════════════════════════════════════════════════
+// 会话导出：供人工评估
+// ═══════════════════════════════════════════════════
+
+function parseExportCount(): number {
+  const idx = process.argv.indexOf("--export");
+  if (idx < 0) return 0;
+  const val = parseInt(process.argv[idx + 1], 10);
+  return val > 0 ? val : 0;
+}
+
+function exportGeneralPurposeSessions(
+  loader: DataLoader,
+  subAgentThreads: ThreadRow[],
+  typeMap: Map<string, string>,
+  exportCount: number,
+): void {
+  if (exportCount <= 0) return;
+
+  const fs = require("fs");
+  const path = require("path");
+  const exportDir = path.join(
+    path.dirname(new URL(import.meta.url).pathname),
+    "..",
+    "..",
+    "exports",
+  );
+  if (!fs.existsSync(exportDir)) fs.mkdirSync(exportDir, { recursive: true });
+
+  const gpThreads = subAgentThreads.filter(
+    (t) => typeMap.get(t.id) === "general-purpose" && t.parent_thread_id,
+  );
+
+  if (gpThreads.length === 0) {
+    console.log(chalk.yellow("  没有 general-purpose SubAgent 可导出"));
+    return;
+  }
+
+  printSeparator();
+  printSection(`导出 general-purpose 会话文本（前 ${exportCount} 个）`);
+
+  // 按消息数降序，取前 N 个
+  const selected = [...gpThreads]
+    .sort((a, b) => b.message_count - a.message_count)
+    .slice(0, exportCount);
+
+  for (let i = 0; i < selected.length; i++) {
+    const sa = selected[i];
+    const parentMsgs = loader.loadMessages(sa.parent_thread_id!);
+    const childMsgs = loader.loadMessages(sa.id);
+
+    // 找父线程中创建此 SubAgent 的 Agent 调用
+    let parentPrompt = "(未提取到 prompt)";
+    for (const m of parentMsgs) {
+      const parsed = DataLoader.parseContent(m.content);
+      if (!parsed || parsed.role !== "assistant") continue;
+      const blocks: ContentBlock[] = Array.isArray(parsed.content) ? parsed.content : [];
+      for (const block of blocks) {
+        if (block.type === "tool_use" && block.name === "Agent") {
+          const tp = (block.input as any)?.prompt;
+          if (tp) parentPrompt = typeof tp === "string" ? tp : JSON.stringify(tp);
+        }
+      }
+    }
+
+    // 构建会话文本
+    let text = "";
+    text += `═`.repeat(80) + "\n";
+    text += `General-purpose SubAgent 会话 #${i + 1}\n`;
+    text += `═`.repeat(80) + "\n";
+    text += `ID: ${sa.id}\n`;
+    text += `消息数: ${sa.message_count}\n`;
+    text += `创建时间: ${sa.created_at}\n`;
+    text += `更新時間: ${sa.updated_at}\n`;
+    text += `狀態: ${sa.agent_status}\n`;
+    text += "\n";
+    text += `── 父线程 prompt ──\n`;
+    text += parentPrompt + "\n";
+    text += "\n";
+    text += `── SubAgent 消息序列（${childMsgs.length} 条）──\n`;
+
+    for (let j = 0; j < childMsgs.length; j++) {
+      const msg = childMsgs[j];
+      const parsed = DataLoader.parseContent(msg.content);
+
+      text += `\n[#${j}] ${msg.role}\n`;
+
+      if (!parsed) {
+        text += `  (parse error)\n`;
+        continue;
+      }
+
+      if (parsed.role === "user" || parsed.role === "system") {
+        const content = typeof parsed.content === "string" ? parsed.content : JSON.stringify(parsed.content);
+        text += `  ${content.slice(0, 500)}\n`;
+      } else if (parsed.role === "assistant") {
+        const blocks: ContentBlock[] = Array.isArray(parsed.content) ? parsed.content : [];
+        for (const block of blocks) {
+          if (block.type === "text") {
+            text += `  [text] ${(block as any).text.slice(0, 300)}\n`;
+          } else if (block.type === "tool_use") {
+            const tu = block as any;
+            const argsStr = typeof tu.input === "object" ? JSON.stringify(tu.input).slice(0, 200) : String(tu.input || "").slice(0, 200);
+            text += `  [tool_use] ${tu.name} @${tu.id.slice(0, 8)} ${argsStr}\n`;
+          } else if (block.type === "reasoning" || block.type === "thinking") {
+            const rt = (block as any).text || "";
+            text += `  [${block.type}] ${rt.slice(0, 100)}\n`;
+          }
+        }
+      } else if (parsed.role === "tool") {
+        const tc = parsed as any;
+        const result = typeof tc.content === "string" ? tc.content : JSON.stringify(tc.content);
+        text += `  [tool_result] ${tc.tool_call_id?.slice(0, 8) || "?"} error=${tc.is_error || false} ${result.slice(0, 300)}\n`;
+      }
+    }
+
+    const filePath = path.join(
+      exportDir,
+      `gp_session_${sa.id.slice(0, 8)}_${sa.message_count}msgs.txt`,
+    );
+    fs.writeFileSync(filePath, text, "utf-8");
+    console.log(`  ${chalk.green("✓")} ${filePath}`);
+  }
+
+  console.log(
+    chalk.dim(`\n  导出完成，文件位于 ${exportDir}/`),
+  );
+}
+
+// ═══════════════════════════════════════════════════
 // 辅助
 // ═══════════════════════════════════════════════════
 
@@ -906,6 +1035,10 @@ function main(): void {
 
   // ── 研究方向：general-purpose 场景特化 ──
   analyzeGeneralPurposeResearch(loader, filteredSubAgents, typeMap);
+
+  // ── 导出会话文本 ──
+  const exportCount = parseExportCount();
+  exportGeneralPurposeSessions(loader, filteredSubAgents, typeMap, exportCount);
 
   loader.close();
 }

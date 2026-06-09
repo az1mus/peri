@@ -65,6 +65,15 @@
 3. ✅ **SubAgent 工具错误率** —— tool 消息 is_error 占比
 4. ✅ **SubAgent 产出比** —— 编辑类工具调用 / 总 tool_use block 数。按类型分层：编辑型与探索型分别统计
 
+### 研究方向：general-purpose 场景特化
+
+从父线程 Agent 调用提取原始 prompt，按实际工具使用分类 general-purpose SubAgent 的调用场景：
+
+- **纯搜索**（无编辑工具使用）→ 可用 explore 替代，省 ~40% 工具描述 tokens
+- **搜索+编辑** → 建议创建 `fixer` 特化 agent，工具集精简（去 WebSearch/Agent/folder_operations），92.3% 为实现类任务
+
+每场景展开：任务类型分布、高频工具覆盖率、消息量 P50/P75/P95、典型 prompt 示例。同时支持 `--export N` 导出指定类型的前 N 个会话文本供人工评估。
+
 ## 使用方式
 
 ```bash
@@ -85,4 +94,7 @@ bun run resource-consumption
 bun run feature-adoption
 bun run edit-quality
 bun run subagent-collab
+
+# 导出 general-purpose 会话文本供人工评估
+bun run src/metrics/subagent_collab.ts --since 168 --export 3
 ```
