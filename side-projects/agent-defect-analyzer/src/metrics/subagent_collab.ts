@@ -12,7 +12,6 @@ import chalk from "chalk";
 // ═══════════════════════════════════════════════════
 
 const EDIT_OUTPUT_TOOLS = new Set(["LineEdit", "Edit", "Write"]);
-const EMPTY_RUN_MIN_MESSAGES = 5;
 
 /** 非编辑型 SubAgent 类型：这些 agent 的本职工作就不是编辑文件 */
 const NON_EDITING_TYPES = new Set([
@@ -31,7 +30,6 @@ interface SubAgentAnalysis {
   thread: ThreadRow;
   messages: MessageRow[];
   subagentType: string;
-  hasEditOutput: boolean;
   toolUseCount: number;
   editToolUseCount: number;
   toolErrorCount: number;
@@ -45,16 +43,16 @@ interface SubAgentAnalysis {
 function analyzeAgentClassification(subAgents: SubAgentAnalysis[]): void {
   printSection("指标 1：内置 Agent 分类分析");
 
-  const editingAgents = subAgents.filter(
+  const editingCount = subAgents.filter(
     (sa) => !NON_EDITING_TYPES.has(sa.subagentType),
-  );
-  const nonEditingAgents = subAgents.filter(
+  ).length;
+  const nonEditingCount = subAgents.filter(
     (sa) => NON_EDITING_TYPES.has(sa.subagentType),
-  );
+  ).length;
 
   printMetric("SubAgent 总数", subAgents.length);
-  printMetric("编辑型", editingAgents.length);
-  printMetric("非编辑型", nonEditingAgents.length, ` (${[...NON_EDITING_TYPES].join(", ")})`);
+  printMetric("编辑型", editingCount);
+  printMetric("非编辑型", nonEditingCount, ` (${[...NON_EDITING_TYPES].join(", ")})`);
 
   // ── 构建类型数据 ──
   const typeProfiles = new Map<
@@ -68,9 +66,6 @@ function analyzeAgentClassification(subAgents: SubAgentAnalysis[]): void {
       searchPct: number;
       editPct: number;
       execPct: number;
-      emptyRunCount: number;
-      emptyRunRate: string;
-      errorCount: number;
     }
   >();
 
@@ -85,9 +80,6 @@ function analyzeAgentClassification(subAgents: SubAgentAnalysis[]): void {
         searchPct: 0,
         editPct: 0,
         execPct: 0,
-        emptyRunCount: 0,
-        emptyRunRate: "N/A",
-        errorCount: 0,
       });
     }
     const p = typeProfiles.get(sa.subagentType)!;
@@ -120,14 +112,6 @@ function analyzeAgentClassification(subAgents: SubAgentAnalysis[]): void {
     p.execPct = [...p.toolCounts.entries()]
       .filter(([t]) => EXEC_TOOLS.has(t))
       .reduce((s, [, c]) => s + c, 0) / (t || 1);
-
-    // 空转率（仅编辑型）
-    if (!NON_EDITING_TYPES.has(p.agents[0]?.subagentType ?? "")) {
-      p.emptyRunCount = p.agents.filter(
-        (sa) => !sa.hasEditOutput && sa.messages.length >= EMPTY_RUN_MIN_MESSAGES,
-      ).length;
-      p.emptyRunRate = pct(p.emptyRunCount, p.count || 1);
-    }
   }
 
   // ── 逐一分析各类型 ──
@@ -143,15 +127,13 @@ function analyzeAgentClassification(subAgents: SubAgentAnalysis[]): void {
         : "研究";
 
     printSection(type);
-    console.log(chalk.dim(`  分类: ${cat}  方向: ${direction}型  数量: ${p.count}  均消息: ${Math.round(p.totalMsg / p.count)}  总调用: ${p.totalCall}`));
+    console.log(
+      chalk.dim(
+        `  分类: ${cat}  方向: ${direction}型  数量: ${p.count}  均消息: ${Math.round(p.totalMsg / p.count)}  总调用: ${p.totalCall}`,
+      ),
+    );
 
-    // 空转（仅编辑型）
-    if (!isNonEditing) {
-      const icon = p.emptyRunCount / (p.count || 1) > 0.4 ? chalk.red : chalk.yellow;
-      console.log(chalk.dim(`  空转: ${icon(p.emptyRunCount)}/${p.count} (${p.emptyRunRate})`));
-    }
-
-    // 工具占比
+    // 工具占比 Top 8
     console.log("");
     const topTools = [...p.toolCounts.entries()]
       .sort((a, b) => b[1] - a[1])
@@ -169,24 +151,6 @@ function analyzeAgentClassification(subAgents: SubAgentAnalysis[]): void {
     printBar("搜索", p.searchPct);
     printBar("编辑", p.editPct);
     printBar("执行", p.execPct);
-
-    // 空转详情（仅编辑型且有空转）
-    if (!isNonEditing && p.emptyRunCount > 0) {
-      console.log("");
-      printTable(
-        ["空转子Agent ID", "消息数", "创建时间"],
-        p.agents
-          .filter((sa) => !sa.hasEditOutput && sa.messages.length >= EMPTY_RUN_MIN_MESSAGES)
-          .sort((a, b) => b.thread.message_count - a.thread.message_count)
-          .slice(0, 5)
-          .map((sa) => [
-            sa.thread.id.slice(0, 14) + "...",
-            String(sa.thread.message_count),
-            sa.thread.created_at.slice(0, 16).replace("T", " "),
-          ]),
-      );
-    }
-
     console.log("");
   }
 }
@@ -271,22 +235,6 @@ function buildSubAgentTypeMap(
   }
 
   return typeMap;
-}
-
-/** 检查消息序列中是否有编辑产出 */
-function hasEditOutput(messages: MessageRow[]): boolean {
-  for (const msg of messages) {
-    const parsed = DataLoader.parseContent(msg.content);
-    if (!parsed || parsed.role !== "assistant") continue;
-    const ai = parsed as AiContent;
-    const blocks: ContentBlock[] = Array.isArray(ai.content) ? ai.content : [];
-    for (const block of blocks) {
-      if (block.type === "tool_use" && EDIT_OUTPUT_TOOLS.has(block.name)) {
-        return true;
-      }
-    }
-  }
-  return false;
 }
 
 // ═══════════════════════════════════════════════════
@@ -642,7 +590,6 @@ function main(): void {
       thread: t,
       messages,
       subagentType: saType,
-      hasEditOutput: saType === "unknown" ? false : hasEditOutput(messages),
       toolUseCount: 0,
       editToolUseCount: 0,
       toolErrorCount: 0,
