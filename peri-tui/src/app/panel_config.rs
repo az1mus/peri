@@ -8,7 +8,7 @@ impl App {
             .peri_config
             .get_or_insert_with(PeriConfig::default);
         let panel = config_panel::ConfigPanel::from_config(cfg);
-        self.open_panel(PanelState::Config(panel));
+        self.open_panel(PanelState::Config(Box::new(panel)));
     }
 
     /// 关闭 /config 面板

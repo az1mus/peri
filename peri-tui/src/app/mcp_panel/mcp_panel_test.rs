@@ -39,9 +39,9 @@
             make_server_info("c", ClientStatus::Connected),
         ];
         app.global_panels
-            .open(crate::app::panel_manager::PanelState::Mcp(McpPanel::new(
+            .open(crate::app::panel_manager::PanelState::Mcp(Box::new(McpPanel::new(
                 servers,
-            )));
+            ))));
 
         for _ in 0..5 {
             app.mcp_panel_move_up();
@@ -58,9 +58,9 @@
     async fn test_mcp_panel_close() {
         let (mut app, _handle) = crate::app::App::new_headless(80, 24).await;
         app.global_panels
-            .open(crate::app::panel_manager::PanelState::Mcp(McpPanel::new(
+            .open(crate::app::panel_manager::PanelState::Mcp(Box::new(McpPanel::new(
                 vec![],
-            )));
+            ))));
         assert!(app.global_panels.is_active(crate::app::PanelKind::Mcp));
         app.mcp_panel_close();
         assert!(!app.global_panels.is_active(crate::app::PanelKind::Mcp));
@@ -71,9 +71,9 @@
         let (mut app, _handle) = crate::app::App::new_headless(80, 24).await;
         let servers = vec![make_server_info("test-srv", ClientStatus::Connected)];
         app.global_panels
-            .open(crate::app::panel_manager::PanelState::Mcp(McpPanel::new(
+            .open(crate::app::panel_manager::PanelState::Mcp(Box::new(McpPanel::new(
                 servers,
-            )));
+            ))));
 
         app.mcp_panel_request_delete();
         assert_eq!(
@@ -96,9 +96,9 @@
         let mut srv = make_server_info("http-srv", ClientStatus::Connected);
         srv.transport_type = "http".to_string();
         app.global_panels
-            .open(crate::app::panel_manager::PanelState::Mcp(McpPanel::new(
+            .open(crate::app::panel_manager::PanelState::Mcp(Box::new(McpPanel::new(
                 vec![srv],
-            )));
+            ))));
 
         app.mcp_panel_enter();
         match &app.global_panels.get::<McpPanel>().unwrap().view {
@@ -120,9 +120,9 @@
             make_server_info("b", ClientStatus::Connected),
         ];
         app.global_panels
-            .open(crate::app::panel_manager::PanelState::Mcp(McpPanel::new(
+            .open(crate::app::panel_manager::PanelState::Mcp(Box::new(McpPanel::new(
                 servers,
-            )));
+            ))));
         app.global_panels
             .get_mut::<McpPanel>()
             .unwrap()

@@ -22,7 +22,7 @@ impl App {
             return;
         }
         let panel = McpPanel::new(infos);
-        self.open_panel(PanelState::Mcp(panel));
+        self.open_panel(PanelState::Mcp(Box::new(panel)));
     }
 
     /// 打开 Cron 面板

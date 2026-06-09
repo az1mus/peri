@@ -2021,9 +2021,9 @@ async fn test_login_select_provider_shows_feedback() {
     };
     app.services.peri_config = Some(cfg);
     app.session_mgr.current_mut().session_panels.open(
-        crate::app::panel_manager::PanelState::Login(LoginPanel::from_config(
+        crate::app::panel_manager::PanelState::Login(Box::new(LoginPanel::from_config(
             app.services.peri_config.as_ref().unwrap(),
-        )),
+        ))),
     );
     // 光标移到第二个 Provider
     app.session_mgr

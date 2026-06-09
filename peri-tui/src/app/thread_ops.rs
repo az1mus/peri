@@ -330,7 +330,7 @@ impl App {
             .filter(|s| !s.is_empty());
 
         let browser = ThreadBrowser::new(filtered, self.services.thread_store.clone(), branch);
-        self.open_panel(PanelState::ThreadBrowser(browser));
+        self.open_panel(PanelState::ThreadBrowser(Box::new(browser)));
     }
 }
 

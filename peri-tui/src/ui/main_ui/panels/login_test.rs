@@ -27,10 +27,10 @@
         panel.browse_list.set_items(vec![(); 1]);
         app.session_mgr.current_mut()
             .session_panels
-            .open(crate::app::panel_manager::PanelState::Login(panel.clone()));
+            .open(crate::app::panel_manager::PanelState::Login(Box::new(panel.clone())));
         app.session_mgr.current_mut()
             .session_panels
-            .open(crate::app::panel_manager::PanelState::Login(panel));
+            .open(crate::app::panel_manager::PanelState::Login(Box::new(panel)));
         handle
             .terminal
             .draw(|f| crate::ui::main_ui::render(f, &mut app))
@@ -71,10 +71,10 @@
         };
         app.session_mgr.current_mut()
             .session_panels
-            .open(crate::app::panel_manager::PanelState::Login(panel.clone()));
+            .open(crate::app::panel_manager::PanelState::Login(Box::new(panel.clone())));
         app.session_mgr.current_mut()
             .session_panels
-            .open(crate::app::panel_manager::PanelState::Login(panel));
+            .open(crate::app::panel_manager::PanelState::Login(Box::new(panel)));
         handle
             .terminal
             .draw(|f| crate::ui::main_ui::render(f, &mut app))

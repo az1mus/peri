@@ -18,7 +18,7 @@
         let (mut app, mut handle) = App::new_headless(120, 30).await;
         let panel = McpPanel::new(servers);
         app.global_panels
-            .open(crate::app::panel_manager::PanelState::Mcp(panel));
+            .open(crate::app::panel_manager::PanelState::Mcp(Box::new(panel)));
         handle
             .terminal
             .draw(|f| crate::ui::main_ui::render(f, &mut app))
@@ -53,7 +53,7 @@
         srv.url = Some("https://example.com/mcp".to_string());
         let panel = McpPanel::new(vec![srv]);
         app.global_panels
-            .open(crate::app::panel_manager::PanelState::Mcp(panel));
+            .open(crate::app::panel_manager::PanelState::Mcp(Box::new(panel)));
         app.mcp_panel_enter();
 
         match &app.global_panels.get::<McpPanel>().unwrap().view {
@@ -103,7 +103,7 @@
 
         let panel = McpPanel::new(vec![plugin_srv]);
         app.global_panels
-            .open(crate::app::panel_manager::PanelState::Mcp(panel));
+            .open(crate::app::panel_manager::PanelState::Mcp(Box::new(panel)));
 
         // Enter detail view
         app.mcp_panel_enter();
@@ -155,7 +155,7 @@
 
         let panel = McpPanel::new(vec![srv_a, srv_b]);
         app.global_panels
-            .open(crate::app::panel_manager::PanelState::Mcp(panel.clone()));
+            .open(crate::app::panel_manager::PanelState::Mcp(Box::new(panel.clone())));
 
         // 选择第二个 server 并进入详情
         app.mcp_panel_move_down();
@@ -198,7 +198,7 @@
 
         let panel = McpPanel::new(vec![connected_srv, uninit_srv]);
         app.global_panels
-            .open(crate::app::panel_manager::PanelState::Mcp(panel.clone()));
+            .open(crate::app::panel_manager::PanelState::Mcp(Box::new(panel.clone())));
 
         // 排序后 "new-server" < "old-server"（字母序），uninit 在位置 0（默认 cursor=0）
         app.mcp_panel_enter();
