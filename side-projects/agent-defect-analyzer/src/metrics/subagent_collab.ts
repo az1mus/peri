@@ -4,7 +4,7 @@
 //! 用法：bun run src/metrics/subagent_collab.ts --since 24
 
 import { DataLoader, type ThreadRow, type MessageRow, type AiContent, type ContentBlock } from "../data/loader.js";
-import { avg, median, p50, p95, pct, formatSize, parseSinceArg, printHeader, printSection, printMetric, printWarning, printTable, printBar, printSeparator } from "../lib/utils.js";
+import { avg, median, p50, p95, pct, quantile, formatSize, parseSinceArg, printHeader, printSection, printMetric, printWarning, printTable, printBar, printSeparator } from "../lib/utils.js";
 import chalk from "chalk";
 
 // ═══════════════════════════════════════════════════
@@ -525,6 +525,301 @@ const SEARCH_TOOLS = new Set(["Read", "Grep", "Glob", "WebFetch", "WebSearch", "
 const EXEC_TOOLS = new Set(["Bash", "Agent", "AgentResult", "TodoWrite", "AskUserQuestion"]);
 
 // ═══════════════════════════════════════════════════
+// 研究方向：general-purpose 场景特化
+// ═══════════════════════════════════════════════════
+
+/** 任务关键词分类 */
+function classifyTask(prompt: string): string {
+  const lower = prompt.toLowerCase();
+  if (/implement|实现|write code|编写|修改|添加|新增/.test(lower)) return "实现";
+  if (/fix|修复|bug|issue/.test(lower)) return "修复";
+  if (/explore|探索|search|查找|了解|调研|分析/.test(lower)) return "探索";
+  if (/review|审查|检查|评审/.test(lower)) return "审查";
+  if (/refactor|重构/.test(lower)) return "重构";
+  if (/create|创建|新建|生成/.test(lower)) return "创建";
+  return "其他";
+}
+
+function analyzeGeneralPurposeResearch(
+  loader: DataLoader,
+  subAgentThreads: ThreadRow[],
+  typeMap: Map<string, string>,
+): void {
+  printSeparator();
+  printSection("研究方向：general-purpose 场景特化分析");
+  console.log(
+    chalk.dim("  目标：分析 general-purpose SubAgent 的实际使用模式，为创建新的特化 agent 提供依据\n"),
+  );
+
+  const gpThreads = subAgentThreads.filter(
+    (t) => typeMap.get(t.id) === "general-purpose",
+  );
+
+  if (gpThreads.length === 0) {
+    printWarning("无数据", "未找到 general-purpose SubAgent");
+    return;
+  }
+
+  // 按父线程分组，提取 Agent tool_use 的 prompt
+  const byParent = new Map<string, { threadId: string; msgCount: number }[]>();
+  for (const t of gpThreads) {
+    if (!t.parent_thread_id) continue;
+    if (!byParent.has(t.parent_thread_id)) byParent.set(t.parent_thread_id, []);
+    byParent.get(t.parent_thread_id)!.push({ threadId: t.id, msgCount: t.message_count });
+  }
+
+  // 对每个 general-purpose 实例收集数据
+  interface GpInstance {
+    id: string;
+    msgCount: number;
+    prompt: string;
+    taskType: string;
+    tools: string[];
+  }
+  const instances: GpInstance[] = [];
+
+  for (const [pid, children] of byParent) {
+    const msgs = loader.loadMessages(pid);
+    const agentCalls: { subagentType: string; prompt: string }[] = [];
+
+    for (const m of msgs) {
+      const parsed = DataLoader.parseContent(m.content);
+      if (!parsed || parsed.role !== "assistant") continue;
+      const blocks: ContentBlock[] = Array.isArray(parsed.content) ? parsed.content : [];
+      for (const block of blocks) {
+        if (block.type === "tool_use" && block.name === "Agent") {
+          const input = block.input as any;
+          agentCalls.push({
+            subagentType: input?.subagent_type || input?.type || "",
+            prompt:
+              typeof input?.prompt === "string"
+                ? input.prompt
+                : JSON.stringify(input?.prompt || ""),
+          });
+        }
+      }
+    }
+
+    for (let i = 0; i < children.length && i < agentCalls.length; i++) {
+      const call = agentCalls[i];
+      if (call.subagentType !== "general-purpose") continue;
+
+      const childMsgs = loader.loadMessages(children[i].threadId);
+      const tools = new Set<string>();
+      for (const cm of childMsgs) {
+        const parsed = DataLoader.parseContent(cm.content);
+        if (!parsed || parsed.role !== "assistant") continue;
+        const blocks: ContentBlock[] = Array.isArray(parsed.content)
+          ? parsed.content
+          : [];
+        for (const block of blocks) {
+          if (block.type === "tool_use") tools.add(block.name);
+        }
+      }
+
+      instances.push({
+        id: children[i].threadId,
+        msgCount: children[i].msgCount,
+        prompt: call.prompt,
+        taskType: classifyTask(call.prompt),
+        tools: [...tools].sort(),
+      });
+    }
+  }
+
+  // ── 分类 ──
+  type PatternGroup = {
+    pattern: string;
+    instances: GpInstance[];
+    avgMsg: number;
+    topTools: [string, number][];
+    replaceableBy: string;
+    estimatedSavings: string;
+  };
+
+  const groups: PatternGroup[] = [
+    {
+      pattern: "纯搜索",
+      instances: [],
+      avgMsg: 0,
+      topTools: [],
+      replaceableBy: "explore",
+      estimatedSavings: "工具描述 ~40%, 迭代上限 20→节省消息",
+    },
+    {
+      pattern: "搜索+编辑",
+      instances: [],
+      avgMsg: 0,
+      topTools: [],
+      replaceableBy: "fixer（新特化）",
+      estimatedSavings: "工具描述 ~25%, 减少 WebSearch 等低使用率工具",
+    },
+    {
+      pattern: "纯编辑",
+      instances: [],
+      avgMsg: 0,
+      topTools: [],
+      replaceableBy: "fixer",
+      estimatedSavings: "去掉搜索类工具描述",
+    },
+    {
+      pattern: "纯执行",
+      instances: [],
+      avgMsg: 0,
+      topTools: [],
+      replaceableBy: "—",
+      estimatedSavings: "—",
+    },
+  ];
+
+  for (const inst of instances) {
+    const hasEdit = inst.tools.some((t) =>
+      ["Write", "Edit", "LineEdit", "HashlineEdit"].includes(t),
+    );
+    const hasSearch = inst.tools.some((t) => SEARCH_TOOLS.has(t));
+    const hasBash = inst.tools.some((t) => t === "Bash");
+
+    let pattern: string;
+    if (hasEdit && hasSearch) pattern = "搜索+编辑";
+    else if (hasEdit && !hasSearch) pattern = "纯编辑";
+    else if (!hasEdit && hasSearch) pattern = "纯搜索";
+    else if (hasBash) pattern = "纯执行";
+    else pattern = "其他";
+
+    const g = groups.find((g) => g.pattern === pattern);
+    if (g) g.instances.push(inst);
+  }
+
+  // ── 输出 ──
+  // 总览
+  printSection("场景分布");
+  console.log("");
+  printTable(
+    ["模式", "数量", "占比", "均消息", "可替换为", "预计节省"],
+    groups
+      .filter((g) => g.instances.length > 0)
+      .map((g) => {
+        const msgAll = g.instances.map((i) => i.msgCount);
+        return [
+          g.pattern,
+          String(g.instances.length),
+          pct(g.instances.length, instances.length || 1),
+          String(Math.round(avg(msgAll))),
+          g.replaceableBy,
+          g.estimatedSavings,
+        ];
+      }),
+  );
+
+  // 逐模式展开
+  for (const g of groups.filter((g) => g.instances.length > 0)) {
+    printSection(`${g.pattern}（${g.instances.length} 个）`);
+
+    // 任务类型分布
+    const taskDist = new Map<string, number>();
+    for (const inst of g.instances) {
+      taskDist.set(inst.taskType, (taskDist.get(inst.taskType) || 0) + 1);
+    }
+    console.log(
+      "  任务类型: " +
+        [...taskDist.entries()]
+          .sort((a, b) => b[1] - a[1])
+          .map(([t, c]) => `${t}(${c})`)
+          .join(", "),
+    );
+
+    // 工具使用
+    const toolAll = new Map<string, number>();
+    for (const inst of g.instances) {
+      for (const t of inst.tools) {
+        toolAll.set(t, (toolAll.get(t) || 0) + 1);
+      }
+    }
+    const topTools = [...toolAll.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 6);
+    console.log(
+      "  高频工具: " +
+        topTools
+          .map(
+            ([t, c]) =>
+              `${t}(${pct(c, g.instances.length)})`,
+          )
+          .join(", "),
+    );
+
+    // 消息量分布
+    const msgVals = g.instances.map((i) => i.msgCount).sort((a, b) => a - b);
+    console.log(
+      `  消息量: P50=${p50(msgVals).toFixed(0)}  P75=${quantile(msgVals, 0.75).toFixed(0)}  P95=${p95(msgVals).toFixed(0)}  max=${msgVals[msgVals.length - 1]}`,
+    );
+
+    // 典型 prompt 示例
+    const samples = g.instances
+      .sort((a, b) => b.msgCount - a.msgCount)
+      .slice(0, 3);
+    console.log("  典型任务:");
+    for (const s of samples) {
+      const trimmed = s.prompt.length > 120 ? s.prompt.slice(0, 120) + "..." : s.prompt;
+      console.log(chalk.dim(`    [${s.msgCount}条] ${trimmed.replace(/\n/g, " / ")}`));
+    }
+
+    console.log("");
+  }
+
+  // ── 推荐 ──
+  printSection("特化建议");
+
+  const pureSearch = groups.find((g) => g.pattern === "纯搜索");
+  const searchEdit = groups.find((g) => g.pattern === "搜索+编辑");
+
+  if (pureSearch && pureSearch.instances.length > 0) {
+    const pctGp = pct(pureSearch.instances.length, gpThreads.length);
+    console.log(
+      chalk.green(
+        `  1. ${pureSearch.instances.length} 个 (${pctGp}) general-purpose 仅做搜索/阅读 → 可用 explore 替代`,
+      ),
+    );
+    console.log(chalk.dim(`     预计节省: 无编辑工具描述 + 迭代上限降至 20 轮`));
+    const msgAll = pureSearch.instances.map((i) => i.msgCount);
+    console.log(
+      chalk.dim(
+        `     当前消耗: 共 ${msgAll.reduce((a, b) => a + b, 0)} 条消息, 均 ${Math.round(avg(msgAll))} 条/次`,
+      ),
+    );
+  }
+
+  if (searchEdit && searchEdit.instances.length > 0) {
+    const pctGp = pct(searchEdit.instances.length, gpThreads.length);
+    console.log(
+      chalk.yellow(
+        `  2. ${searchEdit.instances.length} 个 (${pctGp}) 搜索+编辑 → 建议创建特化 "fixer" agent`,
+      ),
+    );
+    console.log(
+      chalk.dim(`     工具集: Read + Grep + Glob + Bash + LineEdit + Write + Edit + TodoWrite`),
+    );
+    console.log(
+      chalk.dim(`     去掉: WebSearch(0%), WebFetch(0%), folder_operations(~10%), Agent(0%)`),
+    );
+    console.log(
+      chalk.dim(
+        `     预计节省: 工具描述 tokens ~25% ，每会话省 ~50 条工具描述`,
+      ),
+    );
+
+    // 展示 fixer agent 的任务类型
+    const taskDist = new Map<string, number>();
+    for (const inst of searchEdit.instances) taskDist.set(inst.taskType, (taskDist.get(inst.taskType) || 0) + 1);
+    console.log(
+      chalk.dim(`     覆盖任务: ${[...taskDist.entries()].sort((a,b) => b[1]-a[1]).map(([t,c]) => `${t}(${c})`).join(", ")}`),
+    );
+  }
+
+  console.log("");
+}
+
+// ═══════════════════════════════════════════════════
 // 辅助
 // ═══════════════════════════════════════════════════
 
@@ -609,7 +904,8 @@ function main(): void {
   // ── 指标 4：产出比 ──
   analyzeOutputRatio(analyses);
 
-  loader.close();
+  // ── 研究方向：general-purpose 场景特化 ──
+  analyzeGeneralPurposeResearch(loader, filteredSubAgents, typeMap);
 
   loader.close();
 }
