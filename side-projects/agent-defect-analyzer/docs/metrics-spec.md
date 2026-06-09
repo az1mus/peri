@@ -70,7 +70,7 @@
 从父线程 Agent 调用提取原始 prompt，按实际工具使用分类 general-purpose SubAgent 的调用场景：
 
 - **纯搜索**（无编辑工具使用）→ 可用 explore 替代，省 ~40% 工具描述 tokens
-- **搜索+编辑** → 建议创建 `fixer` 特化 agent，工具集精简（去 WebSearch/Agent/folder_operations），92.3% 为实现类任务
+- **搜索+编辑** → 建议创建 `coder` 特化 agent，工具集精简（去 WebSearch/Agent/folder_operations），92.3% 为实现类任务
 
 每场景展开：任务类型分布、高频工具覆盖率、消息量 P50/P75/P95、典型 prompt 示例。同时支持 `--export N` 导出指定类型的前 N 个会话文本供人工评估。
 

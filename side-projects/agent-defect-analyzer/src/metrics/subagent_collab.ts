@@ -651,7 +651,7 @@ function analyzeGeneralPurposeResearch(
       instances: [],
       avgMsg: 0,
       topTools: [],
-      replaceableBy: "fixer（新特化）",
+      replaceableBy: "coder（新特化）",
       estimatedSavings: "工具描述 ~25%, 减少 WebSearch 等低使用率工具",
     },
     {
@@ -659,7 +659,7 @@ function analyzeGeneralPurposeResearch(
       instances: [],
       avgMsg: 0,
       topTools: [],
-      replaceableBy: "fixer",
+      replaceableBy: "coder",
       estimatedSavings: "去掉搜索类工具描述",
     },
     {
@@ -793,7 +793,7 @@ function analyzeGeneralPurposeResearch(
     const pctGp = pct(searchEdit.instances.length, gpThreads.length);
     console.log(
       chalk.yellow(
-        `  2. ${searchEdit.instances.length} 个 (${pctGp}) 搜索+编辑 → 建议创建特化 "fixer" agent`,
+        `  2. ${searchEdit.instances.length} 个 (${pctGp}) 搜索+编辑 → 建议创建特化 "coder" agent`,
       ),
     );
     console.log(
@@ -808,7 +808,7 @@ function analyzeGeneralPurposeResearch(
       ),
     );
 
-    // 展示 fixer agent 的任务类型
+    // 展示 coder agent 的任务类型
     const taskDist = new Map<string, number>();
     for (const inst of searchEdit.instances) taskDist.set(inst.taskType, (taskDist.get(inst.taskType) || 0) + 1);
     console.log(
