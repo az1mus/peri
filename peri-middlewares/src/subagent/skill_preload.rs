@@ -8,7 +8,7 @@ use peri_agent::{
     middleware::r#trait::Middleware,
 };
 
-use crate::skills::{list_skills, load_global_skills_dir};
+use crate::skills::{list_skills, loader::resolve_skill_dirs};
 
 /// 从文本中提取 `/skill-name` 模式的 skill 名称
 ///
@@ -61,6 +61,7 @@ pub fn extract_skill_names_from_text(text: &str) -> Vec<String> {
 pub struct SkillPreloadMiddleware {
     skill_names: Vec<String>,
     cwd: String,
+    extra_dirs: Vec<PathBuf>,
 }
 
 impl SkillPreloadMiddleware {
@@ -68,25 +69,14 @@ impl SkillPreloadMiddleware {
         Self {
             skill_names,
             cwd: cwd.to_string(),
+            extra_dirs: Vec::new(),
         }
     }
 
-    /// 解析 skills 搜索目录：`~/.claude/skills/` → globalConfig → `{cwd}/.claude/skills/`
-    fn resolve_dirs(&self) -> Vec<PathBuf> {
-        let user_dir = dirs_next::home_dir()
-            .map(|h| h.join(".claude").join("skills"))
-            .unwrap_or_default();
-
-        let global_dir = load_global_skills_dir();
-
-        let project_dir = PathBuf::from(&self.cwd).join(".claude").join("skills");
-
-        let mut dirs = vec![user_dir];
-        if let Some(g) = global_dir {
-            dirs.push(g);
-        }
-        dirs.push(project_dir);
-        dirs
+    /// 追加额外 skills 搜索目录（用于插件 skills 路径注入）
+    pub fn with_extra_dirs(mut self, dirs: Vec<PathBuf>) -> Self {
+        self.extra_dirs = dirs;
+        self
     }
 }
 
@@ -118,7 +108,7 @@ impl<S: State> Middleware<S> for SkillPreloadMiddleware {
             return Ok(());
         }
 
-        let dirs = self.resolve_dirs();
+        let dirs = resolve_skill_dirs(&self.cwd, &self.extra_dirs);
         let names_lower: Vec<String> = skill_names.iter().map(|s| s.to_lowercase()).collect();
 
         // 在 blocking 线程中扫描目录 + 读取文件内容

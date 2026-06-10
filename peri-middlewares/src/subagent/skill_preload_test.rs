@@ -322,3 +322,30 @@
         let names = extract_skill_names_from_text("/foo/bar");
         assert!(names.is_empty(), "/foo/bar 含 '/' 应被整体拒绝");
     }
+
+    #[tokio::test]
+    async fn test_preload_from_extra_dirs() {
+        // Arrange: skill 不在标准路径，只在 extra_dirs 中
+        let dir = tempdir().unwrap();
+        let extra_dir = dir.path().join("plugin-skills");
+        std::fs::create_dir_all(&extra_dir).unwrap();
+        write_skill(&extra_dir, "plugin-skill", "插件技能");
+
+        let mw = SkillPreloadMiddleware::new(
+            vec!["plugin-skill".to_string()],
+            "/nonexistent/cwd", // cwd 下没有 skill
+        )
+        .with_extra_dirs(vec![extra_dir]);
+        let mut state = AgentState::new("/nonexistent/cwd");
+
+        // Act
+        mw.before_agent(&mut state).await.unwrap();
+
+        // Assert: 应从 extra_dirs 找到并注入 Ai + Tool = 2 条消息
+        assert_eq!(state.messages().len(), 2, "应从 extra_dirs 找到 skill 并注入");
+        let tool_content = state.messages()[1].content();
+        assert!(
+            tool_content.contains("Skill content for plugin-skill"),
+            "Tool 结果应包含插件 skill 全文"
+        );
+    }
