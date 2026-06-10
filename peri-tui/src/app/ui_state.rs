@@ -47,6 +47,8 @@ pub struct UiState {
     pub bg_bar_area: Option<ratatui::layout::Rect>,
     /// Write/Edit 工具结果内联 diff 是否可见
     pub diff_visible: bool,
+    /// Rewind 完成后待回填到输入框的用户消息文本
+    pub pending_rewind_text: Option<String>,
 }
 
 impl UiState {
@@ -83,6 +85,7 @@ impl UiState {
             bg_bar_cursor: None,
             bg_bar_area: None,
             diff_visible: diff_enabled,
+            pending_rewind_text: None,
         }
     }
 }
