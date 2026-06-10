@@ -184,7 +184,7 @@ pub async fn run_acp_server(
             }
             IncomingMessage::Notification { method, params } => {
                 let sessions = sessions.lock().await;
-                handle_notification(&method, &params, &sessions);
+                handle_notification(&method, &params, &sessions, &cfg);
             }
             IncomingMessage::Response { .. } => {
                 // Responses are routed internally by the transport's pending map.

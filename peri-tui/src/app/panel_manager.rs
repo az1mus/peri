@@ -289,6 +289,11 @@ impl PanelContext<'_> {
             None => return,
         };
         let acp = acp_client.clone();
+        tracing::debug!(
+            active_provider = %cfg.config.active_provider_id,
+            active_alias = %cfg.config.active_alias,
+            "sync_acp_config: sending update_config"
+        );
         tokio::task::block_in_place(|| {
             tokio::runtime::Handle::current().block_on(async {
                 if let Err(e) = acp.update_config(&cfg).await {

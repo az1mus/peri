@@ -464,10 +464,18 @@ pub(crate) async fn handle_request(
             *cfg.peri_config.write() = new_cfg.clone();
 
             if let Some(p) = LlmProvider::from_config(&new_cfg) {
+                tracing::debug!(
+                    provider = %p.display_name(),
+                    model = %p.model_name(),
+                    "update_config: provider updated"
+                );
                 *cfg.provider.write() = p;
             } else {
                 tracing::warn!(
-                    "update_config: LlmProvider::from_config returned None, provider not updated"
+                    active_provider = %new_cfg.config.active_provider_id,
+                    active_alias = %new_cfg.config.active_alias,
+                    providers = new_cfg.config.providers.len(),
+                    "update_config: LlmProvider::from_config returned None, provider NOT updated"
                 );
             }
 
