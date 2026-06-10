@@ -249,6 +249,11 @@ impl App {
                 (true, false, false)
             }
             AgentEvent::StateSnapshot(msgs) => {
+                tracing::debug!(
+                    snapshot_msgs = msgs.len(),
+                    origin_msgs_before = self.session_mgr.current().agent.origin_messages.len(),
+                    "StateSnapshot received in TUI"
+                );
                 // 子 Agent 的 StateSnapshot 不应污染父 Agent 的 origin_messages，
                 // 否则子 Agent 的全部内部消息会混入父 Agent 的对话历史和持久化。
                 if self.session_mgr.current_mut().agent.subagent_depth > 0 {

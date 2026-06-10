@@ -200,9 +200,16 @@ impl<L: ReactLLM, S: State> ReActAgent<L, S> {
         let cancel = cancel.unwrap_or_default();
 
         let human_msg = BaseMessage::human(input.content);
-        let mut snapshot_anchor: MessageId = human_msg.id();
+        let human_msg_id = human_msg.id();
+        // snapshot_anchor 指向 Human 消息之前的最后一条消息（通常是上一轮的 AI 消息或 System 消息）。
+        // index_after_id 返回 anchor 之后的位置，即 Human 消息的索引，确保 StateSnapshot 包含 Human 消息。
+        // 对于空历史（新会话），anchor 设为 human_msg.id()，此时 state 中已有该消息，
+        // index_after_id 返回其位置 +1，跳过 Human 消息——因此需要 fallback 机制。
+        // 非空历史时，anchor 指向 state 中最后一条消息（Human 之前），index_after_id 返回 Human 位置。
+        let pre_human_anchor = state.messages().last().map(|m| m.id());
         state.add_message(human_msg.clone());
         self.emit(AgentEvent::MessageAdded(human_msg));
+        let mut snapshot_anchor: MessageId = pre_human_anchor.unwrap_or(human_msg_id);
 
         // 从中间件收集工具，手动注册的同名工具优先级最高
         let middleware_tools = self.chain.collect_tools(state.cwd());

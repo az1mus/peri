@@ -16,6 +16,11 @@ impl App {
     pub(crate) fn open_rewind_prompt(&mut self) {
         let origin_messages = &self.session_mgr.current().agent.origin_messages;
 
+        tracing::debug!(
+            origin_messages_len = origin_messages.len(),
+            "open_rewind_prompt: checking origin_messages"
+        );
+
         if origin_messages.is_empty() {
             self.push_system_note("没有可回退的对话轮次".to_string());
             return;

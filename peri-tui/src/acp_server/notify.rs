@@ -9,6 +9,7 @@ use tracing::{debug, info};
 use agent_client_protocol::schema::{AvailableCommandsUpdate, SessionUpdate};
 
 use super::{AcpServerConfig, SessionState};
+use crate::app::agent::LlmProvider;
 use peri_acp::dispatch::config_update;
 use peri_middlewares::skills::SkillMetadata;
 
@@ -18,17 +19,71 @@ pub(crate) fn handle_notification(
     method: &str,
     params: &Value,
     sessions: &HashMap<String, SessionState>,
+    cfg: &AcpServerConfig,
 ) {
-    if method == "session/cancel" {
-        let session_id = extract_session_id(params, "");
-        if let Some(state) = sessions.get(session_id) {
-            if let Some(ref token) = state.cancel_token {
-                token.cancel();
-                info!(session_id = %session_id, "Cancel requested");
+    match method {
+        "session/cancel" => {
+            let session_id = extract_session_id(params, "");
+            if let Some(state) = sessions.get(session_id) {
+                if let Some(ref token) = state.cancel_token {
+                    token.cancel();
+                    info!(session_id = %session_id, "Cancel requested");
+                }
             }
         }
-    } else {
-        debug!(method = %method, "Unhandled notification");
+        "session/config_update" => {
+            // Two formats:
+            // 1. {"config": PeriConfig} — full config replace (from update_config)
+            // 2. {"configId": "model"/"provider", "value": "..."} — partial (from set_config_option)
+            if let Some(config_val) = params.get("config") {
+                let new_cfg: crate::config::PeriConfig = match serde_json::from_value(
+                    config_val.clone(),
+                ) {
+                    Ok(c) => c,
+                    Err(e) => {
+                        tracing::warn!(error = %e, "config_update notification: invalid config");
+                        return;
+                    }
+                };
+                tracing::info!(
+                    active_provider = %new_cfg.config.active_provider_id,
+                    provider_count = new_cfg.config.providers.len(),
+                    "config_update notification: full config replace"
+                );
+                *cfg.peri_config.write() = new_cfg.clone();
+                if let Some(p) = LlmProvider::from_config(&new_cfg) {
+                    *cfg.provider.write() = p;
+                }
+            } else if let (Some(config_id), Some(value)) = (
+                params.get("configId").and_then(|v| v.as_str()),
+                params.get("value").and_then(|v| v.as_str()),
+            ) {
+                match config_id {
+                    "model" => {
+                        let mut c = cfg.peri_config.write();
+                        c.config.active_alias = value.to_string();
+                        drop(c);
+                        let new_provider = {
+                            let c = cfg.peri_config.read();
+                            LlmProvider::from_config_for_alias(&c, value)
+                        };
+                        if let Some(p) = new_provider {
+                            tracing::info!(alias = %value, "config_update notification: model changed");
+                            *cfg.provider.write() = p;
+                        }
+                    }
+                    other => {
+                        tracing::debug!(config_id = %other, "config_update notification: unhandled configId");
+                    }
+                }
+            } else {
+                tracing::debug!("config_update notification: missing config/configId");
+            }
+            // No sessions to invalidate — pool will be built fresh on next session/new
+        }
+        _ => {
+            debug!(method = %method, "Unhandled notification");
+        }
     }
 }
 
