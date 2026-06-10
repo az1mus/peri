@@ -4,6 +4,7 @@ use serde::Deserialize;
 use serde_json::Value;
 
 use super::web_common::WEB_CREDIBILITY_WARNING;
+use crate::tools::output_persist::persist_truncated_output;
 
 /// Tavily 抓取后端地址
 const TAVILY_BASE_URL: &str = "https://tavily.claude-code-best.win";
@@ -41,7 +42,7 @@ const WEB_FETCH_DESCRIPTION: &str = r#"Fetches a web page by URL and returns its
 Usage:
 - Only http:// and https:// URLs are allowed
 - Content is returned as clean text extracted from the page
-- Results are truncated at 2000 lines
+- Results are truncated at 2000 lines; full content saved to a temp file when truncated
 - An optional 'prompt' parameter provides guidance for how to use the fetched content
 
 Security:
@@ -67,7 +68,11 @@ fn truncate_content(content: &str, max_lines: usize) -> String {
         content.to_string()
     } else {
         let truncated: String = lines[..max_lines].join("\n");
-        format!("{truncated}\n[内容已截断，原始内容共 {} 行]", lines.len())
+        let persist_hint = persist_truncated_output(content);
+        format!(
+            "{truncated}\n[内容已截断，原始内容共 {} 行]{persist_hint}",
+            lines.len()
+        )
     }
 }
 
@@ -165,3 +170,7 @@ impl BaseTool for WebFetchTool {
         Ok(result)
     }
 }
+
+#[cfg(test)]
+#[path = "web_fetch_test.rs"]
+mod web_fetch_test;
