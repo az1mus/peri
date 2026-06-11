@@ -10,7 +10,10 @@ use crate::ui::markdown::parse_markdown_default;
 use crate::ui::theme;
 
 /// 从工具名和入参构造预渲染的 diff 行（仅 Write/Edit 工具）
-fn build_diff_lines(name: &str, input: &serde_json::Value) -> Option<Vec<Line<'static>>> {
+pub(crate) fn build_diff_lines(
+    name: &str,
+    input: &serde_json::Value,
+) -> Option<Vec<Line<'static>>> {
     let diff_input = match name {
         "Edit" => {
             let old_string = input

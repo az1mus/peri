@@ -10,65 +10,6 @@ use crate::{
     },
 };
 
-/// 从工具名和入参构造预渲染的 diff 行（仅 Write/Edit 工具）
-fn try_build_diff_lines(
-    name: &str,
-    input: &serde_json::Value,
-) -> Option<Vec<ratatui::text::Line<'static>>> {
-    let diff_input = match name {
-        "Edit" => {
-            let old_string = input
-                .get("old_string")
-                .and_then(|v| v.as_str())
-                .unwrap_or("");
-            let new_string = input
-                .get("new_string")
-                .and_then(|v| v.as_str())
-                .unwrap_or("");
-            let file_path = input
-                .get("file_path")
-                .and_then(|v| v.as_str())
-                .unwrap_or("");
-            if old_string.is_empty() || file_path.is_empty() {
-                return None;
-            }
-            Some(peri_widgets::DiffInput {
-                file_path: file_path.to_string(),
-                old_content: old_string.to_string(),
-                new_content: new_string.to_string(),
-                is_new_file: false,
-                is_deleted_file: false,
-                is_binary: false,
-            })
-        }
-        "Write" => {
-            let content = input.get("content").and_then(|v| v.as_str()).unwrap_or("");
-            let file_path = input
-                .get("file_path")
-                .and_then(|v| v.as_str())
-                .unwrap_or("");
-            if content.is_empty() || file_path.is_empty() {
-                return None;
-            }
-            Some(peri_widgets::DiffInput {
-                file_path: file_path.to_string(),
-                old_content: String::new(),
-                new_content: content.to_string(),
-                is_new_file: true,
-                is_deleted_file: false,
-                is_binary: false,
-            })
-        }
-        _ => None,
-    }?;
-    let lines = peri_widgets::diff::render_diff(&diff_input, 80, &peri_widgets::DarkTheme);
-    if lines.is_empty() {
-        None
-    } else {
-        Some(lines)
-    }
-}
-
 // ─── 管线事件 ────────────────────────────────────────────────────────────────
 
 /// 管线处理事件后的输出动作
@@ -244,7 +185,7 @@ impl MessagePipeline {
                 let display = tool_display::format_tool_name(&ct.name);
                 let args = tool_display::format_tool_args(&ct.name, &ct.input, Some(&self.cwd));
                 let diff_lines = if !ct.is_error {
-                    try_build_diff_lines(&ct.name, &ct.input)
+                    crate::ui::message_view::build_diff_lines(&ct.name, &ct.input)
                 } else {
                     None
                 };
@@ -279,7 +220,7 @@ impl MessagePipeline {
             let display = tool_display::format_tool_name(&ct.name);
             let args = tool_display::format_tool_args(&ct.name, &ct.input, Some(&self.cwd));
             let diff_lines = if !ct.is_error {
-                try_build_diff_lines(&ct.name, &ct.input)
+                crate::ui::message_view::build_diff_lines(&ct.name, &ct.input)
             } else {
                 None
             };
