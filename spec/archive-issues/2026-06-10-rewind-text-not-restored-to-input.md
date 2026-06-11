@@ -1,3 +1,5 @@
+> 归档于 2026-06-11，原路径 spec/issues/2026-06-10-rewind-text-not-restored-to-input.md
+
 # Rewind 撤回消息后未将用户输入回填到输入框
 
 **状态**：Verified

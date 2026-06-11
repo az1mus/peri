@@ -1,3 +1,5 @@
+> 归档于 2026-06-11，原路径 spec/issues/2026-06-07-hindsight-mcp-server-init-failed.md
+
 # 插件 MCP 子进程缺少 CLAUDE_PLUGIN_ROOT/DATA 环境变量注入
 
 **状态**：Fixed

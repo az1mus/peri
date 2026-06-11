@@ -1,3 +1,5 @@
+> 归档于 2026-06-11，原路径 spec/issues/2026-06-10-skill-preload-cannot-load-plugin-skills.md
+
 # SkillPreloadMiddleware 无法加载插件提供的 Skill 全文
 
 **状态**：Verified

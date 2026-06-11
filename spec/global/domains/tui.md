@@ -1004,6 +1004,132 @@ submit_message(text)
 **涉及文件:** peri-tui/src/app/config_panel.rs, peri-tui/src/ui/main_ui/panels/config.rs, peri-tui/src/app/panel_config.rs, peri-tui/src/command/core/config.rs
 **CLAUDE.md 链接:** false
 
+### issue_2026-06-06-double-esc-rewind-unresponsive
+
+- **摘要:** 双击 ESC 偶发完全无响应（rewind 选择器不弹出）
+- **状态:** Fixed
+- **归档日期:** 2026-06-11
+- **关键词:** crossterm ESC 合并, 双击 ESC, 视觉反馈补偿
+- **问题本质:** crossterm 0.28.1 的 Parser 在同一轮 read_complete 中将两个 0x1B 字节合并为一个 Esc 事件，导致双击只产生一个事件
+- **通用模式:** 底层库无法修改时，通过应用层视觉反馈补偿用户体验——第一次 ESC 后显示状态栏提示，用户看到后可补按
+- **架构影响:** `rewind_pending_since` 机制增加了 2 秒自动过期 + 状态栏提示，与 `quit_pending_since` 模式一致
+- **涉及文件:** peri-tui/src/event/keyboard/normal_keys.rs, peri-tui/src/event/mod.rs, peri-tui/src/ui/main_ui/status_bar.rs
+
+### issue_2026-06-09-ask-user-textarea-position-one-line-too-high
+
+- **摘要:** AskUser 弹窗自定义输入 textarea 聚焦时比预期偏上一行
+- **状态:** Fixed
+- **归档日期:** 2026-06-11
+- **关键词:** 逻辑行 vs 视觉行, ScrollableArea overlay, Paragraph::line_count
+- **问题本质:** textarea overlay 的 Y 坐标使用逻辑行索引而非视觉行偏移。ScrollableArea 内部 Paragraph + WordWrapper 会因面板宽度换行，逻辑行索引 ≠ 视觉行位置
+- **通用模式:** 任何 overlay 组件定位必须区分逻辑行索引和视觉行偏移——前置内容有换行时两者不一致
+- **涉及文件:** peri-tui/src/ui/main_ui/popups/ask_user.rs, peri-tui/src/ui/main_ui/popups/ask_user_height.rs
+
+### issue_2026-06-06-bg-agent-subagent-group-display
+
+- **摘要:** 消息区域 SubAgentGroup 卡片完成后残留、未聚合、状态错误
+- **状态:** Fixed
+- **归档日期:** 2026-06-11
+- **关键词:** frozen_subagent_vms 过期, 后台 Agent 事件同步, reconcile 覆盖
+- **问题本质:** `handle_background_task_completed` 只更新 `view_messages`，不更新 pipeline 的 `subagent_stack`/`frozen_subagent_vms`。Done 触发 reconcile 时用过期 frozen VM 覆盖已正确更新的 UI 状态
+- **通用模式:** 后台异步任务完成时，必须同步更新所有相关状态层（UI + pipeline），否则 reconcile/rebuild 会用过期数据覆盖正确状态
+- **架构影响:** 新增 `MessagePipeline::notify_bg_completed` 方法，按 instance_id/agent_name 匹配并同步 SubAgentState + frozen VM
+- **涉及文件:** peri-tui/src/app/message_pipeline/mod.rs, peri-tui/src/app/agent_events_bg.rs, peri-tui/src/ui/message_view/aggregate.rs
+
+### issue_2026-06-06-bg-agent-bar-tool-count-always-zero
+
+- **摘要:** BG Agent Bar 始终显示 0 calls
+- **状态:** Fixed
+- **归档日期:** 2026-06-11
+- **关键词:** 后台 Agent 事件转发, BgToolStep, 工具调用计数
+- **问题本质:** bg agent 在 tokio::spawn 中独立运行，不共享 parent 的 event_handler。TUI 只收到 SubagentStarted 和 BackgroundTaskCompleted，中间的 ToolStart/ToolEnd 事件不到达 TUI pipeline
+- **通用模式:** 独立 tokio task 需要显式的事件转发机制——通过轻量级 event_handler 转发关键事件到主 pipeline
+- **架构影响:** 新增 `BgToolStep { child_thread_id }` 事件变体，bg agent builder 添加轻量 event_handler 转发
+- **涉及文件:** peri-agent/src/agent/events.rs, peri-middlewares/src/subagent/tool/execute_bg.rs, peri-tui/src/app/agent_events_bg.rs, peri-tui/src/ui/main_ui/bg_agent_bar.rs
+
+### issue_2026-06-06-plugin-marketplace-delete-not-persisted
+
+- **摘要:** Plugin 面板 marketplace 删除后重新打开面板仍在
+- **状态:** Fixed
+- **归档日期:** 2026-06-11
+- **关键词:** 名称提取不一致, 持久化逻辑重复, MarketplaceManager::extract_name
+- **问题本质:** `persist_marketplace_delete` 自行实现了名称提取逻辑，与 `MarketplaceManager::extract_name()` 不一致。File/Npm/Git/Url 四种类型的名称提取各有差异
+- **通用模式:** 持久化逻辑中的名称匹配必须复用统一的名称提取函数，禁止自行实现并行逻辑
+- **涉及文件:** peri-tui/src/app/plugin_panel/handlers/plugin_handlers/persistence.rs, peri-tui/src/app/plugin_panel/handlers/plugin_handlers/delete.rs
+
+### issue_2026-06-06-plugin-slash-command-marketplace-support
+
+- **摘要:** /plugin 命令缺少 marketplace add、install@marketplace、marketplace update 子命令
+- **状态:** Fixed
+- **归档日期:** 2026-06-11
+- **关键词:** 斜杠命令路由, CLI/UI 一致性, plugin 子命令
+- **问题本质:** /plugin 斜杠命令只打开面板，不支持子命令解析。CLI 和 Plugin Panel UI 已有实现但斜杠命令路径缺失
+- **通用模式:** 斜杠命令应与 CLI 子命令保持功能对等——已有 CLI 实现时斜杠命令可直接复用核心逻辑
+- **涉及文件:** peri-tui/src/command/panel/plugin.rs, peri-tui/src/cli_plugin.rs, peri-middlewares/src/plugin/marketplace/mod.rs
+
+### issue_2026-06-10-rewind-text-not-restored-to-input
+
+- **摘要:** Rewind 撤回消息后未将用户输入回填到输入框
+- **状态:** Fixed
+- **归档日期:** 2026-06-11
+- **关键词:** snapshot_anchor 偏移, 文本回填, rewind 用户体验
+- **问题本质:** `snapshot_anchor` 设为 `human_msg.id()` 后 `index_after_id` 返回 +1 导致 Human 消息被跳过；rewind_confirm 也缺少文本回填逻辑
+- **通用模式:** 截断/回退操作后应自动恢复用户输入到编辑区，复用已有的 textarea.insert_str() 机制
+- **架构影响:** snapshot_anchor 改为指向 Human 之前的消息 ID；空 state 用随机 sentinel ID 让 fallback 从 0 开始
+- **涉及文件:** peri-tui/src/app/agent_ops/rewind.rs, peri-agent/src/agent/executor/snapshot.rs, peri-tui/src/app/history_ops.rs
+
+### issue_2026-06-08-remove-tree-sitter-dependency
+
+- **摘要:** 移除 tree-sitter 依赖以减小二进制体积
+- **状态:** Closed
+- **归档日期:** 2026-06-11
+- **关键词:** 二进制体积, 依赖评估, tree-sitter AST
+- **问题本质:** tree-sitter AST 验证仅覆盖 5 种语言且被层 A/B 短路（拦截场景极少），但带来 0.56 MB 体积增长
+- **通用模式:** 依赖引入需评估 ROI——体积成本 vs 实际拦截率。层 A+B 已覆盖 95%+ 编辑错误场景时，层 C 收益不足以抵消依赖成本
+- **技术决策:** LineEdit 从三层验证退化为两层验证（sanity + brackets），移除 AST guard
+- **涉及文件:** peri-middlewares/Cargo.toml, peri-middlewares/src/tools/filesystem/line_edit_verify.rs, peri-middlewares/src/tools/filesystem/line_edit.rs
+
+### issue_2026-06-06-lineedit-escape-and-context-matching-issues
+
+- **摘要:** LineEdit 工具在转义字符串和上下文匹配场景中的降效问题
+- **状态:** Fixed
+- **归档日期:** 2026-06-11
+- **关键词:** escape_next, Rust lifetime, char literal 区分, brackets 验证
+- **问题本质:** brackets 验证器的 `verify_brackets` 函数在处理转义字符串、Rust lifetime 语法、char literal 时存在三类误判：`\"` 误关闭字符串、`'static` 误开字符串、`'m'` 误判为 lifetime
+- **通用模式:** 语法验证器需要完整的"状态机"思维——字符串/注释/转义/lifetime/char literal 各有独立的状态转换规则，不能简单字符匹配
+- **涉及文件:** peri-middlewares/src/tools/filesystem/line_edit_verify.rs, peri-middlewares/src/tools/filesystem/line_edit_match.rs
+
+### issue_2026-06-06-lineedit-bracket-false-positive
+
+- **摘要:** LineEdit bracket 校验对 Markdown 内容中 URL `://` 的误报
+- **状态:** Fixed
+- **归档日期:** 2026-06-11
+- **关键词:** 行注释检测, URL ://, brackets 误报
+- **问题本质:** `verify_brackets` 的 `//` 行注释检测遇到 URL `://` 时错误进入行注释模式，导致后续 `)` 被跳过，paren_depth 无法归零
+- **通用模式:** 行注释检测需检查前驱字符上下文——`://` 中的 `//` 不是注释，`prev_prev_char != Some(':')` 前置条件
+- **涉及文件:** peri-middlewares/src/tools/filesystem/line_edit_verify.rs
+
+### issue_2026-05-31-login-panel-switch-provider-ignored
+
+- **摘要:** Login 面板 / 快捷键切换 provider 后 ACP 侧实际未生效
+- **状态:** Fixed
+- **归档日期:** 2026-06-11
+- **关键词:** update_config 静默返回, 无 session 路径, ACP notification
+- **问题本质:** `client.rs` 的 `update_config()`/`set_config_option()` 在 `current_session_id == None` 时静默返回 `Ok(())`，config 从未到达 ACP server。代码假设"ACP Server 会从磁盘重新加载"不成立
+- **通用模式:** 配置更新路径必须覆盖"无活跃 session"的情况——通过 notification 机制直接更新 ACP server 侧 config
+- **架构影响:** 新增 `session/config_update` notification handler，无 session 时走 notification 路径更新 ACP server 配置
+- **涉及文件:** peri-tui/src/acp_client/client.rs, peri-tui/src/acp_server/notify.rs, peri-tui/src/acp_server/mod.rs
+
+### issue_2026-06-06-glm-anthropic-tool-result-id-500-regression
+
+- **摘要:** GLM Anthropic 兼容端口 500 回归: tool_result block 缺少 id 属性
+- **状态:** Closed
+- **归档日期:** 2026-06-11
+- **关键词:** GLM 回归, tool_result id, Anthropic 兼容, 多轮工具调用
+- **问题本质:** 5 月 15 日修复的 tool_result id 问题在 6 月 6 日 commit 后回归。代码层面 id 字段完整存在，可能是 GLM 网关对 thinking block 处理的验证路径差异导致
+- **通用模式:** 第三方 API 兼容层的回归难以从代码层面排查——需要实际请求体对比。搁置待复现时捕获请求体
+- **涉及文件:** peri-agent/src/llm/anthropic/invoke.rs, peri-agent/src/llm/anthropic/cache.rs
+
 ---
 
 ## 相关 Feature

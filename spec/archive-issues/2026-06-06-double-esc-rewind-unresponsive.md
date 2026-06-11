@@ -1,3 +1,5 @@
+> 归档于 2026-06-11，原路径 spec/issues/2026-06-06-double-esc-rewind-unresponsive.md
+
 # 双击 ESC 偶发完全无响应（rewind 选择器不弹出）
 
 **状态**：Fixed

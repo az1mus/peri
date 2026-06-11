@@ -1,3 +1,5 @@
+> 归档于 2026-06-11，原路径 spec/issues/2026-06-06-glm-anthropic-tool-result-id-500-regression.md
+
 # GLM Anthropic 兼容端口 500 回归: tool_result block 缺少 id 属性多轮工具调用再触发
 
 **状态**：Closed

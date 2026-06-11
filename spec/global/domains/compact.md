@@ -132,6 +132,17 @@
 **涉及文件:** peri-middlewares/src/compact_middleware.rs, peri-middlewares/src/compact_middleware_test.rs
 **CLAUDE.md 链接:** true
 
+### issue_2026-06-07-full-compact-loses-project-path-context
+
+- **摘要:** Full Compact 后 Agent 使用错误的项目路径前缀
+- **状态:** Fixed
+- **归档日期:** 2026-06-11
+- **关键词:** preprocess_messages, 工具参数丢失, cwd 注入, compact 摘要质量
+- **问题本质:** `preprocess_messages` 处理 Ai 消息时只保留工具调用名称，完全丢弃参数（含 file_path 等路径信息），摘要 LLM 无法知道操作的是哪个文件
+- **通用模式:** compact 摘要必须保留路径关键参数——工具名称不够，参数中的 file_path/path/command 是路径感知的核心信息
+- **架构影响:** `full_compact()` 增加 `cwd` 参数为摘要 LLM 提供路径锚点；`extract_recent_files` 兼容 file_path 和 path 两种参数名
+- **涉及文件:** peri-agent/src/agent/compact/full.rs, peri-agent/src/agent/compact/re_inject.rs, peri-middlewares/src/compact_middleware.rs
+
 ---
 
 ## 相关 Feature

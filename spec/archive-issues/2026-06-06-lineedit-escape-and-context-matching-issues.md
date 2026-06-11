@@ -1,3 +1,5 @@
+> 归档于 2026-06-11，原路径 spec/issues/2026-06-06-lineedit-escape-and-context-matching-issues.md
+
 # LineEdit 工具在转义字符串和上下文匹配场景中的降效问题
 
 **状态**：Fixed

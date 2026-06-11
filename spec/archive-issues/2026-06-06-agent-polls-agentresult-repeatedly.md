@@ -1,3 +1,5 @@
+> 归档于 2026-06-11，原路径 spec/issues/2026-06-06-agent-polls-agentresult-repeatedly.md
+
 # Agent 反复轮询 AgentResult 而非等待后台任务通知
 
 **状态**：Fixed

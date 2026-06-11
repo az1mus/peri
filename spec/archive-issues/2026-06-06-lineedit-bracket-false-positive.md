@@ -1,3 +1,5 @@
+> 归档于 2026-06-11，原路径 spec/issues/2026-06-06-lineedit-bracket-false-positive.md
+
 # LineEdit bracket 校验对 Markdown 内容中 URL `://` 的误报
 
 **状态**：Fixed

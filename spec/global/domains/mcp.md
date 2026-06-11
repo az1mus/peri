@@ -140,6 +140,17 @@ MCP HTTP 请求 → 401 + WWW-Authenticate
 **涉及文件:** peri-middlewares/src/process/mod.rs, peri-middlewares/src/mcp/client.rs, peri-middlewares/src/middleware/terminal.rs, peri-middlewares/src/hooks/executor.rs
 **CLAUDE.md 链接:** true
 
+### issue_2026-06-07-hindsight-mcp-server-init-failed
+
+- **摘要:** 插件 MCP 子进程缺少 CLAUDE_PLUGIN_ROOT/DATA 环境变量注入
+- **状态:** Fixed
+- **归档日期:** 2026-06-11
+- **关键词:** 插件 MCP 环境变量, CLAUDE_PLUGIN_ROOT, spawn_stdio_transport, 子进程 env
+- **问题本质:** `spawn_stdio_transport` 只注入 `.mcp.json` 的 `env` 字段，不注入 `CLAUDE_PLUGIN_ROOT`/`CLAUDE_PLUGIN_DATA`。插件启动脚本（如 run_mcp.sh）依赖这些变量定位 venv
+- **通用模式:** 子进程环境变量注入必须在"展开占位符"之外还包含"注入运行时环境变量"——两者是不同的数据流
+- **技术决策:** 在 `load_merged_config_full` 展开阶段将插件变量追加到 config.env，复用已有的 cmd.envs() 注入
+- **涉及文件:** peri-middlewares/src/mcp/client.rs, peri-middlewares/src/mcp/initialize.rs, peri-middlewares/src/mcp/config.rs
+
 ---
 
 ## 相关 Feature

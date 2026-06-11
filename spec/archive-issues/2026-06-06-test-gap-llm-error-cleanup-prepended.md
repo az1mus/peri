@@ -1,3 +1,5 @@
+> 归档于 2026-06-11，原路径 spec/issues/2026-06-06-test-gap-llm-error-cleanup-prepended.md
+
 # 测试缺口：LLM 错误路径下 system 消息 cleanup 行为无测试
 
 **状态**：✅ 已完成

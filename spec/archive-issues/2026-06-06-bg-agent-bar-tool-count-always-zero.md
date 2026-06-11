@@ -1,3 +1,5 @@
+> 归档于 2026-06-11，原路径 spec/issues/2026-06-06-bg-agent-bar-tool-count-always-zero.md
+
 # BG Agent Bar 始终显示 0 calls
 
 **状态**：Fixed

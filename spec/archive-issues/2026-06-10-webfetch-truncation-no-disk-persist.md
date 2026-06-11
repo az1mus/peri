@@ -1,3 +1,5 @@
+> 归档于 2026-06-11，原路径 spec/issues/2026-06-10-webfetch-truncation-no-disk-persist.md
+
 # WebFetch 截断后未落盘，长网页内容直接丢弃
 
 **状态**：Verified

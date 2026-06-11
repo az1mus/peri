@@ -1,3 +1,5 @@
+> 归档于 2026-06-11，原路径 spec/issues/2026-06-06-test-gap-hitl-cancel-race.md
+
 # HITL 审批与 Cancel 竞态条件缺少测试
 
 **状态**：✅ 已完成

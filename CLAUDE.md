@@ -59,7 +59,7 @@ scripts/start-tui.sh                 # 启动 TUI（RELAY_PORT=3001）
 
 **LLM 适配层**：`BaseModel` trait（OpenAI/Anthropic）→ `BaseModelReactLLM` → `ReactLLM`。`RetryableLLM<L>` 指数退避重试。
 
-**[TRAP]** `Interrupted`/`Error` + `Done` 互斥：`Interrupted`/`Error` 先 `request_rebuild()` + 添加通知，设 `reconcile_already_done=true`，后续 `Done` 跳过 `request_rebuild()` 防止覆盖通知。（详见 spec/global/domains/agent.md#issue_2026-05-25-interrupt-undo-last-user-message）**[TRAP]** Cancel 后历史不应无条件截断：ACP server 在 `result.ok==false` 时无条件 truncate history 会丢失 agent 已写入 state 的消息。应检查 `result.messages.len()` 判断是否有进展，有则保留。（详见 spec/global/domains/agent.md#issue_2026-05-26-ctrl-c-interrupt-causes-agent-amnesia）
+**[TRAP]** `Interrupted`/`Error` + `Done` 互斥：`Interrupted`/`Error` 先 `request_rebuild()` + 添加通知，设 `reconcile_already_done=true`，后续 `Done` 跳过 `request_rebuild()` 防止覆盖通知。（详见 spec/global/domains/agent.md#issue_2026-05-25-interrupt-undo-last-user-message）**[TRAP]** Cancel 后历史不应无条件截断：ACP server 在 `result.ok==false` 时无条件 truncate history 会丢失 agent 已写入 state 的消息。应检查 `result.messages.len()` 判断是否有进展，有则保留。（详见 spec/global/domains/agent.md#issue_2026-05-26-ctrl-c-interrupt-causes-agent-amnesia）**[TRAP]** executor 中 `?` 传播会跳过 `cleanup_prepended`，导致 before_agent 注入的 system 消息泄漏到 state。循环内关键 cleanup 必须用 try_break 宏将错误捕获到变量，循环后无条件执行 cleanup。（详见 spec/global/domains/agent.md#issue_2026-06-06-test-gap-llm-error-cleanup-prepended）
 
 **系统提示词**：`build_system_prompt()` 在 `session/new` 时调用一次，产出 `frozen_system_prompt` 存入 `SessionState`，后续轮次直接复用。段落文件位于 `peri-tui/prompts/sections/`（01-06 静态 + 07-15 动态，共 15 个），通过 `__SYSTEM_PROMPT_DYNAMIC_BOUNDARY__` 边界标记分隔——标记前可缓存，标记后不影响前缀缓存。`PromptFeatures` 控制条件段落注入。Agent 构建在 system prompt 末尾追加 Git Attribution 段落（动态区域内不影响缓存前缀）。
 
@@ -166,6 +166,8 @@ session/new → frozen_date → frozen_claude_md + frozen_claude_local_md
 | `peri-acp/src/session/command/bg.rs` | `/bg` Slash Command（`CommandKind::Immediate`） |
 
 **[TRAP]** compact 后消息结构必须以 `BaseMessage::human(summary + continuation)` 开头。禁止将摘要放在 `BaseMessage::system()` 中。compact 后的完整结构：`[Human(摘要+续接指令), System(文件)..., System(Skills)...]`。（详见 spec/global/domains/compact.md#issue_2026-05-20-auto-compact-empty-messages-400）
+
+**[TRAP]** full compact 后 `preprocess_messages` 处理 Ai 消息时只保留工具调用名称、完全丢弃参数（含 file_path 等路径信息），摘要 LLM 无法知道操作的是哪个文件。`full_compact()` 增加 `cwd` 参数为摘要 LLM 提供路径锚点。（详见 spec/global/domains/compact.md#issue_2026-06-07-full-compact-loses-project-path-context）
 
 ## Sync 模块
 

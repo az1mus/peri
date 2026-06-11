@@ -1,3 +1,5 @@
+> 归档于 2026-06-11，原路径 spec/issues/2026-06-06-plugin-slash-command-marketplace-support.md
+
 # /plugin 命令缺少 marketplace add、install@marketplace、marketplace update 子命令
 
 **状态**：Verified

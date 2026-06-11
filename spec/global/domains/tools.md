@@ -40,3 +40,13 @@
 **通用模式:** 外部依赖（搜索引擎）应通过统一 API 封装，避免直接解析 HTML；API 迁移时需完整移除旧实现防止代码残留
 **涉及文件:** peri-middlewares/src/middleware/web_search.rs, peri-middlewares/src/middleware/web_fetch.rs, peri-middlewares/src/middleware/web_common.rs
 **CLAUDE.md 链接:** false
+
+### issue_2026-06-10-webfetch-truncation-no-disk-persist
+
+- **摘要:** WebFetch 截断后未落盘，长网页内容直接丢弃
+- **状态:** Fixed
+- **归档日期:** 2026-06-11
+- **关键词:** 截断落盘, persist_truncated_output, 工具一致性
+- **问题本质:** WebFetch 遗漏了接入已有的 `persist_truncated_output` 机制，其他工具（Bash/Grep/Glob/Folder/MCP）均已接入
+- **通用模式:** 新增工具的截断行为必须接入统一的落盘机制——批量实现后逐一检查每个工具是否接入
+- **涉及文件:** peri-middlewares/src/middleware/web_fetch.rs, peri-middlewares/src/tools/output_persist.rs

@@ -188,6 +188,17 @@ load_merged_config()
 **涉及文件:** peri-middlewares/src/plugin/config.rs, peri-middlewares/src/plugin/installer/install.rs, peri-tui/src/app/plugin_panel/handlers/plugin_handlers/persistence.rs
 **CLAUDE.md 链接:** false
 
+### issue_2026-06-10-skill-preload-cannot-load-plugin-skills
+
+- **摘要:** SkillPreloadMiddleware 无法加载插件提供的 Skill 全文
+- **状态:** Fixed
+- **归档日期:** 2026-06-11
+- **关键词:** 插件 skill 全文加载, resolve_dirs 硬编码, with_extra_dirs
+- **问题本质:** `SkillPreloadMiddleware::resolve_dirs()` 硬编码三个搜索路径，不包含插件 skill 目录。`SkillsMiddleware` 有 `with_extra_dirs()` 但 `SkillPreloadMiddleware` 没有
+- **通用模式:** 两个中间件共享相同的数据源（skill 目录列表）时，必须通过公共函数统一管理，避免一方更新另一方遗漏
+- **架构影响:** 抽取 `resolve_skill_dirs()` 公共函数（`skills/loader.rs`），两个中间件均委托此函数
+- **涉及文件:** peri-middlewares/src/subagent/skill_preload.rs, peri-middlewares/src/skills/loader.rs, peri-acp/src/agent/builder.rs
+
 ---
 
 ## 相关 Feature

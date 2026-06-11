@@ -1,3 +1,5 @@
+> 归档于 2026-06-11，原路径 spec/issues/2026-06-09-ask-user-textarea-position-one-line-too-high.md
+
 # AskUser 弹窗自定义输入 textarea 聚焦时比预期偏上一行
 
 **状态**：Verified

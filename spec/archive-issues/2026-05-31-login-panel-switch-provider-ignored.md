@@ -1,3 +1,5 @@
+> 归档于 2026-06-11，原路径 spec/issues/2026-05-31-login-panel-switch-provider-ignored.md
+
 # Login 面板 / 快捷键切换 provider 后 ACP 侧实际未生效
 
 **状态**：Verified

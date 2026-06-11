@@ -1,3 +1,5 @@
+> 归档于 2026-06-11，原路径 spec/issues/2026-06-06-plugin-marketplace-delete-not-persisted.md
+
 # Plugin 面板 marketplace 删除后重新打开面板仍在
 
 **状态**：Verified

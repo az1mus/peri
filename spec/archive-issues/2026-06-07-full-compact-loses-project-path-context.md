@@ -1,3 +1,5 @@
+> 归档于 2026-06-11，原路径 spec/issues/2026-06-07-full-compact-loses-project-path-context.md
+
 # Full Compact 后 Agent 使用错误的项目路径前缀
 
 **状态**：Fixed

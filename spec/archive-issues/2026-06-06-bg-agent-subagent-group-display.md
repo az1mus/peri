@@ -1,3 +1,5 @@
+> 归档于 2026-06-11，原路径 spec/issues/2026-06-06-bg-agent-subagent-group-display.md
+
 # 消息区域 SubAgentGroup 卡片显示异常——完成后残留、未聚合、状态错误
 
 **状态**：Fixed

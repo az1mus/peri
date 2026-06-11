@@ -766,6 +766,37 @@ launch_agent 工具调用
 **涉及文件:** peri-middlewares/src/tools/filesystem/line_edit.rs, prompts/lineedit_stress_test.txt
 **CLAUDE.md 链接:** false
 
+### issue_2026-06-06-agent-polls-agentresult-repeatedly
+
+- **摘要:** Agent 反复轮询 AgentResult 而非等待后台任务通知
+- **状态:** Fixed
+- **归档日期:** 2026-06-11
+- **关键词:** AgentResult 轮询, 后台任务通知, 系统提示词行为引导
+- **问题本质:** Agent 派发后台任务后缺乏"等待"概念，倾向于反复调用 AgentResult 轮询（单次 17+ 次调用）
+- **通用模式:** LLM 行为约束需要系统提示词层面（行为准则）+ 工具层面（返回文案强化）双管齐下
+- **技术决策:** 混合式提示词策略——引导性措辞 + 关键位置强措辞，工具返回文案删除误导性引导
+- **涉及文件:** peri-tui/prompts/sections/11_subagent.md, peri-middlewares/src/subagent/agent_result.rs
+
+### issue_2026-06-06-test-gap-hitl-cancel-race
+
+- **摘要:** HITL 审批与 Cancel 竞态条件缺少测试
+- **状态:** Fixed
+- **归档日期:** 2026-06-11
+- **关键词:** broker timeout, 竞态条件, 无超时等待
+- **问题本质:** `broker.request(ctx).await` 是无超时、无 cancel token 的 async 等待，broker 实现永远不返回时 Agent 永久挂起
+- **通用模式:** 所有外部交互的 async 等待必须包裹 timeout 保护，超时后返回错误而非永久挂起
+- **涉及文件:** peri-middlewares/src/hitl/mod.rs, peri-middlewares/src/hitl/mod_test.rs
+
+### issue_2026-06-06-test-gap-llm-error-cleanup-prepended
+
+- **摘要:** 测试缺口：LLM 错误路径下 system 消息 cleanup 行为无测试
+- **状态:** Fixed
+- **归档日期:** 2026-06-11
+- **关键词:** cleanup_prepended 泄漏, try_break 宏, 循环内错误传播
+- **问题本质:** executor 中 `?` 传播会跳过 `cleanup_prepended`，导致 before_agent 注入的 system 消息泄漏到 state
+- **通用模式:** 循环内关键 cleanup 逻辑不能依赖 `?` 传播路径——用 try_break 宏将错误捕获到变量，循环后无条件执行 cleanup
+- **涉及文件:** peri-agent/src/agent/executor/mod.rs, peri-agent/src/agent/executor/mod_test.rs
+
 ---
 
 ## 相关 Feature

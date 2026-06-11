@@ -1,3 +1,5 @@
+> 归档于 2026-06-11，原路径 spec/issues/2026-06-08-remove-tree-sitter-dependency.md
+
 # 移除 tree-sitter 依赖以减小二进制体积
 
 **状态**：Verified
