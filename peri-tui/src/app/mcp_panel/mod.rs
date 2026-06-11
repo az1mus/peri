@@ -115,7 +115,8 @@ impl McpPanel {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use peri_middlewares::mcp::ClientStatus;
+
+    use super::*;
     include!("mcp_panel_test.rs");
 }

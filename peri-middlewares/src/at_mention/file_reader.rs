@@ -157,9 +157,11 @@ fn read_directory(dir: &Path, display_path: &str) -> FileContent {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::fs;
+
     use tempfile::tempdir;
+
+    use super::*;
 
     #[test]
     fn test_read_file_full_content() {

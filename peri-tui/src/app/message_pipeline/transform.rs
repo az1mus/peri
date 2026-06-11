@@ -1,5 +1,6 @@
 use peri_agent::messages::BaseMessage;
 
+use super::MessagePipeline;
 use crate::{
     app::tool_display,
     ui::{
@@ -7,8 +8,6 @@ use crate::{
         message_view::{aggregate_tool_groups, tool_color, ContentBlockView, MessageViewModel},
     },
 };
-
-use super::MessagePipeline;
 
 impl MessagePipeline {
     /// 构建当前流式 AI 消息的 AssistantBubble ViewModel。

@@ -1,11 +1,10 @@
+use peri_widgets::{BorderedPanel, ScrollState, ScrollableArea};
 use ratatui::{
     layout::Rect,
     style::{Modifier, Style},
     text::{Line, Span, Text},
     Frame,
 };
-
-use peri_widgets::{BorderedPanel, ScrollState, ScrollableArea};
 
 use crate::{
     app::{

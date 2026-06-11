@@ -1,10 +1,11 @@
-use super::color::BranchColors;
-use super::layout::{CellType, GraphRow};
-use crate::theme::GigTheme;
 use git2::Oid;
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use unicode_width::UnicodeWidthStr;
+
+use super::color::BranchColors;
+use super::layout::{CellType, GraphRow};
+use crate::theme::GigTheme;
 
 pub fn render_graph_row(
     row: &GraphRow,
@@ -152,9 +153,10 @@ fn cell_second_char(cell: &CellType, color: Color) -> (char, Color) {
 
 #[cfg(test)]
 mod tests {
+    use git2::Oid;
+
     use super::*;
     use crate::graph::layout::CellType;
-    use git2::Oid;
 
     fn oid(n: u8) -> Oid {
         let mut bytes = [0u8; 20];

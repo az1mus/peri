@@ -1,3 +1,4 @@
+use super::ReActAgent;
 use crate::{
     agent::{
         events::AgentEvent,
@@ -7,8 +8,6 @@ use crate::{
     error::AgentResult,
     messages::{message::MessageId, BaseMessage},
 };
-
-use super::ReActAgent;
 
 /// 在消息列表中查找给定 ID 消息的索引，返回其后一个位置（即下一条新消息的起始位置）。
 /// 如果未找到（不应发生），fallback 到 0。

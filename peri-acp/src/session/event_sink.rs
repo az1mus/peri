@@ -4,18 +4,17 @@
 //! execution events differently. [`EventSink`] abstracts this so the core
 //! prompt execution logic can live in `peri-acp`.
 
+// Re-export SDK types used by StdioEventSink.
+pub use agent_client_protocol::{
+    schema::{SessionId as SdkSessionId, SessionNotification, SessionUpdate},
+    Client, ConnectionTo,
+};
 use async_trait::async_trait;
 use peri_agent::agent::events::AgentEvent as ExecutorEvent;
 use serde_json::json;
 use tracing::{debug, error};
 
 use crate::{event::map_event, transport::AcpTransport};
-
-// Re-export SDK types used by StdioEventSink.
-pub use agent_client_protocol::{
-    schema::{SessionId as SdkSessionId, SessionNotification, SessionUpdate},
-    Client, ConnectionTo,
-};
 
 /// Receives [`ExecutorEvent`]s produced during agent execution and routes them
 /// to the appropriate transport.

@@ -1,4 +1,3 @@
-use crate::scrollable::ScrollState;
 use ratatui::{
     layout::Rect,
     prelude::*,
@@ -6,6 +5,8 @@ use ratatui::{
     text::{Line, Text},
     widgets::{Paragraph, StatefulWidget, StatefulWidgetRef, Widget},
 };
+
+use crate::scrollable::ScrollState;
 
 /// 泛型列表状态——管理 items + cursor + scroll offset
 ///

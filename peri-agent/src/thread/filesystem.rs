@@ -1,7 +1,8 @@
+use std::path::PathBuf;
+
 use anyhow::{Context, Result};
 use async_trait::async_trait;
 use chrono::Utc;
-use std::path::PathBuf;
 use tokio::{fs, io::AsyncWriteExt};
 
 use crate::{
@@ -283,7 +284,8 @@ fn extract_title(msgs: &[BaseMessage]) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use tempfile::tempdir;
+
+    use super::*;
     include!("filesystem_test.rs");
 }

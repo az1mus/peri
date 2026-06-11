@@ -9,9 +9,6 @@ use std::sync::{
 };
 
 use async_trait::async_trait;
-use tokio::sync::mpsc;
-use tracing::{info, warn};
-
 use peri_agent::{
     agent::{
         compact::{
@@ -28,6 +25,8 @@ use peri_agent::{
     messages::BaseMessage,
     middleware::r#trait::Middleware,
 };
+use tokio::sync::mpsc;
+use tracing::{info, warn};
 
 use crate::hooks::{self, RegisteredHook};
 

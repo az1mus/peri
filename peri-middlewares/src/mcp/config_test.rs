@@ -1,5 +1,6 @@
-use super::*;
 use tempfile::NamedTempFile;
+
+use super::*;
 
 #[test]
 fn test_load_from_nonexistent_path() {

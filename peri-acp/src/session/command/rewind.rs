@@ -7,9 +7,10 @@
 //! 4. 从 SQLite 持久化中删除被移除的消息
 //! 5. 发送 CompactCompleted 事件通知 TUI 刷新
 
+use std::path::Path;
+
 use peri_agent::agent::events::AgentEvent as ExecutorEvent;
 use peri_agent::messages::{BaseMessage, ContentBlock, MessageId};
-use std::path::Path;
 use tracing::{debug, warn};
 
 use super::{AgentCommand, CommandContext, CommandKind, CommandResult};

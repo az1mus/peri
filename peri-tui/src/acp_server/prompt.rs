@@ -3,10 +3,8 @@
 
 use std::{collections::HashMap, sync::Arc};
 
+use agent_client_protocol::schema::{PromptResponse, StopReason};
 use parking_lot::RwLock;
-use serde_json::Value;
-use tracing::info;
-
 use peri_acp::{
     broker::AcpTransportBroker,
     langfuse::LangfuseSession,
@@ -15,12 +13,11 @@ use peri_acp::{
 };
 use peri_agent::{agent::AgentCancellationToken, interaction::ChannelState};
 use peri_middlewares::prelude::*;
-
-use agent_client_protocol::schema::{PromptResponse, StopReason};
-
-use crate::{app::agent::LlmProvider, config::PeriConfig};
+use serde_json::Value;
+use tracing::info;
 
 use super::SharedSessions;
+use crate::{app::agent::LlmProvider, config::PeriConfig};
 
 // ── Prompt execution (spawned into background task) ──────────────────────────
 

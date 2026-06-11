@@ -1,9 +1,9 @@
 use std::{any::Any, collections::HashSet};
 
-use super::FieldTextarea;
 use ratatui::{layout::Rect, Frame};
 use tui_textarea::Input;
 
+use super::FieldTextarea;
 use super::{
     panel_component::PanelComponent,
     panel_list::PanelList,

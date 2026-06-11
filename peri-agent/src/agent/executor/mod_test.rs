@@ -1,3 +1,5 @@
+use std::time::{Duration, Instant};
+
 use super::*;
 use crate::{
     agent::{
@@ -7,7 +9,6 @@ use crate::{
     messages::BaseMessage,
     tools::BaseTool,
 };
-use std::time::{Duration, Instant};
 
 // ─── Mock LLM：第一步返回两个并发工具调用，第二步返回最终答案 ───────────
 
@@ -237,8 +238,9 @@ async fn test_tool_rejection_continues_loop() {
 /// 验证 TextChunk 携带的 message_id 与前一条 MessageAdded(Ai) 的 id 一致
 #[tokio::test]
 async fn test_text_chunk_message_id() {
-    use crate::agent::events::{AgentEvent, FnEventHandler};
     use std::sync::{Arc, Mutex};
+
+    use crate::agent::events::{AgentEvent, FnEventHandler};
 
     struct FinalAnswerLLM;
     #[async_trait::async_trait]
@@ -304,8 +306,9 @@ async fn test_text_chunk_message_id() {
 /// 验证 ToolStart/ToolEnd 携带的 message_id 与同轮次 MessageAdded(Ai) 的 id 一致
 #[tokio::test]
 async fn test_tool_message_id() {
-    use crate::agent::events::{AgentEvent, FnEventHandler};
     use std::sync::{Arc, Mutex};
+
+    use crate::agent::events::{AgentEvent, FnEventHandler};
 
     struct OneToolLLM;
     #[async_trait::async_trait]
@@ -622,8 +625,9 @@ fn test_agent_event_message_id_serialization() {
 /// 验证最终回答路径也会发出 StateSnapshot，确保多轮对话不丢失 AI 回复
 #[tokio::test]
 async fn test_state_snapshot_on_final_answer() {
-    use crate::agent::events::{AgentEvent, FnEventHandler};
     use std::sync::{Arc, Mutex};
+
+    use crate::agent::events::{AgentEvent, FnEventHandler};
 
     struct FinalAnswerLLM;
     #[async_trait::async_trait]
@@ -744,8 +748,9 @@ async fn test_max_iterations_exceeded() {
 /// 验证两个工具调用通过批量 before_tools_batch 处理（HITL 批量审批路径）
 #[tokio::test]
 async fn test_batch_before_tools_execution() {
-    use crate::agent::events::{AgentEvent, FnEventHandler};
     use std::sync::{Arc, Mutex};
+
+    use crate::agent::events::{AgentEvent, FnEventHandler};
 
     struct TwoToolLLM;
     #[async_trait::async_trait]
@@ -906,8 +911,9 @@ async fn test_no_context_budget_fallback() {
 /// 验证 ContextBudget 路径下 ContextWarning 事件被发出
 #[tokio::test]
 async fn test_context_budget_emits_warning_event() {
-    use crate::agent::events::{AgentEvent, FnEventHandler};
     use std::sync::{Arc, Mutex};
+
+    use crate::agent::events::{AgentEvent, FnEventHandler};
 
     struct TokenLLM {
         input_tokens: u32,
@@ -976,8 +982,9 @@ async fn test_context_budget_emits_warning_event() {
 /// 验证无 ContextBudget 时回退路径也发出 ContextWarning 事件
 #[tokio::test]
 async fn test_fallback_path_emits_warning_event() {
-    use crate::agent::events::{AgentEvent, FnEventHandler};
     use std::sync::{Arc, Mutex};
+
+    use crate::agent::events::{AgentEvent, FnEventHandler};
 
     struct HighTokenLLM;
     #[async_trait::async_trait]
@@ -1041,8 +1048,9 @@ async fn test_fallback_path_emits_warning_event() {
 /// 验证低 token 用量时不发出 ContextWarning
 #[tokio::test]
 async fn test_low_usage_no_warning_event() {
-    use crate::agent::events::{AgentEvent, FnEventHandler};
     use std::sync::{Arc, Mutex};
+
+    use crate::agent::events::{AgentEvent, FnEventHandler};
 
     struct LowTokenLLM;
     #[async_trait::async_trait]
@@ -1094,8 +1102,9 @@ async fn test_low_usage_no_warning_event() {
 /// 增量快照之间不应包含相同 message_id 的消息。
 #[tokio::test]
 async fn test_state_snapshot_no_overlap() {
-    use crate::agent::events::{AgentEvent, FnEventHandler};
     use std::sync::{Arc, Mutex};
+
+    use crate::agent::events::{AgentEvent, FnEventHandler};
 
     struct ToolThenAnswerLLM;
     #[async_trait::async_trait]
@@ -1194,11 +1203,12 @@ async fn test_state_snapshot_no_overlap() {
 /// 被 prepend 的 System 消息。这些消息不应泄露到 agent_state_messages。
 #[tokio::test]
 async fn test_state_snapshot_excludes_system_messages() {
+    use std::sync::{Arc, Mutex};
+
     use crate::{
         agent::events::{AgentEvent, FnEventHandler},
         middleware::r#trait::Middleware,
     };
-    use std::sync::{Arc, Mutex};
 
     struct AnswerLLM;
     #[async_trait::async_trait]
@@ -1275,8 +1285,9 @@ async fn test_state_snapshot_excludes_system_messages() {
 /// 验证 set_event_handler 在 &mut agent 上替换事件回调
 #[tokio::test]
 async fn test_set_event_handler() {
-    use crate::agent::events::FnEventHandler;
     use std::sync::{Arc, Mutex};
+
+    use crate::agent::events::FnEventHandler;
 
     struct AnswerLLM;
     #[async_trait::async_trait]

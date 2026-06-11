@@ -1,5 +1,6 @@
-use super::*;
 use tokio::sync::mpsc;
+
+use super::*;
 
 fn new_scheduler() -> (CronScheduler, mpsc::UnboundedReceiver<CronTrigger>) {
     let (tx, rx) = mpsc::unbounded_channel();

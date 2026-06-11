@@ -178,6 +178,10 @@ impl<S: State> Default for MiddlewareChain<S> {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::{Arc, Mutex};
+
+    use async_trait::async_trait;
+
     use super::*;
     use crate::{
         agent::state::AgentState,
@@ -185,7 +189,5 @@ mod tests {
         messages::{BaseMessage, ContentBlock, MessageId},
         middleware::r#trait::{Middleware, NoopMiddleware},
     };
-    use async_trait::async_trait;
-    use std::sync::{Arc, Mutex};
     include!("chain_test.rs");
 }

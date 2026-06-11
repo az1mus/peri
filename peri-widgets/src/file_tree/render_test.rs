@@ -1,6 +1,7 @@
+use ratatui::{backend::TestBackend, style::Color, Terminal};
+
 use super::*;
 use crate::file_tree::{FileNode, FileTreeState};
-use ratatui::{backend::TestBackend, style::Color, Terminal};
 
 fn make_file(name: &str) -> FileNode {
     FileNode {

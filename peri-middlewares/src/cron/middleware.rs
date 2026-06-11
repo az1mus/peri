@@ -1,7 +1,7 @@
-use parking_lot::Mutex;
 use std::sync::Arc;
 
 use async_trait::async_trait;
+use parking_lot::Mutex;
 use peri_agent::{agent::state::State, middleware::r#trait::Middleware, tools::BaseTool};
 
 use super::{

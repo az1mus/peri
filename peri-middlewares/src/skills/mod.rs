@@ -1,10 +1,9 @@
 pub mod loader;
 
-pub use loader::{list_skills, load_skill_metadata, SkillMetadata};
-
 use std::path::PathBuf;
 
 use async_trait::async_trait;
+pub use loader::{list_skills, load_skill_metadata, SkillMetadata};
 use peri_agent::{
     agent::state::State, error::AgentResult, messages::BaseMessage, middleware::r#trait::Middleware,
 };
@@ -223,8 +222,9 @@ impl<S: State> Middleware<S> for SkillsMiddleware {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use peri_agent::agent::state::AgentState;
     use tempfile::tempdir;
+
+    use super::*;
     include!("mod_test.rs");
 }

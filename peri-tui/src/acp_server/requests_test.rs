@@ -7,9 +7,8 @@ use peri_agent::thread::FilesystemThreadStore;
 use peri_middlewares::hitl::shared_mode::{PermissionMode, SharedPermissionMode};
 use serde_json::{json, Value};
 
-use crate::app::agent::LlmProvider;
-
 use super::*;
+use crate::app::agent::LlmProvider;
 
 // ── Mock AcpTransport ─────────────────────────────────────────────────────────
 

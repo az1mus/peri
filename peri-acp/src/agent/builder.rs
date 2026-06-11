@@ -10,7 +10,6 @@
 use std::{collections::HashMap, sync::Arc};
 
 use parking_lot::RwLock;
-
 use peri_agent::{
     agent::{
         compact::CompactConfig,

@@ -1,6 +1,7 @@
+use std::collections::BTreeMap;
+
 use futures::StreamExt;
 use serde_json::{json, Value};
-use std::collections::BTreeMap;
 
 use super::invoke::{build_request_body, extract_openai_usage};
 use crate::{

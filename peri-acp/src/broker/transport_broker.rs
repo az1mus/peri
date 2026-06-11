@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use agent_client_protocol::schema::{
     PermissionOption, PermissionOptionKind, RequestPermissionOutcome, RequestPermissionRequest,
     RequestPermissionResponse, SelectedPermissionOutcome, SessionId, ToolCallStatus,
@@ -13,7 +15,6 @@ use peri_agent::interaction::{
     ApprovalDecision, ApprovalItem, InteractionContext, InteractionResponse, QuestionAnswer,
     QuestionItem, UserInteractionBroker,
 };
-use std::sync::Arc;
 
 use crate::transport::AcpTransport;
 

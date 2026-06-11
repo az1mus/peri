@@ -7,6 +7,7 @@ use peri_agent::{
     },
     middleware::r#trait::Middleware,
 };
+use tokio::sync::mpsc;
 
 use crate::{
     agents_md::AgentsMdMiddleware,
@@ -15,7 +16,6 @@ use crate::{
     skills::SkillsMiddleware,
     subagent::{skill_preload::SkillPreloadMiddleware, SubAgentMiddlewareConfig},
 };
-use tokio::sync::mpsc;
 
 /// 事件处理器包装器：为子 Agent 事件注入 source_agent_id
 struct SourceAgentIdHandler {

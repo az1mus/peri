@@ -1,3 +1,4 @@
+use peri_widgets::{BorderedPanel, ScrollState, ScrollableArea};
 use ratatui::{
     layout::Rect,
     style::{Modifier, Style},
@@ -5,8 +6,7 @@ use ratatui::{
     Frame,
 };
 
-use peri_widgets::{BorderedPanel, ScrollState, ScrollableArea};
-
+use super::detail_kv_line;
 use crate::{
     app::{
         plugin_panel::{DiscoverDetailAction, PluginPanel},
@@ -14,8 +14,6 @@ use crate::{
     },
     ui::theme,
 };
-
-use super::detail_kv_line;
 
 pub(crate) fn render_discover_detail(
     f: &mut Frame,

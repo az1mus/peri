@@ -1,6 +1,7 @@
+use std::sync::{Arc, Mutex};
+
 use async_trait::async_trait;
 use peri_agent::prelude::*;
-use std::sync::{Arc, Mutex};
 
 // ── 辅助 ──────────────────────────────────────────────────────────────────────
 

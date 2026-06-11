@@ -4,10 +4,9 @@ mod render_state;
 #[cfg(feature = "markdown-highlight")]
 mod highlight;
 
+use cache::MarkdownCache;
 use pulldown_cmark::{Options, Parser};
 use ratatui::{style::Color, text::Text};
-
-use cache::MarkdownCache;
 use render_state::RenderState;
 
 // ── MarkdownTheme trait ──────────────────────────────────────

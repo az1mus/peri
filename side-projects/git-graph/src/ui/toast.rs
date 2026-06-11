@@ -1,4 +1,3 @@
-use crate::app::{App, ToastStyle};
 use ratatui::{
     layout::Rect,
     style::{Color, Style},
@@ -6,6 +5,8 @@ use ratatui::{
     widgets::Paragraph,
     Frame,
 };
+
+use crate::app::{App, ToastStyle};
 
 /// 渲染底部 toast 栏（1 行）
 pub fn draw_toast(f: &mut Frame, area: Rect, app: &mut App) {

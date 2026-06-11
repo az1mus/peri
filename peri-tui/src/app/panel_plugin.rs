@@ -53,13 +53,14 @@ impl App {
     }
 
     pub fn open_plugin_panel(&mut self) {
-        use crate::app::plugin_panel::{
-            DiscoverPlugin, MarketplaceViewEntry, MarketplaceViewStatus, PluginEntry,
-            PluginItemType,
-        };
         use peri_middlewares::plugin::{
             load_claude_settings, load_installed_plugins, load_known_marketplaces,
             load_plugin_manifest, marketplaces_cache_dir, MarketplaceManager,
+        };
+
+        use crate::app::plugin_panel::{
+            DiscoverPlugin, MarketplaceViewEntry, MarketplaceViewStatus, PluginEntry,
+            PluginItemType,
         };
 
         let claude_dir = dirs_next::home_dir()

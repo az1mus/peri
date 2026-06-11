@@ -148,7 +148,8 @@ impl StatefulWidget for RadioGroup<'_> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use ratatui::{backend::TestBackend, Terminal};
+
+    use super::*;
     include!("radio_group_test.rs");
 }

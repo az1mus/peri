@@ -1,4 +1,3 @@
-use crate::app::App;
 use ratatui::{
     layout::{Alignment, Margin, Rect},
     style::{Color, Modifier, Style},
@@ -6,6 +5,8 @@ use ratatui::{
     widgets::{Block, Borders, Clear, Paragraph},
     Frame,
 };
+
+use crate::app::App;
 
 pub fn draw_confirm(f: &mut Frame, area: Rect, app: &App) {
     if app.confirm_message.is_none() {

@@ -1,4 +1,3 @@
-use crate::file_tree::{FileTreeState, FlatNode};
 use ratatui::{
     layout::Rect,
     prelude::*,
@@ -6,6 +5,8 @@ use ratatui::{
     text::{Line, Span, Text},
     widgets::{Paragraph, StatefulWidget, Widget},
 };
+
+use crate::file_tree::{FileTreeState, FlatNode};
 
 /// 文件树渲染 widget
 pub struct FileTree {

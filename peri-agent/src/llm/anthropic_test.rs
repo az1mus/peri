@@ -1,6 +1,7 @@
+use serde_json::json;
+
 use super::{cache, *};
 use crate::messages::{BaseMessage, ContentBlock, MessageContent};
-use serde_json::json;
 
 /// 验证 cache_control 放在第一条和最后一条 user 消息上（3 断点策略）
 #[test]

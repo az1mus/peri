@@ -3,9 +3,11 @@ mod llm_step;
 mod tool_dispatch;
 mod tool_setup;
 
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use tokio_util::sync::CancellationToken;
+pub use tokio_util::sync::CancellationToken as AgentCancellationToken;
 use tracing::instrument;
 
 use crate::{
@@ -19,9 +21,6 @@ use crate::{
     middleware::{chain::MiddlewareChain, r#trait::Middleware},
     tools::BaseTool,
 };
-use std::collections::HashMap;
-
-pub use tokio_util::sync::CancellationToken as AgentCancellationToken;
 
 #[allow(clippy::type_complexity)]
 /// Agent 执行器 - 管理 ReAct 循环

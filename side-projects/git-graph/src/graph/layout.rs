@@ -1,9 +1,11 @@
+use std::collections::{HashMap, HashSet};
+
+use git2::Oid;
+use ratatui::style::Color;
+
 use crate::git::commit::TopoNode;
 use crate::git::stash::StashInfo;
 use crate::graph::color::BranchColors;
-use git2::Oid;
-use ratatui::style::Color;
-use std::collections::{HashMap, HashSet};
 
 /// 图中单个格子的类型
 ///

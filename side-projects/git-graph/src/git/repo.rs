@@ -1,7 +1,8 @@
-use anyhow::{Context, Result};
-use git2::{DiffOptions, Oid, Repository};
 use std::collections::HashMap;
 use std::path::Path;
+
+use anyhow::{Context, Result};
+use git2::{DiffOptions, Oid, Repository};
 
 use super::commit::{CommitDetail, DiffStats, FileChange, FileStatus, TopoNode};
 
@@ -330,8 +331,9 @@ impl GitRepo {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::process::Command;
+
+    use super::*;
 
     fn setup_test_repo() -> tempfile::TempDir {
         let dir = tempfile::tempdir().unwrap();

@@ -1,15 +1,17 @@
+use std::sync::Arc;
+
+use tokio::{
+    sync::{mpsc, oneshot},
+    time::{interval, Duration},
+};
+use tracing::{debug, error, info, warn};
+
 use crate::{
     config::{BackpressurePolicy, BatcherConfig},
     error::LangfuseError,
     types::IngestionEvent,
     LangfuseClient,
 };
-use std::sync::Arc;
-use tokio::{
-    sync::{mpsc, oneshot},
-    time::{interval, Duration},
-};
-use tracing::{debug, error, info, warn};
 
 /// Batcher 内部命令（不导出）
 #[allow(clippy::large_enum_variant)]
@@ -188,8 +190,9 @@ impl Drop for Batcher {
 
 #[cfg(test)]
 mod tests {
+    use std::time::Duration;
+
     use super::*;
     use crate::types::TraceBody;
-    use std::time::Duration;
     include!("batcher_test.rs");
 }

@@ -1,9 +1,11 @@
+use std::path::Path;
+
+use tracing::{debug, warn};
+
 use crate::{
     agent::{compact::config::CompactConfig, events::CompactFileInfo},
     messages::BaseMessage,
 };
-use std::path::Path;
-use tracing::{debug, warn};
 
 #[derive(Debug, Clone)]
 pub struct ReInjectResult {

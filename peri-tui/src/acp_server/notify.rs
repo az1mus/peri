@@ -3,15 +3,14 @@
 
 use std::collections::HashMap;
 
+use agent_client_protocol::schema::{AvailableCommandsUpdate, SessionUpdate};
+use peri_acp::dispatch::config_update;
+use peri_middlewares::skills::SkillMetadata;
 use serde_json::Value;
 use tracing::{debug, info};
 
-use agent_client_protocol::schema::{AvailableCommandsUpdate, SessionUpdate};
-
 use super::{AcpServerConfig, SessionState};
 use crate::app::agent::LlmProvider;
-use peri_acp::dispatch::config_update;
-use peri_middlewares::skills::SkillMetadata;
 
 // ── Notification dispatch ────────────────────────────────────────────────────
 

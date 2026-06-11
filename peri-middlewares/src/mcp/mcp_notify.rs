@@ -1,7 +1,7 @@
+use rmcp::model::ClientNotification;
 use serde_json::Value;
 
 use super::client::McpClientPool;
-use rmcp::model::ClientNotification;
 
 impl McpClientPool {
     /// Send a custom JSON-RPC notification to an MCP server.

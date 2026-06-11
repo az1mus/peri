@@ -7,7 +7,6 @@ mod status_bar;
 mod sticky_header;
 
 pub(crate) use message_area::highlight_line_spans;
-
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Modifier, Style},
@@ -259,6 +258,32 @@ fn render_session_column(f: &mut Frame, app: &mut App, area: Rect) {
         f.render_widget(textarea_ref, chunks[5]);
     }
     app.session_mgr.current_mut().ui.textarea_area = Some(chunks[5]);
+
+    // Prediction placeholder 叠加（textarea 为空 + 有 prediction 时显示）
+    if let Some(ref pred) = app.session_mgr.current().ui.prediction {
+        let textarea_empty = app
+            .session_mgr
+            .current()
+            .ui
+            .textarea
+            .lines()
+            .iter()
+            .all(|l| l.is_empty());
+        if textarea_empty {
+            let area = chunks[5];
+            let pred_area = ratatui::layout::Rect {
+                x: area.x + 2,
+                y: area.y + 1,
+                width: area.width.saturating_sub(2),
+                height: 1,
+            };
+            let pred_text = ratatui::text::Line::from(ratatui::text::Span::styled(
+                &pred.text,
+                ratatui::style::Style::default().fg(theme::DIM),
+            ));
+            f.render_widget(ratatui::widgets::Paragraph::new(pred_text), pred_area);
+        }
+    }
 
     // ❯ 前缀
     let prompt_x = chunks[5].x;

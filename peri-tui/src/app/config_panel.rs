@@ -3,14 +3,13 @@ use std::any::Any;
 use ratatui::{layout::Rect, Frame};
 use tui_textarea::Input;
 
-use crate::config::PeriConfig;
-
 use super::{
     field_textarea::FieldTextarea,
     panel_component::PanelComponent,
     panel_manager::{EventResult, PanelContext, PanelKind},
     App,
 };
+use crate::config::PeriConfig;
 
 // ─── 行索引常量 ─────────────────────────────────────────────────────────────────
 

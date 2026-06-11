@@ -1,3 +1,4 @@
+use peri_widgets::{BorderedPanel, ScrollState, ScrollableArea};
 use ratatui::{
     layout::Rect,
     style::{Modifier, Style},
@@ -6,8 +7,7 @@ use ratatui::{
     Frame,
 };
 
-use peri_widgets::{BorderedPanel, ScrollState, ScrollableArea};
-
+use super::{discover_search::render_discover_search_box, truncate_display};
 use crate::{
     app::{
         plugin_panel::{PluginPanel, PluginPanelView},
@@ -15,8 +15,6 @@ use crate::{
     },
     ui::theme,
 };
-
-use super::{discover_search::render_discover_search_box, truncate_display};
 
 /// Tab 行占用的固定高度（Tab 行 + 空行）
 pub(crate) const DISCOVER_TAB_OVERHEAD: u16 = 2;

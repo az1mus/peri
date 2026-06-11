@@ -1,5 +1,6 @@
-use crate::app::FieldTextarea;
 use peri_middlewares::ask_user::{AskUserBatchRequest, AskUserQuestionData};
+
+use crate::app::FieldTextarea;
 
 // ─── AskUserBatchPrompt ───────────────────────────────────────────────────────
 

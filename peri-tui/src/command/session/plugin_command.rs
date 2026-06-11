@@ -1,5 +1,6 @@
-use crate::{app::App, command::Command};
 use peri_middlewares::plugin::CommandEntry;
+
+use crate::{app::App, command::Command};
 
 /// 将插件的 CommandEntry 适配为 TUI Command trait
 pub struct PluginCommandAdapter {
@@ -34,9 +35,10 @@ impl Command for PluginCommandAdapter {
 
 #[cfg(test)]
 mod tests {
+    use peri_middlewares::plugin::CommandSource;
+
     use super::*;
     use crate::i18n::LcRegistry;
-    use peri_middlewares::plugin::CommandSource;
 
     fn make_lc() -> LcRegistry {
         LcRegistry::new(None)

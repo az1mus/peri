@@ -161,7 +161,8 @@ impl StatefulWidget for TabBar {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use ratatui::{backend::TestBackend, Terminal};
+
+    use super::*;
     include!("tab_bar_test.rs");
 }

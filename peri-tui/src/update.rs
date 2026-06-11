@@ -6,8 +6,9 @@
 //! Delegates all update logic (download, checksum, extract, symlink)
 //! to the remote install scripts.
 
-use anyhow::{Context, Result};
 use std::process::Stdio;
+
+use anyhow::{Context, Result};
 use tokio::{
     io::{AsyncBufReadExt, BufReader},
     process::Command,

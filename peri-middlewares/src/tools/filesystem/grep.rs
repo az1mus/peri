@@ -1,5 +1,3 @@
-use peri_agent::tools::BaseTool;
-use serde_json::Value;
 use std::{
     cell::Cell,
     path::{Path, PathBuf},
@@ -8,13 +6,15 @@ use std::{
         Arc, Mutex,
     },
 };
-use tokio::time::{timeout, Duration};
 
 use grep::{
     regex::RegexMatcherBuilder,
     searcher::{BinaryDetection, SearcherBuilder},
 };
 use ignore::WalkBuilder;
+use peri_agent::tools::BaseTool;
+use serde_json::Value;
+use tokio::time::{timeout, Duration};
 
 /// Grep tool - 与 Claude Code Grep 工具对齐
 pub struct GrepTool {
@@ -59,12 +59,11 @@ When to use:
 - Use Glob for file name search, Grep for content search
 - For open-ended searches, start with the most specific query and broaden if needed"#;
 
-use crate::tools::output_persist::persist_truncated_output;
-
 use super::{
     grep_args::{GrepInput, OutputMode, ParsedArgs},
     grep_format::SearchSink,
 };
+use crate::tools::output_persist::persist_truncated_output;
 
 /// 核心搜索函数（同步，在 spawn_blocking 中运行）
 fn execute_search(

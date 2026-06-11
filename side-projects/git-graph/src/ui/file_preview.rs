@@ -1,4 +1,3 @@
-use crate::app::App;
 use peri_widgets::Theme;
 use ratatui::{
     layout::{Margin, Rect},
@@ -8,6 +7,8 @@ use ratatui::{
     Frame,
 };
 use unicode_width::UnicodeWidthStr;
+
+use crate::app::App;
 
 /// 将高亮 spans 按水平滚动偏移和最大宽度截断，保留样式
 fn slice_spans_hscroll(spans: &[(Style, String)], offset: u16, max_w: u16) -> Vec<Span<'static>> {

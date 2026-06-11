@@ -1,7 +1,9 @@
+use std::collections::HashMap;
+
+use git2::Oid;
+
 use crate::git::commit::TopoNode;
 use crate::git::stash::StashInfo;
-use git2::Oid;
-use std::collections::HashMap;
 
 /// 拓扑骨架
 #[allow(dead_code)]

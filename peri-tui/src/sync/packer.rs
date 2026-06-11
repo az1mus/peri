@@ -1,5 +1,6 @@
-use crate::sync::{crypto, protocol::SyncPackage};
 use anyhow::{anyhow, Result};
+
+use crate::sync::{crypto, protocol::SyncPackage};
 
 /// 加密分片后的数据块
 #[derive(Debug, Clone)]

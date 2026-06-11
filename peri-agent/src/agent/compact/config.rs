@@ -1,5 +1,6 @@
-use serde::{Deserialize, Serialize};
 use std::env;
+
+use serde::{Deserialize, Serialize};
 
 const DEFAULT_COMPACTABLE_TOOLS: &[&str] = &["Bash", "Read", "Glob", "Grep", "Write", "Edit"];
 

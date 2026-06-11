@@ -316,7 +316,8 @@ impl<S: State> Middleware<S> for AgentsMdMiddleware {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use peri_agent::agent::state::AgentState;
+
+    use super::*;
     include!("agents_md_test.rs");
 }

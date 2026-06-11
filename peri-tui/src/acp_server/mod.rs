@@ -161,6 +161,132 @@ pub async fn run_acp_server(
                         )
                         .await;
 
+                        // Prediction: agent 成功完成后发起预测输入请求
+                        if result.is_ok() {
+                            let pred_transport = Arc::clone(&transport);
+                            let pred_session_id = prompt_session_id.clone();
+                            let pred_provider = provider.clone();
+                            let pred_sessions = sessions.clone();
+
+                            tokio::spawn(async move {
+                                tracing::debug!("Prediction task started");
+                                // 从 session 获取最新历史
+                                let (history, cwd) = {
+                                    let sessions = pred_sessions.lock().await;
+                                    match sessions.get(&pred_session_id) {
+                                        Some(s) => (s.history.clone(), s.cwd.clone()),
+                                        None => {
+                                            tracing::debug!("Prediction: session not found");
+                                            return;
+                                        }
+                                    }
+                                };
+
+                                // 取最近 10 条消息作为上下文（排除 System 消息）
+                                let recent: Vec<_> = history
+                                    .iter()
+                                    .rev()
+                                    .filter(|m| !m.is_system())
+                                    .take(10)
+                                    .cloned()
+                                    .collect();
+                                let recent: Vec<_> = recent.into_iter().rev().collect();
+
+                                if recent.is_empty() {
+                                    tracing::debug!("Prediction: no recent messages");
+                                    return;
+                                }
+                                tracing::debug!(count = recent.len(), "Prediction: got messages");
+
+                                // 直接复用已构建的 LlmProvider（绕过 from_config）
+                                let llm_provider = pred_provider.read().clone();
+                                tracing::debug!("Prediction: LLM provider ready");
+
+                                let base_llm = peri_agent::llm::BaseModelReactLLM::new(
+                                    llm_provider.into_model(),
+                                );
+                                let llm = peri_agent::llm::RetryableLLM::new(
+                                    base_llm,
+                                    peri_agent::llm::RetryConfig::default(),
+                                );
+
+                                // 构建最小 agent（1 轮、无工具、无中间件）
+                                let directive =
+                                    peri_middlewares::subagent::build_prediction_directive();
+                                let agent = peri_agent::agent::executor::ReActAgent::new(llm)
+                                    .max_iterations(1)
+                                    .with_system_prompt(directive);
+
+                                // 构造 state，注入对话历史
+                                let mut state = peri_agent::agent::state::AgentState::new(&cwd);
+                                for msg in &recent {
+                                    state.add_message(msg.clone());
+                                }
+
+                                tracing::debug!("Prediction: calling LLM");
+                                // 30 秒超时（首次冷启动可能较慢）
+                                let result = tokio::time::timeout(
+                                    std::time::Duration::from_secs(30),
+                                    agent.execute(
+                                        peri_agent::agent::react::AgentInput::text(
+                                            "请根据以上对话预测用户下一步输入",
+                                        ),
+                                        &mut state,
+                                        None,
+                                    ),
+                                )
+                                .await;
+
+                                match result {
+                                    Ok(Ok(_output)) => {
+                                        // 提取最后一条 AI 消息文本
+                                        let text = state
+                                            .messages()
+                                            .iter()
+                                            .rev()
+                                            .find_map(|m| {
+                                                if matches!(
+                                                    m,
+                                                    peri_agent::messages::BaseMessage::Ai { .. }
+                                                ) {
+                                                    let t = m.content();
+                                                    let trimmed = t.trim();
+                                                    if trimmed.is_empty() {
+                                                        None
+                                                    } else {
+                                                        Some(trimmed.to_string())
+                                                    }
+                                                } else {
+                                                    None
+                                                }
+                                            })
+                                            .unwrap_or_default();
+
+                                        if !text.is_empty() {
+                                            tracing::debug!(%text, "Prediction ready, sending notification");
+                                            let _ = pred_transport
+                                                .send_notification(
+                                                    "peri/prediction_ready",
+                                                    serde_json::json!({
+                                                        "sessionId": pred_session_id,
+                                                        "text": text,
+                                                    }),
+                                                )
+                                                .await;
+                                        } else {
+                                            tracing::debug!("Prediction: LLM returned empty text");
+                                        }
+                                    }
+                                    Ok(Err(e)) => {
+                                        tracing::debug!(error = %e, "Prediction fork failed");
+                                    }
+                                    Err(_) => {
+                                        tracing::debug!("Prediction fork timed out (30s)");
+                                    }
+                                }
+                            });
+                        }
+
                         // Restore AgentPool back into session
                         if let Ok(mutex) = Arc::try_unwrap(pool_arc) {
                             let mut sessions = sessions.lock().await;

@@ -1,8 +1,10 @@
+use std::path::Path;
+
+use chrono::{DateTime, Utc};
+use tracing::warn;
+
 use super::{find_marketplace_json, read_manifest_from_path, MarketplaceError};
 use crate::plugin::types::MarketplaceManifest;
-use chrono::{DateTime, Utc};
-use std::path::Path;
-use tracing::warn;
 
 pub(crate) async fn fetch_github(
     name: &str,

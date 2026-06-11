@@ -1,8 +1,7 @@
 use tui_textarea::{Input, Key};
 
-use crate::app::App;
-
 use super::super::Action;
+use crate::app::App;
 
 /// 弹窗处理：OAuth > AskUser > Rewind > HITL（优先级链）
 pub(super) fn handle_popups(app: &mut App, input: &Input) -> Option<Action> {

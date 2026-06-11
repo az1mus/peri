@@ -2,9 +2,8 @@ use anyhow::Result;
 use ratatui::crossterm::event::{KeyCode, KeyEventKind, KeyModifiers};
 use tui_textarea::Input;
 
-use crate::app::App;
-
 use super::Action;
+use crate::app::App;
 
 // ── Submodule declarations ─────────────────────────────────────────────────
 mod bar_focus;

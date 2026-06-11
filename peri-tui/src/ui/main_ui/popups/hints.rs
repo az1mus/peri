@@ -1,3 +1,4 @@
+use peri_widgets::BorderedPanel;
 use ratatui::{
     layout::Rect,
     style::{Modifier, Style},
@@ -5,8 +6,6 @@ use ratatui::{
     widgets::Paragraph,
     Frame,
 };
-
-use peri_widgets::BorderedPanel;
 
 use crate::{app::App, ui::theme};
 

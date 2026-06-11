@@ -8,12 +8,11 @@ use peri_agent::{
     messages::BaseMessage,
 };
 
+use super::{build_agent::CancelPolicy, fire_subagent_lifecycle_hooks_static};
 use crate::{
     hooks::types::HookEvent,
     subagent::background::{BackgroundTask, BackgroundTaskRegistry, BackgroundTaskStatus},
 };
-
-use super::{build_agent::CancelPolicy, fire_subagent_lifecycle_hooks_static};
 
 impl super::SubAgentTool {
     pub(crate) async fn invoke_background(

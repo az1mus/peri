@@ -1,9 +1,9 @@
 use std::collections::HashSet;
 
-use super::super::FieldTextarea;
 pub use peri_middlewares::plugin::InstallScope;
 
 use super::super::panel_list::PanelList;
+use super::super::FieldTextarea;
 
 /// Discover 视图中展示的可用插件
 #[derive(Debug, Clone)]

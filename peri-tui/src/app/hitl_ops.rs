@@ -1,8 +1,8 @@
-use super::*;
-
 use agent_client_protocol::schema::{
     RequestPermissionOutcome, RequestPermissionResponse, SelectedPermissionOutcome,
 };
+
+use super::*;
 
 impl App {
     /// 上下移动列表光标

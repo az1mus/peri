@@ -1,8 +1,7 @@
 use ratatui::crossterm::event::{KeyCode, KeyEventKind};
 
-use crate::app::App;
-
 use super::super::Action;
+use crate::app::App;
 
 /// Bar 焦点模式拦截：bg_bar_cursor 有值时，所有按键转发到 handle_bar_key_event
 pub(super) fn handle_bar_focus(

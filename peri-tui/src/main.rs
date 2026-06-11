@@ -1,6 +1,16 @@
-use anyhow::Result;
+use std::io;
+use std::sync::{Arc, OnceLock};
+use std::time::{Duration, Instant};
 
+use anyhow::Result;
 use clap::{Parser, Subcommand};
+use peri_acp::transport::mpsc::mpsc_transport_pair;
+use peri_tui::{
+    acp_client::AcpTuiClient,
+    acp_server::{run_acp_server, AcpServerConfig},
+    app::App,
+    event, ui,
+};
 use ratatui::{
     crossterm::{
         event::{
@@ -11,17 +21,6 @@ use ratatui::{
         terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
     },
     prelude::*,
-};
-use std::io;
-use std::sync::{Arc, OnceLock};
-use std::time::{Duration, Instant};
-
-use peri_acp::transport::mpsc::mpsc_transport_pair;
-use peri_tui::{
-    acp_client::AcpTuiClient,
-    acp_server::{run_acp_server, AcpServerConfig},
-    app::App,
-    event, ui,
 };
 
 #[cfg(not(target_os = "windows"))]

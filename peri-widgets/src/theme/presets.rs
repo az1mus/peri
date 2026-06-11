@@ -1,5 +1,6 @@
-use super::Theme;
 use ratatui::style::Color;
+
+use super::Theme;
 
 /// 项目默认深色主题
 ///

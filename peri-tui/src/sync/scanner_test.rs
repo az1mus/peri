@@ -1,11 +1,13 @@
 #[cfg(test)]
 mod tests {
+    use std::{fs, path::Path};
+
+    use tempfile::TempDir;
+
     use crate::sync::{
         protocol::{SettingsItem, SyncItems},
         scanner,
     };
-    use std::{fs, path::Path};
-    use tempfile::TempDir;
 
     fn make_home_dir() -> TempDir {
         TempDir::new().expect("创建临时目录失败")

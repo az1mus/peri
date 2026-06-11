@@ -1,10 +1,10 @@
+use peri_middlewares::plugin::InstallScope;
+
 use crate::app::{
     panel_manager::PanelContext,
     plugin_panel::{DetailAction, PluginPanel},
     AgentEvent,
 };
-
-use peri_middlewares::plugin::InstallScope;
 
 impl PluginPanel {
     /// 异步安装 Discover 视图中当前光标处的插件

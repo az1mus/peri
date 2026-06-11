@@ -8,8 +8,6 @@
 //! messages and dispatches responses to the pending request map, so `send_request`
 //! can await the oneshot channel without deadlocking.
 
-use async_trait::async_trait;
-use serde_json::Value;
 use std::{
     collections::HashMap,
     sync::{
@@ -17,6 +15,9 @@ use std::{
         Arc,
     },
 };
+
+use async_trait::async_trait;
+use serde_json::Value;
 use tokio::sync::{mpsc, oneshot, Mutex};
 
 use super::{
@@ -270,8 +271,9 @@ pub fn mpsc_transport_pair() -> (MpscClientTransport, MpscServerTransport) {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use serde_json::json;
+
+    use super::*;
 
     #[tokio::test]
     async fn test_request_response() {

@@ -1,5 +1,6 @@
 use std::{collections::HashMap, sync::Arc};
 
+use rmcp::transport::auth::{AuthError, OAuthState};
 use thiserror::Error;
 use tokio::sync::oneshot;
 use tracing::{info, warn};
@@ -9,7 +10,6 @@ use super::{
     callback_server::{CallbackError, OAuthCallbackServer},
     config::OAuthConfig,
 };
-use rmcp::transport::auth::{AuthError, OAuthState};
 
 /// OAuth 回调结果（从 TUI 传回后台 OAuth 流程）
 pub struct OAuthCallbackResult {

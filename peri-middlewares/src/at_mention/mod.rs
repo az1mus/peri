@@ -1,11 +1,10 @@
 mod file_reader;
 mod parser;
 
-pub use file_reader::FileContent;
-
 use std::path::PathBuf;
 
 use async_trait::async_trait;
+pub use file_reader::FileContent;
 use peri_agent::{
     agent::state::State,
     error::AgentResult,
@@ -130,10 +129,12 @@ impl<S: State> Middleware<S> for AtMentionMiddleware {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use peri_agent::agent::state::AgentState;
     use std::fs;
+
+    use peri_agent::agent::state::AgentState;
     use tempfile::tempdir;
+
+    use super::*;
 
     #[tokio::test]
     async fn test_no_mentions_no_injection() {

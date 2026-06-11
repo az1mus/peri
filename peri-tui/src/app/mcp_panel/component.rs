@@ -1,15 +1,12 @@
 use std::any::Any;
 
+use peri_middlewares::mcp::ClientStatus;
 use ratatui::{
     crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind},
     layout::Rect,
     Frame,
 };
 use tui_textarea::Input;
-
-use peri_middlewares::mcp::ClientStatus;
-
-use crate::i18n::LcRegistry;
 
 use super::{
     super::{
@@ -18,6 +15,7 @@ use super::{
     },
     App, DetailAction, McpPanel, McpPanelView,
 };
+use crate::i18n::LcRegistry;
 
 impl PanelComponent for McpPanel {
     fn kind(&self) -> PanelKind {

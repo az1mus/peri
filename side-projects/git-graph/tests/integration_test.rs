@@ -1,5 +1,6 @@
-use assert_cmd::Command;
 use std::process::Command as StdCommand;
+
+use assert_cmd::Command;
 
 fn setup_repo() -> tempfile::TempDir {
     let dir = tempfile::tempdir().unwrap();

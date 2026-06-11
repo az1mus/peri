@@ -1,6 +1,7 @@
+use serde_json::json;
+
 use super::*;
 use crate::messages::{MessageContent, ToolCallRequest};
-use serde_json::json;
 
 fn ai_read_file(tc_id: &str, path: &str) -> BaseMessage {
     BaseMessage::ai_with_tool_calls(

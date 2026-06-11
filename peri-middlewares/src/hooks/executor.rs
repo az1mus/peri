@@ -1,13 +1,5 @@
 use std::{collections::HashSet, process::Stdio, sync::Arc, time::Duration};
 
-use tokio::io::AsyncWriteExt;
-
-use crate::hooks::{
-    output_parser::{parse_command_hook_output, parse_http_hook_response},
-    ssrf_guard::check_url,
-    types::{HookAction, HookInput, HookType, RegisteredHook},
-    variables::resolve_hook_variables,
-};
 use peri_agent::{
     agent::{
         react::{AgentInput, ReactLLM},
@@ -15,6 +7,14 @@ use peri_agent::{
         ReActAgent, State,
     },
     messages::BaseMessage,
+};
+use tokio::io::AsyncWriteExt;
+
+use crate::hooks::{
+    output_parser::{parse_command_hook_output, parse_http_hook_response},
+    ssrf_guard::check_url,
+    types::{HookAction, HookInput, HookType, RegisteredHook},
+    variables::resolve_hook_variables,
 };
 
 /// Execute a command hook (shell script).

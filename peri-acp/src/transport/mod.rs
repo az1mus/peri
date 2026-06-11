@@ -13,7 +13,6 @@ pub mod types;
 
 use async_trait::async_trait;
 use serde_json::Value;
-
 use types::{AcpError, IncomingMessage, RequestId};
 
 /// Bidirectional ACP JSON-RPC 2.0 transport.

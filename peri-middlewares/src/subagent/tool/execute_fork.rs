@@ -7,9 +7,8 @@ use peri_agent::{
     tools::BaseTool,
 };
 
-use crate::{subagent::SubAgentMiddlewareConfig, tools::ArcToolWrapper};
-
 use super::{build_subagent_middlewares, format_subagent_result, SourceAgentIdHandler};
+use crate::{subagent::SubAgentMiddlewareConfig, tools::ArcToolWrapper};
 
 impl super::SubAgentTool {
     pub(crate) async fn invoke_fork(

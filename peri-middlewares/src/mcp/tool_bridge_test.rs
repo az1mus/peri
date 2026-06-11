@@ -1,6 +1,7 @@
+use rmcp::model::RawTextContent;
+
 use super::*;
 use crate::mcp::client::ClientStatus;
-use rmcp::model::RawTextContent;
 
 fn make_tool(name: &str, description: Option<&str>) -> Tool {
     let json = serde_json::json!({

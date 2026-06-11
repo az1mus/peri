@@ -2,9 +2,10 @@
 //!
 //! JSONL 文件存储，mpsc channel 解耦，fire-and-forget 写入。
 
+use std::sync::LazyLock;
+
 use chrono::Utc;
 use serde::Serialize;
-use std::sync::LazyLock;
 use tokio::sync::mpsc;
 
 /// 字符串截断上限（字符级，CJK 安全）

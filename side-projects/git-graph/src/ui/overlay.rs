@@ -1,4 +1,3 @@
-use crate::app::{App, Overlay};
 use ratatui::{
     layout::{Alignment, Margin, Rect},
     style::{Color, Style},
@@ -6,6 +5,8 @@ use ratatui::{
     widgets::{Block, Borders, Clear, Paragraph},
     Frame,
 };
+
+use crate::app::{App, Overlay};
 
 pub fn draw_overlay(f: &mut Frame, area: Rect, app: &App) {
     match app.overlay {

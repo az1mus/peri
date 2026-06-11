@@ -1,11 +1,13 @@
 #[cfg(test)]
 mod tests {
+    use std::{fs, path::Path};
+
+    use tempfile::TempDir;
+
     use crate::sync::{
         protocol::{FileEntry, FilesItem, McpItem, SettingsItem, SyncItems},
         writer,
     };
-    use std::{fs, path::Path};
-    use tempfile::TempDir;
 
     #[test]
     fn test_validate_normal_relative_path() {

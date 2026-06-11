@@ -1,3 +1,12 @@
+use std::collections::{HashMap, HashSet};
+use std::path::Path;
+
+use anyhow::Result;
+use git2::Oid;
+use peri_widgets::FileNode;
+use ratatui::layout::Rect;
+use sysinfo::System;
+
 use crate::git::commit::{CommitDetail, DiffStats};
 use crate::git::repo::GitRepo;
 use crate::git::stash::StashInfo;
@@ -6,13 +15,6 @@ use crate::graph::layout::GraphLayout;
 use crate::graph::topology::Topology;
 use crate::theme::GigTheme;
 use crate::ui::toolbar::{GlobalToolbarState, ToolbarState};
-use anyhow::Result;
-use git2::Oid;
-use peri_widgets::FileNode;
-use ratatui::layout::Rect;
-use std::collections::{HashMap, HashSet};
-use std::path::Path;
-use sysinfo::System;
 
 /// Toast 通知消息
 #[derive(Debug, Clone)]

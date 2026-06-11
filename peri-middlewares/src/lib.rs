@@ -79,6 +79,9 @@ pub use tools::{ArcToolWrapper, AskUserTool, BoxToolWrapper};
 
 /// Prelude - 常用类型一次性导入
 pub mod prelude {
+    // 重导出 peri-agent 核心类型
+    pub use peri_agent::prelude::*;
+
     pub use crate::{
         agent_define::AgentDefineMiddleware,
         agents_md::AgentsMdMiddleware,
@@ -111,6 +114,4 @@ pub mod prelude {
             WriteFileTool,
         },
     };
-    // 重导出 peri-agent 核心类型
-    pub use peri_agent::prelude::*;
 }

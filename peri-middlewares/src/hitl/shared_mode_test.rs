@@ -1,5 +1,6 @@
-use super::*;
 use std::thread;
+
+use super::*;
 
 #[test]
 fn test_next_cycle() {

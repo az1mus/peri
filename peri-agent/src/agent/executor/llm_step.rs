@@ -1,6 +1,8 @@
 use std::sync::Arc;
+
 use tokio_util::sync::CancellationToken;
 
+use super::ReActAgent;
 use crate::{
     agent::{
         events::AgentEvent,
@@ -12,8 +14,6 @@ use crate::{
     messages::MessageId,
     tools::BaseTool,
 };
-
-use super::ReActAgent;
 
 /// LLM 推理 + Token 预算监控
 pub(crate) async fn call_llm<L: ReactLLM, S: State>(

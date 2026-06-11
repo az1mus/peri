@@ -1,5 +1,6 @@
-use peri_agent::agent::BackgroundTaskResult;
 use std::collections::HashMap;
+
+use peri_agent::agent::BackgroundTaskResult;
 use tracing::warn;
 
 /// 后台任务状态

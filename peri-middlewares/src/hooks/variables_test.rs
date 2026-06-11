@@ -1,5 +1,6 @@
-use super::*;
 use std::path::PathBuf;
+
+use super::*;
 
 fn plugin_root() -> PathBuf {
     PathBuf::from("/tmp/plugin")

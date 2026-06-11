@@ -1,7 +1,9 @@
-use crate::plugin::types::{MarketplaceManifest, MarketplaceSource, PluginAuthor};
-use chrono::{DateTime, Utc};
 use std::path::{Path, PathBuf};
+
+use chrono::{DateTime, Utc};
 use thiserror::Error;
+
+use crate::plugin::types::{MarketplaceManifest, MarketplaceSource, PluginAuthor};
 
 mod fetch;
 mod manager;

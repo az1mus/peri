@@ -3,14 +3,13 @@ use std::{any::Any, sync::Arc};
 use ratatui::{layout::Rect, Frame};
 use tui_textarea::Input;
 
+use super::{ThreadId, ThreadMeta, ThreadStore};
 use crate::app::FieldTextarea;
 use crate::app::{
     panel_component::PanelComponent,
     panel_manager::{EventResult, PanelContext, PanelKind},
     App,
 };
-
-use super::{ThreadId, ThreadMeta, ThreadStore};
 
 /// TUI 内 Thread 历史浏览面板
 #[derive(Clone)]

@@ -42,7 +42,8 @@ impl<'a> BorderedPanel<'a> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use ratatui::{backend::TestBackend, Terminal};
+
+    use super::*;
     include!("bordered_panel_test.rs");
 }

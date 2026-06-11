@@ -1,9 +1,9 @@
 //! ACP notification bridge — converts AcpNotification → TUI AgentEvent dispatch.
 //! Extracted from original agent_ops.rs (2026-05-20 split).
 
-use super::super::*;
 use tracing::debug;
 
+use super::super::*;
 use crate::app::App;
 
 impl App {
@@ -43,6 +43,26 @@ impl App {
                 tracing::debug!(%method, "ACP→TUI: peri/* notification (no TUI action)");
                 let _ = params;
                 (false, false, false)
+            }
+            AcpNotification::PredictionReady { text, .. } => {
+                tracing::debug!(%text, "TUI received PredictionReady");
+                // textarea 为空时才显示 prediction（用户可能已开始输入）
+                let textarea_empty = self
+                    .session_mgr
+                    .current_mut()
+                    .ui
+                    .textarea
+                    .lines()
+                    .iter()
+                    .all(|l| l.is_empty());
+                if textarea_empty && !self.session_mgr.current_mut().ui.loading {
+                    self.session_mgr.current_mut().ui.prediction =
+                        Some(crate::app::ui_state::PredictionState {
+                            text,
+                            received_at: std::time::Instant::now(),
+                        });
+                }
+                (true, false, false)
             }
             AcpNotification::Other { msg } => {
                 tracing::warn!(%msg, "Unhandled ACP notification");

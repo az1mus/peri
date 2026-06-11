@@ -1,6 +1,7 @@
 pub mod blocks;
 pub mod highlight;
 
+pub use blocks::BlockRenderStrategy;
 use ratatui::{
     buffer::Buffer,
     layout::Rect,
@@ -9,8 +10,6 @@ use ratatui::{
 };
 
 use crate::theme::DarkTheme;
-
-pub use blocks::BlockRenderStrategy;
 
 pub struct MessageBlockState {
     blocks: Vec<BlockRenderStrategy>,

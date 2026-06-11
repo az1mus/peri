@@ -1,6 +1,7 @@
+use std::collections::HashMap;
+
 use anyhow::Result;
 use git2::Oid;
-use std::collections::HashMap;
 
 /// Stash 信息
 #[derive(Debug, Clone)]

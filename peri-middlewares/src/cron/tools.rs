@@ -1,8 +1,9 @@
+use std::sync::Arc;
+
 use async_trait::async_trait;
 use parking_lot::Mutex;
 use peri_agent::tools::BaseTool;
 use serde_json::Value;
-use std::sync::Arc;
 
 use super::CronScheduler;
 
@@ -181,7 +182,8 @@ impl BaseTool for CronRemoveTool {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use tokio::sync::mpsc;
+
+    use super::*;
     include!("tools_test.rs");
 }

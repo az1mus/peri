@@ -1,7 +1,8 @@
-use super::*;
-use crate::ui::message_view::ContentBlockView;
 use peri_agent::messages::{MessageContent, ToolCallRequest};
 use serde_json::json;
+
+use super::*;
+use crate::ui::message_view::ContentBlockView;
 
 /// 测试：AI 消息只有 tool_calls（无 content）时，应正确渲染工具调用
 #[test]

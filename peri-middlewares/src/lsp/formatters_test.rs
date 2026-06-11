@@ -1,5 +1,6 @@
-use super::*;
 use lsp_types::{Position, Range};
+
+use super::*;
 
 fn make_uri(path: &str) -> lsp_types::Uri {
     format!("file://{path}").parse().unwrap()

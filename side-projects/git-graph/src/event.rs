@@ -1,10 +1,11 @@
+use crossterm::event::{KeyCode, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
+
 use crate::app::{
     App, ConfirmAction, Focus, InputAction, InputDialog, Overlay, StatusSubPanel, ToastStyle,
 };
 use crate::git::remote::{self, RemoteOp, RemoteResult};
 use crate::ui::sidebar::status_panel;
 use crate::ui::toolbar::{GlobalAction, ToolbarAction};
-use crossterm::event::{KeyCode, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 
 /// 打开文件搜索弹窗（Ctrl+P 或工具栏按钮共用）
 fn open_file_search(app: &mut App) {

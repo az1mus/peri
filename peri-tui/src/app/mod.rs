@@ -104,42 +104,39 @@ mod edit_utils;
 pub use edit_utils::{build_textarea, ensure_cursor_visible};
 
 mod field_textarea;
-pub use field_textarea::FieldTextarea;
+use std::sync::Arc;
 
-use crate::acp_client::{AcpNotification, AcpTuiClient};
+pub use agent::LlmProvider;
+// Re-export sub-structs
+pub use agent_comm::{AgentComm, RetryStatus};
+pub use agent_panel::AgentPanel;
+pub use cron_state::{CronPanel, CronState};
+pub use field_textarea::FieldTextarea;
+pub use hooks_panel::HooksPanel;
+pub use langfuse_state::LangfuseState;
+pub use mcp_panel::{DetailAction, McpPanel, McpPanelView};
+pub use model_panel::ModelPanel;
+pub use panel_component::PanelComponent;
+pub use panel_manager::{
+    EventResult, MutexGroup, PanelContext, PanelKind, PanelManager, PanelScope, PanelState,
+};
 use peri_agent::messages::BaseMessage;
 use peri_middlewares::prelude::HitlDecision;
+pub use setup_wizard::SetupWizardPanel;
+pub use tasks_panel::TasksPanel;
 
-use crate::{
-    config::PeriConfig,
-    thread::{SqliteThreadStore, ThreadBrowser, ThreadId, ThreadStore},
-};
-
+use crate::acp_client::{AcpNotification, AcpTuiClient};
 // Re-export MessageViewModel from ui::message_view
 use crate::command::agents::AgentItem;
 pub use crate::ui::message_view::{
     aggregate_tail_tool_groups, aggregate_tool_groups, ContentBlockView, MessageViewModel,
     ToolCategory,
 };
-pub use agent::LlmProvider;
-pub use agent_panel::AgentPanel;
-pub use hooks_panel::HooksPanel;
-pub use model_panel::ModelPanel;
-pub use setup_wizard::SetupWizardPanel;
-use std::sync::Arc;
-
 use crate::ui::render_thread::RenderEvent;
-
-// Re-export sub-structs
-pub use agent_comm::{AgentComm, RetryStatus};
-pub use cron_state::{CronPanel, CronState};
-pub use langfuse_state::LangfuseState;
-pub use mcp_panel::{DetailAction, McpPanel, McpPanelView};
-pub use panel_component::PanelComponent;
-pub use panel_manager::{
-    EventResult, MutexGroup, PanelContext, PanelKind, PanelManager, PanelScope, PanelState,
+use crate::{
+    config::PeriConfig,
+    thread::{SqliteThreadStore, ThreadBrowser, ThreadId, ThreadStore},
 };
-pub use tasks_panel::TasksPanel;
 
 // ─── App ──────────────────────────────────────────────────────────────────────
 
@@ -521,6 +518,7 @@ impl App {
         let s = self.active_mut();
         s.ui.loading = loading;
         if loading {
+            s.ui.prediction = None;
             s.ui.textarea = build_textarea(true);
             s.spinner_state
                 .set_mode(peri_widgets::SpinnerMode::Responding);

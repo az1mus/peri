@@ -2,9 +2,10 @@
 // map_executor_event: handles categories ②③ only
 // Category ① events now come through session/update → handle_session_update_peri()
 
+use peri_agent::agent::events::AgentEvent as ExecutorEvent;
+
 pub use super::provider::LlmProvider;
 use super::AgentEvent;
-use peri_agent::agent::events::AgentEvent as ExecutorEvent;
 
 /// 将 ExecutorEvent 映射为 TUI AgentEvent。
 ///

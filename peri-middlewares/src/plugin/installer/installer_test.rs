@@ -1,5 +1,6 @@
-use super::*;
 use tempfile::tempdir;
+
+use super::*;
 
 fn setup_marketplace_cache(cache_dir: &Path) {
     let mkt_dir = cache_dir.join("test-mkt");

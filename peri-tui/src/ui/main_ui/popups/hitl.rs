@@ -1,3 +1,4 @@
+use peri_widgets::BorderedPanel;
 use ratatui::{
     layout::Rect,
     style::{Modifier, Style},
@@ -5,8 +6,6 @@ use ratatui::{
     widgets::Paragraph,
     Frame,
 };
-
-use peri_widgets::BorderedPanel;
 
 use crate::{app::App, ui::theme};
 
@@ -145,7 +144,8 @@ fn format_input_preview(input: &serde_json::Value, max_len: usize) -> String {
 
 #[cfg(test)]
 mod tests {
-    use crate::app::{App, HitlBatchPrompt, InteractionPrompt};
     use peri_middlewares::hitl::BatchItem;
+
+    use crate::app::{App, HitlBatchPrompt, InteractionPrompt};
     include!("hitl_test.rs");
 }

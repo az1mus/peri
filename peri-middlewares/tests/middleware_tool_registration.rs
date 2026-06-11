@@ -1,6 +1,7 @@
+use std::fs;
+
 use peri_agent::prelude::*;
 use peri_middlewares::middleware::{FilesystemMiddleware, TerminalMiddleware};
-use std::fs;
 use tempfile::TempDir;
 
 // ── 辅助：创建临时目录并写入测试文件 ────────────────────────────────────────

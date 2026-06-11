@@ -1,8 +1,9 @@
+use tempfile::tempdir;
+
 use super::*;
 use crate::plugin::types::{
     InstallScope, InstalledPlugin, PluginAgent, PluginCommand, PluginCommandEntry,
 };
-use tempfile::tempdir;
 
 pub(crate) fn make_manifest_with_commands(commands: Vec<PluginCommand>) -> PluginManifest {
     let entries: Vec<PluginCommandEntry> =

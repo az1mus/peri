@@ -7,13 +7,12 @@ use ratatui::{
 };
 use tui_textarea::Input;
 
-use crate::config::{PeriConfig, ThinkingConfig};
-
 use super::{
     panel_component::PanelComponent,
     panel_manager::{EventResult, PanelContext, PanelKind},
     App,
 };
+use crate::config::{PeriConfig, ThinkingConfig};
 
 // ─── AliasTab 枚举 ─────────────────────────────────────────────────────────────
 

@@ -1,11 +1,12 @@
 pub mod file_tree_panel;
 pub mod status_panel;
 
-use crate::app::App;
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     Frame,
 };
+
+use crate::app::App;
 
 /// 记录 sidebar 布局（两个面板的位置信息，用于点击检测）
 #[derive(Default)]

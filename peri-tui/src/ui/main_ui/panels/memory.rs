@@ -1,13 +1,14 @@
-use crate::{
-    app::{memory_panel::MemoryPanel, App},
-    ui::theme,
-};
 use peri_widgets::{BorderedPanel, ScrollState, ScrollableArea};
 use ratatui::{
     layout::Rect,
     style::{Modifier, Style},
     text::{Line, Span, Text},
     Frame,
+};
+
+use crate::{
+    app::{memory_panel::MemoryPanel, App},
+    ui::theme,
 };
 
 pub(crate) fn render_memory_panel(f: &mut Frame, panel: &MemoryPanel, app: &mut App, area: Rect) {

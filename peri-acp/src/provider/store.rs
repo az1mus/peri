@@ -1,6 +1,8 @@
-use super::config::PeriConfig;
-use anyhow::Result;
 use std::path::{Path, PathBuf};
+
+use anyhow::Result;
+
+use super::config::PeriConfig;
 
 /// 配置文件路径：~/.peri/settings.json
 pub fn config_path() -> PathBuf {

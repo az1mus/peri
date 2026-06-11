@@ -1,10 +1,3 @@
-use crate::{
-    app::{
-        status_panel::{StatusPanel, STATUS_TAB_CONTEXT, STATUS_TAB_COST},
-        App,
-    },
-    ui::theme,
-};
 use peri_widgets::BorderedPanel;
 use ratatui::{
     layout::Rect,
@@ -12,6 +5,14 @@ use ratatui::{
     text::{Line, Span, Text},
     widgets::Paragraph,
     Frame,
+};
+
+use crate::{
+    app::{
+        status_panel::{StatusPanel, STATUS_TAB_CONTEXT, STATUS_TAB_COST},
+        App,
+    },
+    ui::theme,
 };
 
 pub(crate) fn render_status_panel(f: &mut Frame, panel: &StatusPanel, app: &mut App, area: Rect) {
@@ -569,7 +570,8 @@ fn render_context_tab(f: &mut Frame, app: &App, area: Rect) {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use peri_agent::agent::token::RequestRecord;
+
+    use super::*;
     include!("status_test.rs");
 }

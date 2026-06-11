@@ -1,8 +1,9 @@
-use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
     path::{Path, PathBuf},
 };
+
+use serde::{Deserialize, Serialize};
 
 /// LSP 服务器配置来源
 #[derive(Debug, Clone, PartialEq, Eq)]

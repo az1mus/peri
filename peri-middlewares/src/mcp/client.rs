@@ -1,10 +1,10 @@
 use std::{collections::HashMap, sync::Arc};
-use thiserror::Error;
 
 use rmcp::{
     model::{Resource, Tool},
     service::{Peer, QuitReason, RoleClient, RunningService, ServiceError},
 };
+use thiserror::Error;
 
 use super::{
     channel_handler::ChannelHandler,

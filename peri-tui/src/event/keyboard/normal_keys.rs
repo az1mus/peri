@@ -1,8 +1,7 @@
 use tui_textarea::{Input, Key};
 
-use crate::app::{App, PendingAttachment};
-
 use super::super::Action;
+use crate::app::{App, PendingAttachment};
 
 /// Normal mode key handling: main match block arm bodies
 pub(super) fn handle_normal_keys(app: &mut App, input: Input) -> anyhow::Result<Option<Action>> {
@@ -270,6 +269,8 @@ pub(super) fn handle_normal_keys(app: &mut App, input: Input) -> anyhow::Result<
                 app.exit_history();
             }
             app.session_mgr.current_mut().ui.textarea.input(input);
+            // 任意输入清除 prediction
+            app.session_mgr.current_mut().ui.prediction = None;
             // When input changes: reset cursor (don't pre-select; wait for user to press Tab/Up/Down)
             if !app.session_mgr.current_mut().ui.loading {
                 app.session_mgr.current_mut().ui.hint_cursor = None;
@@ -429,6 +430,16 @@ fn handle_ctrl_v(app: &mut App) {
 
 fn handle_tab(app: &mut App) {
     use super::inject_at_mention_path;
+
+    // Prediction 接受优先级最高
+    if let Some(pred) = app.session_mgr.current_mut().ui.prediction.take() {
+        app.session_mgr
+            .current_mut()
+            .ui
+            .textarea
+            .insert_str(&pred.text);
+        return;
+    }
 
     if app.session_mgr.current_mut().ui.at_mention.active {
         inject_at_mention_path(app);

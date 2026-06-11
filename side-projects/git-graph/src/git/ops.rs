@@ -1,7 +1,8 @@
-use anyhow::{Context, Result};
-use git2::Oid;
 use std::path::Path;
 use std::process::Command;
+
+use anyhow::{Context, Result};
+use git2::Oid;
 
 use super::repo::GitRepo;
 

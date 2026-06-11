@@ -1,3 +1,5 @@
+use tracing::warn;
+
 use crate::{
     agent::compact::{
         config::CompactConfig,
@@ -7,7 +9,6 @@ use crate::{
     llm::{types::LlmRequest, BaseModel},
     messages::{BaseMessage, ContentBlock, MessageContent},
 };
-use tracing::warn;
 
 /// 结构化摘要 system prompt
 const SYSTEM_PROMPT: &str =

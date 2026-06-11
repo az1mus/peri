@@ -1,9 +1,10 @@
-use crate::app::{App, Overlay};
-use crate::ui::overlay;
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     Frame,
 };
+
+use crate::app::{App, Overlay};
+use crate::ui::overlay;
 
 pub fn draw(f: &mut Frame, app: &mut App) {
     let size = f.area();

@@ -1,3 +1,10 @@
+use std::path::PathBuf;
+
+use chrono::Utc;
+use tokio::sync::mpsc;
+use tracing::{debug, warn};
+
+use super::fetch::{fetch_git, fetch_github, fetch_npm, fetch_url, read_directory, read_file};
 use super::{
     find_marketplace_json, read_manifest_from_path, AvailablePlugin, MarketplaceEntry,
     MarketplaceRefreshEvent, MarketplaceStatus,
@@ -9,12 +16,6 @@ use crate::plugin::{
     },
     types::{KnownMarketplace, MarketplaceManifest, MarketplacePlugin, MarketplaceSource},
 };
-use chrono::Utc;
-use std::path::PathBuf;
-use tokio::sync::mpsc;
-use tracing::{debug, warn};
-
-use super::fetch::{fetch_git, fetch_github, fetch_npm, fetch_url, read_directory, read_file};
 
 pub struct MarketplaceManager {
     pub(crate) entries: Vec<MarketplaceEntry>,

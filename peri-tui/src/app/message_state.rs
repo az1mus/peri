@@ -4,12 +4,11 @@ use parking_lot::RwLock;
 use peri_agent::interaction::channel_types::ChannelNotification;
 use tokio::sync::{mpsc, Notify};
 
+use super::message_pipeline::MessagePipeline;
 use crate::ui::{
     message_view::MessageViewModel,
     render_thread::{RenderCache, RenderEvent},
 };
-
-use super::message_pipeline::MessagePipeline;
 
 /// 消息状态：会话级的消息管线、渲染通道、消息列表。
 pub struct MessageState {

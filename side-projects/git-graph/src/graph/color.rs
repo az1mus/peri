@@ -1,5 +1,6 @@
-use ratatui::style::Color;
 use std::collections::HashMap;
+
+use ratatui::style::Color;
 
 const PALETTE: [Color; 5] = [
     Color::Rgb(255, 95, 95),   // 红

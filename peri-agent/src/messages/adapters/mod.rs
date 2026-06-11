@@ -2,9 +2,8 @@ mod anthropic;
 mod openai;
 
 pub use anthropic::AnthropicAdapter;
-pub use openai::OpenAiAdapter;
-
 use anyhow::Result;
+pub use openai::OpenAiAdapter;
 use serde_json::Value;
 
 use crate::messages::BaseMessage;

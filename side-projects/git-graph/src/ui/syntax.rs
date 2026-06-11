@@ -1,8 +1,9 @@
 //! 语法高亮辅助模块。基于 syntect，一次性加载语法定义和主题，
 //! 提供 `highlight()` 将文件内容转换为 ratatui Span 列表。
 
-use ratatui::style::{Color, Modifier, Style};
 use std::sync::OnceLock;
+
+use ratatui::style::{Color, Modifier, Style};
 use syntect::highlighting::{FontStyle, Theme, ThemeSet};
 use syntect::parsing::{SyntaxReference, SyntaxSet};
 

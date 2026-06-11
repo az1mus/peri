@@ -1,5 +1,6 @@
-use super::*;
 use tokio::sync::mpsc;
+
+use super::*;
 
 #[test]
 fn test_description_extended() {

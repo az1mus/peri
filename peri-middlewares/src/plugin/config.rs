@@ -1,9 +1,11 @@
+use std::path::{Path, PathBuf};
+
+use serde::{Deserialize, Serialize};
+use thiserror::Error;
+
 use crate::plugin::types::{
     DeclaredMarketplace, InstalledPlugins, KnownMarketplace, PluginManifest,
 };
-use serde::{Deserialize, Serialize};
-use std::path::{Path, PathBuf};
-use thiserror::Error;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ClaudeSettings {

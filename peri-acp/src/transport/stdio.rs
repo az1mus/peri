@@ -4,8 +4,6 @@
 //! Background pump task dispatches Response messages to the pending request map,
 //! forwards Requests/Notifications to the incoming channel.
 
-use async_trait::async_trait;
-use serde_json::Value;
 use std::{
     collections::HashMap,
     sync::{
@@ -13,6 +11,9 @@ use std::{
         Arc,
     },
 };
+
+use async_trait::async_trait;
+use serde_json::Value;
 use tokio::{
     io::{AsyncBufReadExt, AsyncWriteExt, BufReader, BufWriter},
     sync::{mpsc, oneshot, Mutex},

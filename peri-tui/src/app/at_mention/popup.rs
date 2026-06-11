@@ -1,3 +1,4 @@
+use peri_widgets::BorderedPanel;
 use ratatui::{
     layout::Rect,
     style::{Modifier, Style},
@@ -6,8 +7,6 @@ use ratatui::{
     Frame,
 };
 use unicode_width::UnicodeWidthStr;
-
-use peri_widgets::BorderedPanel;
 
 use super::AtMentionState;
 use crate::ui::theme;

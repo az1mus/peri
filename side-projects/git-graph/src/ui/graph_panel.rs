@@ -1,5 +1,3 @@
-use crate::app::App;
-use crate::graph::render::render_graph_row;
 use peri_widgets::Theme as _;
 use ratatui::{
     layout::{Margin, Rect},
@@ -7,6 +5,9 @@ use ratatui::{
     widgets::{Block, Paragraph, Scrollbar, ScrollbarOrientation, ScrollbarState},
     Frame,
 };
+
+use crate::app::App;
+use crate::graph::render::render_graph_row;
 
 pub fn draw(f: &mut Frame, area: Rect, app: &mut App) {
     let block = Block::default()

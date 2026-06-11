@@ -1,7 +1,3 @@
-use crate::{
-    app::{betas_panel::BetasPanel, App},
-    ui::theme,
-};
 use peri_widgets::BorderedPanel;
 use ratatui::{
     layout::Rect,
@@ -9,6 +5,11 @@ use ratatui::{
     text::{Line, Span, Text},
     widgets::Paragraph,
     Frame,
+};
+
+use crate::{
+    app::{betas_panel::BetasPanel, App},
+    ui::theme,
 };
 
 pub(crate) fn render_betas_panel(f: &mut Frame, panel: &BetasPanel, app: &mut App, area: Rect) {

@@ -1,7 +1,7 @@
+use ratatui::style::Modifier;
 use unicode_width::UnicodeWidthStr;
 
 use super::*;
-use ratatui::style::Modifier;
 
 fn default_theme() -> DefaultMarkdownTheme {
     DefaultMarkdownTheme

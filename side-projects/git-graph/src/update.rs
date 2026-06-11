@@ -6,8 +6,9 @@
 //! 所有下载、解压、symlink、版本管理逻辑都在脚本中，
 //! 二进制只负责拉起脚本，保持轻量。
 
-use anyhow::{bail, Result};
 use std::process::Command;
+
+use anyhow::{bail, Result};
 
 const SCRIPT_URL_UNIX: &str =
     "https://raw.githubusercontent.com/konghayao/peri/main/side-projects/git-graph/install-gig.sh";

@@ -37,8 +37,9 @@ impl<S: peri_agent::agent::state::State> Middleware<S> for McpMiddleware {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use peri_agent::agent::state::AgentState;
+
+    use super::*;
 
     #[test]
     fn test_name_returns_mcp_middleware() {

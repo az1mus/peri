@@ -1,5 +1,6 @@
-use super::*;
 use tempfile::tempdir;
+
+use super::*;
 
 #[test]
 fn test_load_overrides_persona_only() {

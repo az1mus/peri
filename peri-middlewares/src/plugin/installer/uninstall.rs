@@ -3,14 +3,13 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use crate::plugin::{
-    config::{load_installed_plugins, save_installed_plugins},
-    types::InstalledPlugins,
-};
-
 use super::{
     atomic_write_settings, get_marketplace_manifest, match_project_path,
     remove_from_enabled_plugins, sanitize_plugin_id, InstallerError, PluginUpdateInfo,
+};
+use crate::plugin::{
+    config::{load_installed_plugins, save_installed_plugins},
+    types::InstalledPlugins,
 };
 
 pub async fn uninstall_plugin(

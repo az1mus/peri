@@ -7,14 +7,13 @@ use ratatui::{
 };
 use tui_textarea::Input;
 
-use crate::command::agents::AgentItem;
-
 use super::{
     panel_component::PanelComponent,
     panel_list::PanelList,
     panel_manager::{EventResult, PanelContext, PanelKind},
     App,
 };
+use crate::command::agents::AgentItem;
 
 /// AgentPanel 内部用占位单元管理 cursor/scroll，实际 agent 数据在 agents 字段
 #[derive(Clone)]

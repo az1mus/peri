@@ -1,3 +1,14 @@
+use std::{
+    collections::HashMap,
+    path::{Path, PathBuf},
+};
+
+use gray_matter::{engine::YAML, Matter};
+use peri_lsp::config::{LspConfigSource, LspServerConfig};
+use serde::Deserialize;
+use thiserror::Error;
+use tracing::{debug, warn};
+
 use crate::{
     hooks::types::{HooksConfig, RegisteredHook},
     mcp::{config::McpConfigFile, McpServerConfig},
@@ -11,15 +22,6 @@ use crate::{
         types::{InstalledPlugins, McpServerEntry, PluginCommandEntry, PluginManifest},
     },
 };
-use gray_matter::{engine::YAML, Matter};
-use peri_lsp::config::{LspConfigSource, LspServerConfig};
-use serde::Deserialize;
-use std::{
-    collections::HashMap,
-    path::{Path, PathBuf},
-};
-use thiserror::Error;
-use tracing::{debug, warn};
 
 #[derive(Debug, Error)]
 pub enum LoaderError {

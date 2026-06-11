@@ -1,8 +1,9 @@
 //! Receiver mode: enter pair code → select items → receive + decrypt → write
 
+use std::io::Write;
+
 use anyhow::{Context, Result};
 use futures_util::{SinkExt, StreamExt};
-use std::io::Write;
 use tokio_tungstenite::{connect_async, tungstenite::Message};
 use tracing::info;
 

@@ -1,6 +1,7 @@
+use serde_json::json;
+
 use super::*;
 use crate::messages::{MessageContent, ToolCallRequest};
-use serde_json::json;
 
 fn ai_with_tools(ids: &[&str]) -> BaseMessage {
     let tcs: Vec<ToolCallRequest> = ids

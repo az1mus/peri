@@ -1,5 +1,6 @@
-use crate::app::App;
-use crate::git::status::FileStatus;
+use std::borrow::Cow;
+use std::collections::{BTreeMap, HashSet};
+
 use peri_widgets::Theme;
 use ratatui::{
     layout::Rect,
@@ -8,9 +9,10 @@ use ratatui::{
     widgets::{Block, Borders, Paragraph},
     Frame,
 };
-use std::borrow::Cow;
-use std::collections::{BTreeMap, HashSet};
 use unicode_width::UnicodeWidthStr;
+
+use crate::app::App;
+use crate::git::status::FileStatus;
 
 /// status 面板按钮类型
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

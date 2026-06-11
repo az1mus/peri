@@ -7,11 +7,10 @@ use peri_agent::{
     thread::ThreadMeta,
 };
 
+use super::{build_subagent_middlewares, SourceAgentIdHandler};
 use crate::{
     claude_agent_parser::ClaudeAgent, hooks::types::HookEvent, subagent::SubAgentMiddlewareConfig,
 };
-
-use super::{build_subagent_middlewares, SourceAgentIdHandler};
 
 /// Controls how parent cancellation affects child agent.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

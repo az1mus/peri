@@ -1,7 +1,9 @@
+use std::path::PathBuf;
+
+use peri_agent::messages::MessageId;
+
 use super::*;
 use crate::hooks::types::HookEvent;
-use peri_agent::messages::MessageId;
-use std::path::PathBuf;
 
 fn make_registered() -> RegisteredHook {
     RegisteredHook {

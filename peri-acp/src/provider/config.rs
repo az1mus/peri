@@ -2,9 +2,10 @@
 //!
 //! 从 peri-tui 迁移，移除 TUI 特有关联。
 
+use std::collections::HashMap;
+
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
-use std::collections::HashMap;
 
 /// 顶层包装（与 ~/.peri/settings.json 的 { "config": {...} } 对应）
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

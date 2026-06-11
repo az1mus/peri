@@ -1,3 +1,5 @@
+use peri_middlewares::mcp::{ClientStatus, ConfigSource, OAuthStatus, ServerInfo};
+use peri_widgets::{BorderedPanel, ScrollState, ScrollableArea};
 use ratatui::{
     layout::Rect,
     style::{Modifier, Style},
@@ -5,15 +7,11 @@ use ratatui::{
     Frame,
 };
 
-use peri_widgets::{BorderedPanel, ScrollState, ScrollableArea};
-
 use crate::{
     app::{App, DetailAction, McpPanel, McpPanelView},
     i18n::LcRegistry,
     ui::{main_ui::highlight_line_spans, theme},
 };
-
-use peri_middlewares::mcp::{ClientStatus, ConfigSource, OAuthStatus, ServerInfo};
 
 /// MCP 管理面板渲染
 pub(crate) fn render_mcp_panel(f: &mut Frame, panel: &McpPanel, app: &mut App, area: Rect) {
@@ -497,7 +495,8 @@ fn apply_panel_selection(app: &mut App, lines: &mut Vec<Line>, area: Rect) {
 
 #[cfg(test)]
 mod tests {
-    use crate::app::{App, DetailAction, McpPanel, McpPanelView};
     use peri_middlewares::mcp::{ClientStatus, ConfigSource, ServerInfo};
+
+    use crate::app::{App, DetailAction, McpPanel, McpPanelView};
     include!("mcp_test.rs");
 }

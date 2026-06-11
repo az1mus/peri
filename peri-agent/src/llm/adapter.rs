@@ -1,8 +1,9 @@
-use async_trait::async_trait;
 use std::sync::{
     atomic::{AtomicUsize, Ordering},
     Arc,
 };
+
+use async_trait::async_trait;
 
 use crate::{
     agent::react::{ReactLLM, Reasoning, ToolCall},

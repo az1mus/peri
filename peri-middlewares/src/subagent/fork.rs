@@ -134,6 +134,22 @@ pub fn overrides_from_agent_def(
     }
 }
 
+/// 构建 Prediction 指令模板（中文）。
+/// 用于 agent 完成后预测用户下一步输入。
+pub fn build_prediction_directive() -> String {
+    "<prediction_directive>\n\
+     你是预测输入助手。根据对话上下文，预测用户下一步最可能在输入框中输入什么。\n\
+     \n\
+     规则：\n\
+     1. 只输出一句预测文本，不要解释\n\
+     2. 预测应该是自然的用户语言，像用户自己会打的那样\n\
+     3. 不要加引号、前缀或格式\n\
+     4. 长度控制在 5-30 个字\n\
+     5. 如果无法判断，输出空字符串\n\
+     </prediction_directive>"
+        .to_string()
+}
+
 #[cfg(test)]
 #[path = "fork_test.rs"]
 mod tests;

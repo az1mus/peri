@@ -1,14 +1,16 @@
-use crate::{
-    error::LspError,
-    jsonrpc::{codec, JsonRpcNotification, JsonRpcRequest},
-};
+use std::{collections::HashMap, process::Stdio, sync::Arc};
+
 use parking_lot::Mutex;
 use serde_json::Value;
-use std::{collections::HashMap, process::Stdio, sync::Arc};
 use tokio::{
     io::{AsyncBufReadExt, BufReader},
     process::{Child, ChildStdin, ChildStdout},
     sync::{mpsc, oneshot},
+};
+
+use crate::{
+    error::LspError,
+    jsonrpc::{codec, JsonRpcNotification, JsonRpcRequest},
 };
 
 type NotificationHandler = Box<dyn Fn(Value) + Send + Sync>;

@@ -1,3 +1,8 @@
+use std::{collections::HashMap, sync::Arc};
+
+use parking_lot::RwLock;
+use serde_json::Value;
+
 use crate::{
     diagnostics::DiagnosticsRegistry,
     error::LspError,
@@ -10,9 +15,6 @@ use crate::{
         requests::initialize_params,
     },
 };
-use parking_lot::RwLock;
-use serde_json::Value;
-use std::{collections::HashMap, sync::Arc};
 
 /// LSP 服务器状态
 #[derive(Debug, Clone, PartialEq)]

@@ -169,8 +169,9 @@ impl<S: State> Middleware<S> for SkillPreloadMiddleware {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use peri_agent::{agent::state::AgentState, middleware::r#trait::Middleware};
     use tempfile::tempdir;
+
+    use super::*;
     include!("skill_preload_test.rs");
 }

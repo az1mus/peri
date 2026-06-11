@@ -1,5 +1,5 @@
-use super::*;
-use crate::claude_agent_parser::ToolsValue;
+use std::sync::Arc;
+
 use parking_lot::RwLock;
 use peri_agent::{
     agent::{
@@ -9,8 +9,10 @@ use peri_agent::{
     messages::BaseMessage,
     tools::BaseTool,
 };
-use std::sync::Arc;
 use tempfile::tempdir;
+
+use super::*;
+use crate::claude_agent_parser::ToolsValue;
 
 // Mock LLM: returns final answer directly
 struct EchoLLM;

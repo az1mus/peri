@@ -1,8 +1,9 @@
+use std::sync::Arc;
+
 use async_trait::async_trait;
 use peri_agent::tools::BaseTool;
 use peri_lsp::pool::LspServerPool;
 use serde_json::Value;
-use std::sync::Arc;
 use thiserror::Error;
 
 use super::formatters;

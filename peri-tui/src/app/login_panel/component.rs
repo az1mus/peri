@@ -3,8 +3,6 @@ use std::any::Any;
 use ratatui::{layout::Rect, Frame};
 use tui_textarea::Input;
 
-use crate::i18n::LcRegistry;
-
 use super::{
     super::{
         panel_component::PanelComponent,
@@ -12,6 +10,7 @@ use super::{
     },
     App, LoginEditField, LoginPanel, LoginPanelMode,
 };
+use crate::i18n::LcRegistry;
 
 impl PanelComponent for LoginPanel {
     fn kind(&self) -> PanelKind {

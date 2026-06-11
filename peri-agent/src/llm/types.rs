@@ -1,5 +1,6 @@
-use crate::{messages::BaseMessage, tools::ToolDefinition};
 use tokio_util::sync::CancellationToken;
+
+use crate::{messages::BaseMessage, tools::ToolDefinition};
 
 /// LLM 请求
 pub struct LlmRequest {
@@ -102,8 +103,9 @@ impl std::fmt::Display for StopReason {
     }
 }
 
-use crate::{agent::events::AgentEventHandler, messages::MessageId};
 use std::sync::Arc;
+
+use crate::{agent::events::AgentEventHandler, messages::MessageId};
 
 /// 流式输出上下文，由 Executor 注入到 LLM 适配器。
 /// LLM 适配器在 SSE 解析过程中通过 event_handler 发射增量事件。

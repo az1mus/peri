@@ -1,13 +1,12 @@
 use std::any::Any;
 
+use peri_middlewares::hooks::types::{HookEvent, HookType, RegisteredHook};
 use ratatui::{
     crossterm::event::{MouseButton, MouseEvent, MouseEventKind},
     layout::Rect,
     Frame,
 };
 use tui_textarea::Input;
-
-use peri_middlewares::hooks::types::{HookEvent, HookType, RegisteredHook};
 
 use super::{
     panel_component::PanelComponent,
@@ -372,7 +371,8 @@ impl PanelComponent for HooksPanel {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::{collections::HashMap, path::PathBuf};
+
+    use super::*;
     include!("hooks_panel_test.rs");
 }

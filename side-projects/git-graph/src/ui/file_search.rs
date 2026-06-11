@@ -1,4 +1,3 @@
-use crate::app::App;
 use ratatui::{
     layout::Rect,
     style::{Color, Modifier, Style},
@@ -6,6 +5,8 @@ use ratatui::{
     widgets::{Block, Borders, Clear, Paragraph},
     Frame,
 };
+
+use crate::app::App;
 
 pub fn draw_file_search(f: &mut Frame, area: Rect, app: &App) {
     let popup_width = 60u16.min(area.width);

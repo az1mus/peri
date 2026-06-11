@@ -1,5 +1,6 @@
-use crate::list::{ListState, SelectableList};
 use ratatui::{layout::Rect, style::Style, text::Line, widgets::Clear, Frame};
+
+use crate::list::{ListState, SelectableList};
 
 /// 锚点位置——浮动面板相对于锚点的定位方式
 #[derive(Debug, Clone, Copy)]

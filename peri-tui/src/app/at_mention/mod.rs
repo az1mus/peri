@@ -312,8 +312,9 @@ fn search_thread_main(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::time::Duration;
+
+    use super::*;
 
     #[test]
     fn test_detect_at_sign_with_text() {

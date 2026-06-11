@@ -5,7 +5,6 @@ use std::{
 
 use async_trait::async_trait;
 use parking_lot::{Mutex, RwLock};
-
 use peri_agent::{
     agent::{
         react::{AgentOutput, ReactLLM, ToolCall, ToolResult},

@@ -1,5 +1,6 @@
-use crate::ui::theme;
 use ratatui::style::Color;
+
+use crate::ui::theme;
 
 /// 只读工具分类，用于折叠聚合
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

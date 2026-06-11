@@ -1,10 +1,10 @@
 mod conversion;
 mod otlp;
 
-pub(crate) use conversion::ingestion_events_to_otel;
-
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+
+pub(crate) use conversion::ingestion_events_to_otel;
+use serde::{Deserialize, Serialize};
 
 // ─── IngestionEvent helpers ─────────────────────────────────────────
 

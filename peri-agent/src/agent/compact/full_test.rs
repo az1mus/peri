@@ -1,10 +1,12 @@
+use std::sync::atomic::{AtomicUsize, Ordering};
+
+use async_trait::async_trait;
+
 use super::*;
 use crate::{
     error::AgentError,
     llm::types::{LlmResponse, StopReason},
 };
-use async_trait::async_trait;
-use std::sync::atomic::{AtomicUsize, Ordering};
 
 struct MockBaseModel {
     response: String,
@@ -89,8 +91,9 @@ fn test_preprocess_replaces_image() {
 
 #[test]
 fn test_preprocess_formats_tool_calls() {
-    use crate::messages::ToolCallRequest;
     use serde_json::json;
+
+    use crate::messages::ToolCallRequest;
     let msgs = vec![BaseMessage::ai_with_tool_calls(
         MessageContent::text("thinking"),
         vec![
@@ -107,8 +110,9 @@ fn test_preprocess_formats_tool_calls() {
 
 #[test]
 fn test_preprocess_preserves_tool_file_paths() {
-    use crate::messages::ToolCallRequest;
     use serde_json::json;
+
+    use crate::messages::ToolCallRequest;
     let msgs = vec![BaseMessage::ai_with_tool_calls(
         MessageContent::text(""),
         vec![
@@ -216,8 +220,9 @@ fn test_ptl_truncate_single_round() {
 
 #[test]
 fn test_ptl_truncate_drops_oldest() {
-    use crate::messages::ToolCallRequest;
     use serde_json::json;
+
+    use crate::messages::ToolCallRequest;
     let msgs = vec![
         BaseMessage::human("q1"),
         BaseMessage::ai("a1"),
@@ -301,8 +306,9 @@ fn test_is_not_ptl_error() {
 
 #[tokio::test]
 async fn test_full_compact_basic() {
-    use crate::messages::ToolCallRequest;
     use serde_json::json;
+
+    use crate::messages::ToolCallRequest;
     let msgs = vec![
         BaseMessage::human("帮我写个函数"),
         BaseMessage::ai_with_tool_calls(

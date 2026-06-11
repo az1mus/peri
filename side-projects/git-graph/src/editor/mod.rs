@@ -6,11 +6,12 @@
 pub mod input;
 pub mod render;
 
+use std::fs;
+use std::path::PathBuf;
+
 use anyhow::{Context, Result};
 use ratatui::style::Style;
 use ropey::Rope;
-use std::fs;
-use std::path::PathBuf;
 use unicode_width::UnicodeWidthChar;
 
 /// 单行最大显示列数（防止超长行拖慢渲染）
@@ -1302,8 +1303,9 @@ impl TextEditor {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::io::Write as IoWrite;
+
+    use super::*;
 
     /// 测试打开文件并读取内容。
     #[test]

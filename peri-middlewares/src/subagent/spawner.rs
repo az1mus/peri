@@ -17,6 +17,7 @@ use peri_agent::{
     thread::ThreadMeta,
 };
 
+use super::tool::{build_subagent_middlewares, fire_subagent_lifecycle_hooks_static};
 use crate::{
     hooks::types::{HookEvent, RegisteredHook},
     subagent::{
@@ -25,8 +26,6 @@ use crate::{
     },
     tools::ArcToolWrapper,
 };
-
-use super::tool::{build_subagent_middlewares, fire_subagent_lifecycle_hooks_static};
 
 /// Fork 指令类型，决定 fork agent 使用的 system directive 模板
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

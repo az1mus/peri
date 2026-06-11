@@ -1,11 +1,10 @@
 use tui_textarea::Input;
 
-use crate::app::FieldTextarea;
-
 use super::{
     test_connectivity, FormField, FormMode, MigratedProvider, ProviderType, SetupSource, SetupStep,
     SetupWizardPanel, LANGUAGE_OPTIONS,
 };
+use crate::app::FieldTextarea;
 
 /// 检测配置是否需要 Setup 向导
 pub fn needs_setup(config: &crate::config::AppConfig) -> bool {

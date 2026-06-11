@@ -3,8 +3,9 @@
 /// 场景1: build_rebuild_all 产生正确的 RebuildAll action
 #[test]
 fn test_build_rebuild_all_done() {
-    use super::message_pipeline::MessagePipeline;
     use peri_agent::messages::BaseMessage;
+
+    use super::message_pipeline::MessagePipeline;
 
     let mut pipeline = MessagePipeline::new("/tmp".to_string());
     pipeline.set_completed(vec![
@@ -31,8 +32,9 @@ fn test_build_rebuild_all_done() {
 /// 场景2: build_rebuild_all 在 Interrupted 场景下正确工作
 #[test]
 fn test_build_rebuild_all_interrupted() {
-    use super::message_pipeline::MessagePipeline;
     use peri_agent::messages::BaseMessage;
+
+    use super::message_pipeline::MessagePipeline;
 
     let mut pipeline = MessagePipeline::new("/tmp".to_string());
     pipeline.set_completed(vec![

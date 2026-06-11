@@ -1,5 +1,6 @@
-use crate::error::LspError;
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWrite, AsyncWriteExt};
+
+use crate::error::LspError;
 
 /// Content-Length 分帧编码
 ///
@@ -68,7 +69,8 @@ pub async fn decode_message(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use tokio::io::{BufReader, BufWriter};
+
+    use super::*;
     include!("codec_test.rs");
 }

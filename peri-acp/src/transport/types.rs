@@ -1,8 +1,9 @@
 //! Core transport types for ACP JSON-RPC 2.0 communication.
 
+use std::fmt;
+
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::fmt;
 
 /// JSON-RPC request/response identifier.
 ///

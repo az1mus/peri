@@ -1,6 +1,5 @@
 use std::hash::{Hash, Hasher};
 
-use crate::ui::theme;
 use peri_agent::messages::{BaseMessage, ContentBlock};
 use ratatui::{
     style::Color,
@@ -8,6 +7,7 @@ use ratatui::{
 };
 
 use super::markdown::parse_markdown_default;
+use crate::ui::theme;
 
 mod aggregate;
 mod tools;

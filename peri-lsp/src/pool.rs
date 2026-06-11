@@ -1,14 +1,16 @@
+use std::{
+    collections::{HashMap, HashSet},
+    path::Path,
+    sync::Arc,
+};
+
+use parking_lot::RwLock;
+
 use crate::{
     client::{LspClient, ServerState},
     config::{LspConfigFile, LspConfigSource},
     diagnostics::DiagnosticsRegistry,
     error::LspError,
-};
-use parking_lot::RwLock;
-use std::{
-    collections::{HashMap, HashSet},
-    path::Path,
-    sync::Arc,
 };
 
 /// LSP 服务器池：管理多个 LSP 服务器实例，按文件扩展名路由

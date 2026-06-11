@@ -1,6 +1,7 @@
+use peri_agent::agent::events::{AgentEvent as ExecutorEvent, TodoEntry, TodoStatus};
+
 use super::map_executor_event;
 use crate::app::AgentEvent;
-use peri_agent::agent::events::{AgentEvent as ExecutorEvent, TodoEntry, TodoStatus};
 
 #[test]
 fn test_map_executor_event_todo_update_returns_none() {

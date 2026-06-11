@@ -5,10 +5,9 @@ use ratatui::{
 };
 use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
-use super::MarkdownTheme;
-
 #[cfg(feature = "markdown-highlight")]
 use super::highlight::highlight_code_block;
+use super::MarkdownTheme;
 
 // ── 辅助类型 ──────────────────────────────────────────────────────────────────
 

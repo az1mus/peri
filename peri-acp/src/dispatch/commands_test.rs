@@ -1,6 +1,8 @@
-use super::commands::build_available_commands;
-use peri_middlewares::skills::SkillMetadata;
 use std::path::PathBuf;
+
+use peri_middlewares::skills::SkillMetadata;
+
+use super::commands::build_available_commands;
 
 #[test]
 fn test_build_available_commands_includes_builtins() {

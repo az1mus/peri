@@ -1,5 +1,6 @@
-use super::{message_pipeline::PipelineAction, *};
 use peri_agent::{agent::events::CompactFileInfo, messages::BaseMessage};
+
+use super::{message_pipeline::PipelineAction, *};
 
 impl App {
     pub(crate) fn handle_compact_started(&mut self) -> (bool, bool, bool) {

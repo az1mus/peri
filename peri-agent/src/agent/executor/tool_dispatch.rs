@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use tokio_util::sync::CancellationToken;
 
+use super::ReActAgent;
 use crate::{
     agent::{
         events::AgentEvent,
@@ -12,8 +13,6 @@ use crate::{
     messages::{message::MessageId, BaseMessage, ToolCallRequest},
     tools::BaseTool,
 };
-
-use super::ReActAgent;
 
 /// 工具名语义别名表：LLM 输出的名称 → 实际注册的工具名。
 const TOOL_ALIASES: &[(&str, &str)] = &[("task", "Agent"), ("shell", "Bash"), ("reading", "Read")];

@@ -52,8 +52,9 @@ impl CommandSystem {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::path::PathBuf;
+
+    use super::*;
 
     fn make_metadata(name: &str, desc: &str) -> SkillMetadata {
         SkillMetadata {

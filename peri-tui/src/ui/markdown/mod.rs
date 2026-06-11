@@ -1,11 +1,10 @@
 mod table_holdback;
 
-use ratatui::text::Text;
-
 use peri_widgets::DefaultMarkdownTheme;
+use ratatui::text::Text;
+pub use table_holdback::{HoldbackDecision, TableHoldbackScanner};
 
 use super::message_view::ContentBlockView;
-pub use table_holdback::{HoldbackDecision, TableHoldbackScanner};
 
 static THEME: DefaultMarkdownTheme = DefaultMarkdownTheme;
 

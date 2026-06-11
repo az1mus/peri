@@ -1,4 +1,5 @@
 use chrono::Utc;
+use peri_widgets::{BorderedPanel, ScrollState, ScrollableArea};
 use ratatui::{
     layout::Rect,
     style::{Modifier, Style},
@@ -6,8 +7,6 @@ use ratatui::{
     widgets::{Block, BorderType, Borders, Paragraph},
     Frame,
 };
-
-use peri_widgets::{BorderedPanel, ScrollState, ScrollableArea};
 use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
 use crate::{

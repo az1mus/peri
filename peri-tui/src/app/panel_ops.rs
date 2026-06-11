@@ -51,8 +51,9 @@ impl App {
         width: u16,
         height: u16,
     ) -> (App, crate::ui::headless::HeadlessHandle) {
-        use crate::thread::SqliteThreadStore;
         use ratatui::{backend::TestBackend, Terminal};
+
+        use crate::thread::SqliteThreadStore;
 
         let backend = TestBackend::new(width, height);
         let terminal = Terminal::new(backend).expect("TestBackend should never fail");

@@ -1,6 +1,8 @@
-use super::*;
-use langfuse_client::{BackpressurePolicy, Batcher, BatcherConfig, LangfuseClient};
 use std::{sync::Arc, time::Duration};
+
+use langfuse_client::{BackpressurePolicy, Batcher, BatcherConfig, LangfuseClient};
+
+use super::*;
 
 fn make_tracer() -> LangfuseTracer {
     let client = LangfuseClient::new("pk-test", "sk-test", "http://127.0.0.1:1", 0);

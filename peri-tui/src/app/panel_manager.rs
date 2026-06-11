@@ -2,9 +2,8 @@
 
 use std::any::Any;
 
-use tui_textarea::Input;
-
 use ratatui::{layout::Rect, Frame};
+use tui_textarea::Input;
 
 use super::{
     agent_panel::AgentPanel, betas_panel::BetasPanel, config_panel::ConfigPanel,

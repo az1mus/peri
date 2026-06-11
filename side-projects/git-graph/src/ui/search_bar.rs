@@ -1,4 +1,3 @@
-use crate::app::App;
 use ratatui::{
     layout::Rect,
     style::{Color, Style},
@@ -6,6 +5,8 @@ use ratatui::{
     widgets::Paragraph,
     Frame,
 };
+
+use crate::app::App;
 
 pub fn draw_search_bar(f: &mut Frame, area: Rect, app: &App) {
     let query = app.search_query.as_deref().unwrap_or("");

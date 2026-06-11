@@ -1,7 +1,6 @@
+use super::{panel_list::PanelList, App};
 use crate::app::FieldTextarea;
 use crate::config::{PeriConfig, ProviderConfig, ProviderModels};
-
-use super::{panel_list::PanelList, App};
 
 // ─── 默认模型名常量表 ─────────────────────────────────────────────────────────
 

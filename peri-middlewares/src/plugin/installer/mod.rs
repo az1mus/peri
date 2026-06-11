@@ -1,11 +1,13 @@
+use std::path::{Path, PathBuf};
+
+use thiserror::Error;
+
 #[cfg(test)]
 use crate::plugin::config::{load_installed_plugins, save_installed_plugins};
 use crate::plugin::types::InstallScope;
 #[cfg(test)]
 use crate::plugin::types::{InstalledPlugin, InstalledPlugins};
 use crate::plugin::{marketplace::read_manifest_from_path, PluginConfigError};
-use std::path::{Path, PathBuf};
-use thiserror::Error;
 
 mod install;
 mod uninstall;

@@ -1,4 +1,3 @@
-use super::*;
 use peri_agent::{
     agent::{
         react::{ReactLLM, Reasoning},
@@ -7,6 +6,8 @@ use peri_agent::{
     messages::BaseMessage,
     middleware::r#trait::Middleware,
 };
+
+use super::*;
 
 struct EchoLLM;
 

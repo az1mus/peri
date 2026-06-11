@@ -14,15 +14,13 @@
 mod model_email;
 mod state;
 
-pub use model_email::get_attribution_email;
-pub use state::AttributionState;
-
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex},
 };
 
 use async_trait::async_trait;
+pub use model_email::get_attribution_email;
 use peri_agent::{
     agent::{
         react::{ToolCall, ToolResult},
@@ -31,6 +29,7 @@ use peri_agent::{
     error::AgentResult,
     middleware::Middleware,
 };
+pub use state::AttributionState;
 
 use crate::tool_search::core_tools::{TOOL_EDIT, TOOL_WRITE};
 

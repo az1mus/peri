@@ -1,8 +1,10 @@
+use std::collections::HashMap;
+
+use tempfile::tempdir;
+
 use super::*;
 use crate::hooks::types::HookEvent;
 use crate::hooks::types::HookType;
-use std::collections::HashMap;
-use tempfile::tempdir;
 
 fn make_manifest_with_hooks(hooks: Option<HooksConfig>) -> PluginManifest {
     PluginManifest {

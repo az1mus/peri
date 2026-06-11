@@ -1,5 +1,6 @@
-use fuzzy_matcher::{skim::SkimMatcherV2, FuzzyMatcher};
 use std::path::Path;
+
+use fuzzy_matcher::{skim::SkimMatcherV2, FuzzyMatcher};
 use walkdir::WalkDir;
 
 /// 文件搜索候选结果
@@ -169,9 +170,11 @@ pub fn filter_candidates(candidates: &[FileCandidate], query: &str) -> Vec<FileC
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::fs;
+
     use tempfile::tempdir;
+
+    use super::*;
 
     #[test]
     fn test_search_by_name() {

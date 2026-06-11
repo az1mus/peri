@@ -1,4 +1,3 @@
-use crate::app::App;
 use peri_widgets::file_tree::render::FileTree;
 use peri_widgets::Theme;
 use ratatui::{
@@ -7,6 +6,8 @@ use ratatui::{
     widgets::{Block, Borders},
     Frame,
 };
+
+use crate::app::App;
 
 #[allow(dead_code)]
 pub fn draw(f: &mut Frame, area: Rect, app: &mut App) {

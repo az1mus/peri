@@ -818,8 +818,9 @@ async fn test_bordered_panel_integration() {
 #[tokio::test]
 async fn test_tab_bar_integration() {
     // TabBar 集成冒烟测试：渲染 ask_user popup 验证 TabBar widget 正确工作
-    use crate::app::AskUserBatchPrompt;
     use peri_middlewares::ask_user::{AskUserBatchRequest, AskUserOption, AskUserQuestionData};
+
+    use crate::app::AskUserBatchPrompt;
 
     let (mut app, mut handle) = App::new_headless(120, 30).await;
 
@@ -1396,8 +1397,9 @@ async fn test_done_does_not_duplicate_ai_message() {
 /// 回归：StateSnapshot 是增量的，不应覆盖之前已完成的消息
 #[test]
 fn test_state_snapshot_is_incremental() {
-    use crate::app::message_pipeline::MessagePipeline;
     use peri_agent::messages::{BaseMessage, MessageContent, MessageId};
+
+    use crate::app::message_pipeline::MessagePipeline;
 
     let mut pipeline = MessagePipeline::new("/tmp".to_string());
 
@@ -1826,9 +1828,10 @@ async fn test_model_panel_space_selects_model() {
 /// Cron 面板删除确认：Ctrl+D 应进入确认状态而非立即删除
 #[tokio::test]
 async fn test_cron_panel_delete_confirmation() {
-    use crate::app::CronPanel;
     use chrono::Utc;
     use peri_middlewares::cron::CronTask;
+
+    use crate::app::CronPanel;
 
     let (mut app, _handle) = App::new_headless(120, 30).await;
 
@@ -1888,9 +1891,10 @@ async fn test_cron_panel_delete_confirmation() {
 /// Cron 面板确认删除时渲染显示确认提示
 #[tokio::test]
 async fn test_cron_panel_confirm_delete_renders() {
-    use crate::app::CronPanel;
     use chrono::Utc;
     use peri_middlewares::cron::CronTask;
+
+    use crate::app::CronPanel;
 
     let (mut app, mut handle) = App::new_headless(120, 30).await;
     let task = CronTask {
@@ -2457,8 +2461,9 @@ fn bg_diag_print_vms(app: &App, label: &str) {
 /// 2. BackgroundTaskCompleted → 检查 SubAgentGroup 是否仍在
 #[tokio::test]
 async fn test_diagnostic_bg_subagent_group_disappears() {
-    use crate::app::message_pipeline::PipelineAction;
     use peri_agent::messages::{BaseMessage, ToolCallRequest};
+
+    use crate::app::message_pipeline::PipelineAction;
 
     let (mut app, _handle) = App::new_headless(120, 30).await;
 
@@ -2656,8 +2661,9 @@ async fn test_diagnostic_bg_subagent_group_disappears() {
 /// 3. Disconnected 分支清理 pipeline → SubAgentGroup 可能丢失
 #[tokio::test]
 async fn test_diagnostic_fork_plus_background_subagent_group() {
-    use crate::app::message_pipeline::PipelineAction;
     use peri_agent::messages::{BaseMessage, ToolCallRequest};
+
+    use crate::app::message_pipeline::PipelineAction;
 
     let (mut app, _handle) = App::new_headless(120, 30).await;
 

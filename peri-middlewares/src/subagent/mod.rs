@@ -8,11 +8,11 @@ mod tool;
 pub use agent_result::AgentResultTool;
 pub use background::{BackgroundTask, BackgroundTaskRegistry, BackgroundTaskStatus};
 pub use built_in_agents::{get_built_in_agent, list_built_in_agents, BuiltInAgent};
+pub use fork::build_prediction_directive;
+use parking_lot::RwLock;
 pub use skill_preload::SkillPreloadMiddleware;
 pub use spawner::{spawn_background_fork, BgForkConfig, BgForkDirectiveKind, BgForkSpawned};
 pub use tool::SubAgentTool;
-
-use parking_lot::RwLock;
 
 /// SubAgent 中间件链构造配置
 ///
@@ -49,6 +49,7 @@ use std::{
 };
 
 use async_trait::async_trait;
+use peri_agent::thread::ThreadStore;
 use peri_agent::{
     agent::{events::AgentEventHandler, react::ReactLLM, state::State, AgentCancellationToken},
     error::AgentResult,
@@ -56,8 +57,6 @@ use peri_agent::{
     middleware::r#trait::Middleware,
     tools::BaseTool,
 };
-
-use peri_agent::thread::ThreadStore;
 
 use crate::{agent_define::AgentOverrides, parse_agent_file, tools::BoxToolWrapper};
 

@@ -1,9 +1,11 @@
-use super::*;
+use std::sync::Arc;
+
 use peri_agent::{
     agent::{state::AgentState, token::ContextBudget},
     messages::{BaseMessage, ContentBlock},
 };
-use std::sync::Arc;
+
+use super::*;
 
 fn make_state() -> AgentState {
     AgentState::new("/tmp/test")

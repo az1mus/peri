@@ -1,5 +1,6 @@
-use super::cache::MarkdownCache;
 use ratatui::text::Text;
+
+use super::cache::MarkdownCache;
 
 /// 辅助：创建新的缓存实例（不使用全局单例，测试隔离）
 fn make_cache() -> MarkdownCache {

@@ -1,12 +1,11 @@
 use ratatui::crossterm::event::KeyCode;
 
+use super::super::Action;
 use super::{
     SHORTCUT_BG_BAR, SHORTCUT_CTRL_CYCLE_MODE, SHORTCUT_CTRL_CYCLE_PROVIDER, SHORTCUT_CYCLE_MODE,
     SHORTCUT_CYCLE_PROVIDER,
 };
 use crate::app::{App, MessageViewModel};
-
-use super::super::Action;
 
 /// 处理全局快捷键：BackTab（权限循环）、Ctrl+B（bg bar）、Ctrl+T（模型切换）、Ctrl+Shift+T（Provider 切换）、Ctrl+O（diff 切换）
 pub(super) fn handle_shortcuts(

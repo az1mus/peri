@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
+use parking_lot::RwLock;
 use peri_agent::{
     agent::{
         events::{AgentEvent, AgentEventHandler},
@@ -12,17 +13,15 @@ use peri_agent::{
     tools::BaseTool,
 };
 
+use super::{
+    build_agent::CancelPolicy, fire_subagent_lifecycle_hooks_static, format_subagent_result,
+};
 use crate::tool_search::core_tools::TOOL_AGENT;
 use crate::{
     agent_define::{AgentDefineMiddleware, AgentOverrides},
     claude_agent_parser::{parse_agent_file, ClaudeAgent, ToolsValue},
     hooks::types::{HookEvent, RegisteredHook},
     subagent::{background::BackgroundTaskRegistry, built_in_agents::get_built_in_agent},
-};
-use parking_lot::RwLock;
-
-use super::{
-    build_agent::CancelPolicy, fire_subagent_lifecycle_hooks_static, format_subagent_result,
 };
 
 /// RAII guard that calls deregister on drop (panic-safe cleanup).

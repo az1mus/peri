@@ -1,5 +1,6 @@
-use super::*;
 use ratatui::{backend::TestBackend, text::Line, Terminal};
+
+use super::*;
 
 #[test]
 fn scroll_state_ensure_visible_above() {

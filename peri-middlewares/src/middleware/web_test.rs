@@ -1,6 +1,7 @@
+use serde_json::Value;
+
 use super::*;
 use crate::middleware::web_search::{format_search_results, SearchResult};
-use serde_json::Value;
 
 // --- WebFetchTool tests ---
 

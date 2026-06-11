@@ -1,3 +1,4 @@
+use peri_middlewares::plugin::InstallScope;
 use tui_textarea::{Input, Key};
 
 use crate::app::{
@@ -5,8 +6,6 @@ use crate::app::{
     plugin_panel::{DiscoverDetailAction, PluginPanel},
     AgentEvent,
 };
-
-use peri_middlewares::plugin::InstallScope;
 
 impl PluginPanel {
     pub(crate) fn handle_discover_detail(

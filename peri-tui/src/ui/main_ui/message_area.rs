@@ -1,3 +1,4 @@
+use peri_middlewares::prelude::TodoStatus;
 use ratatui::{
     layout::Rect,
     style::{Modifier, Style},
@@ -6,13 +7,11 @@ use ratatui::{
     Frame,
 };
 
+use super::sticky_header;
 use crate::{
     app::App,
     ui::{render_thread::RenderEvent, theme, welcome},
 };
-use peri_middlewares::prelude::TodoStatus;
-
-use super::sticky_header;
 
 /// 视口裁剪结果
 struct ViewportClip {

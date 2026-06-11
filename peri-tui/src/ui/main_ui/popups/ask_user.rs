@@ -1,3 +1,4 @@
+use peri_widgets::{BorderedPanel, ScrollState, ScrollableArea, TabBar, TabState, TabStyle};
 use ratatui::{
     layout::Rect,
     style::{Color, Modifier, Style},
@@ -6,8 +7,6 @@ use ratatui::{
     Frame,
 };
 use unicode_width::UnicodeWidthStr;
-
-use peri_widgets::{BorderedPanel, ScrollState, ScrollableArea, TabBar, TabState, TabStyle};
 
 use crate::{app::App, ui::theme};
 

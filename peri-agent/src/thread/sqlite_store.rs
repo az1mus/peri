@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use anyhow::{Context, Result};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
@@ -5,7 +7,6 @@ use sqlx::{
     sqlite::{SqliteConnectOptions, SqlitePoolOptions},
     SqlitePool,
 };
-use std::path::PathBuf;
 
 use crate::{
     messages::BaseMessage,
@@ -639,7 +640,8 @@ impl ThreadStore for SqliteThreadStore {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use tempfile::tempdir;
+
+    use super::*;
     include!("sqlite_store_test.rs");
 }

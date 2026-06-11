@@ -2,7 +2,6 @@
 //! Extracted from original agent_ops.rs (2026-05-20 split).
 
 use super::super::*;
-
 use crate::app::{message_pipeline::PipelineAction, App};
 
 impl App {

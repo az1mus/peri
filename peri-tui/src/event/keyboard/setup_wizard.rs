@@ -1,9 +1,8 @@
+use peri_agent::messages::BaseMessage;
 use tui_textarea::{Input, Key};
 
-use crate::app::{App, MessageViewModel};
-use peri_agent::messages::BaseMessage;
-
 use super::super::Action;
+use crate::app::{App, MessageViewModel};
 
 /// Setup wizard 模式下拦截所有按键
 pub(super) fn handle_setup_wizard(app: &mut App, input: &Input) -> Option<Action> {

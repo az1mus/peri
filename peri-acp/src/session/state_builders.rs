@@ -3,16 +3,15 @@
 //! Converts internal agent state into ACP protocol types
 //! (modes, models, config options) for `session/new` and `session/set_*` responses.
 
-use parking_lot::RwLock;
-use peri_middlewares::prelude::{PermissionMode, SharedPermissionMode};
-
-use crate::provider::{LlmProvider, PeriConfig, ThinkingConfig};
-
 pub use agent_client_protocol_schema::{
     ModelId, ModelInfo, SessionConfigId, SessionConfigOption, SessionConfigOptionCategory,
     SessionConfigSelectOption, SessionConfigSelectOptions, SessionConfigValueId, SessionMode,
     SessionModeId, SessionModeState, SessionModelState,
 };
+use parking_lot::RwLock;
+use peri_middlewares::prelude::{PermissionMode, SharedPermissionMode};
+
+use crate::provider::{LlmProvider, PeriConfig, ThinkingConfig};
 
 /// Parse a mode ID string into a `PermissionMode`.
 pub fn parse_permission_mode(mode_id: &str) -> PermissionMode {

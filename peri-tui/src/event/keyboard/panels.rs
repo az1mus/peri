@@ -1,5 +1,6 @@
 use tui_textarea::Input;
 
+use super::super::Action;
 use crate::{
     app::{
         betas_panel::BetasPanel,
@@ -8,8 +9,6 @@ use crate::{
     },
     with_global_panels, with_session_panels,
 };
-
-use super::super::Action;
 
 /// PanelManager 分发：先处理 session panels，再处理 global panels
 pub(super) fn handle_panels(app: &mut App, input: &Input) -> Option<Action> {

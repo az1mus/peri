@@ -1,5 +1,6 @@
-use super::*;
 use serde_json::json;
+
+use super::*;
 
 fn test_config() -> CompactConfig {
     CompactConfig::default()

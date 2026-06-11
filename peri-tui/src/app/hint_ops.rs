@@ -184,7 +184,8 @@ impl App {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use peri_middlewares::skills::loader::SkillMetadata;
+
+    use super::*;
     include!("hint_ops_test.rs");
 }

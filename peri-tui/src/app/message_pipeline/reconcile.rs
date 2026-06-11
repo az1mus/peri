@@ -1,5 +1,7 @@
 use peri_agent::messages::BaseMessage;
 
+use super::MessagePipeline;
+pub use crate::ui::message_view::aggregate_batch_groups;
 use crate::{
     app::tool_display,
     ui::{
@@ -7,10 +9,6 @@ use crate::{
         theme,
     },
 };
-
-pub use crate::ui::message_view::aggregate_batch_groups;
-
-use super::MessagePipeline;
 
 /// 从工具名和入参构造预渲染的 diff 行（仅 Write/Edit 工具）
 fn try_build_diff_lines(

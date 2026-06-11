@@ -1,5 +1,6 @@
-use super::*;
 use std::collections::HashMap;
+
+use super::*;
 
 fn make_global() -> AppConfig {
     AppConfig {

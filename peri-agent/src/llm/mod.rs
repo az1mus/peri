@@ -8,12 +8,12 @@ mod adapter;
 mod react_adapter;
 
 // Re-export types for external crate usage (e.g. BaseModel trait impls, tests)
+use async_trait::async_trait;
+
 pub use self::react_adapter::BaseModelReactLLM;
 pub use self::retry::{RetryConfig, RetryableLLM};
 pub use self::types::{LlmRequest, LlmResponse, StopReason, StreamingContext};
-
 use crate::error::AgentResult;
-use async_trait::async_trait;
 
 /// BaseModel trait - 统一 LLM 接口，对齐 LangChain Python BaseModel
 #[async_trait]

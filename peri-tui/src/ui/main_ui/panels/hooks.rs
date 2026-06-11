@@ -1,11 +1,10 @@
+use peri_widgets::{BorderedPanel, ScrollState, ScrollableArea};
 use ratatui::{
     layout::Rect,
     style::{Modifier, Style},
     text::{Line, Span, Text},
     Frame,
 };
-
-use peri_widgets::{BorderedPanel, ScrollState, ScrollableArea};
 
 use crate::{
     app::{
@@ -155,8 +154,10 @@ pub(crate) fn render_hooks_panel(f: &mut Frame, panel: &HooksPanel, app: &mut Ap
 
 #[cfg(test)]
 mod tests {
-    use crate::app::{hooks_panel::HooksPanel, App};
-    use peri_middlewares::hooks::types::{HookEvent, HookType, RegisteredHook};
     use std::{collections::HashMap, path::PathBuf};
+
+    use peri_middlewares::hooks::types::{HookEvent, HookType, RegisteredHook};
+
+    use crate::app::{hooks_panel::HooksPanel, App};
     include!("hooks_test.rs");
 }

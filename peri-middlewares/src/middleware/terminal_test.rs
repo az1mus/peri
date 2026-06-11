@@ -1,6 +1,8 @@
-use super::*;
-use peri_agent::tools::BaseTool;
 use std::time::Instant;
+
+use peri_agent::tools::BaseTool;
+
+use super::*;
 
 #[tokio::test]
 async fn test_bash_normal_command() {

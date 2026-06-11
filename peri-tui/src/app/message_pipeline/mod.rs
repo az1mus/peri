@@ -32,10 +32,11 @@ use crate::ui::message_view::{instance_hash, parse_bg_hash};
 mod reconcile;
 mod transform;
 
-pub use crate::ui::message_view::aggregate_batch_groups;
 pub use reconcile::PipelineAction;
 #[cfg(test)]
 use reconcile::{extract_tail_lines, merge_frozen_subagents};
+
+pub use crate::ui::message_view::aggregate_batch_groups;
 
 // ─── 流式渲染模式 ──────────────────────────────────────────────────────────
 

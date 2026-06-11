@@ -1,5 +1,6 @@
-use super::*;
 use peri_agent::tools::BaseTool;
+
+use super::*;
 
 fn make_tool(name: &'static str) -> Arc<dyn BaseTool> {
     struct DummyTool(&'static str);

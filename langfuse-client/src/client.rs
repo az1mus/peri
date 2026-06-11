@@ -1,11 +1,13 @@
+use std::time::Duration;
+
+use base64::Engine;
+use reqwest::Client;
+use tracing::warn;
+
 use crate::{
     error::LangfuseError,
     types::{ingestion_events_to_otel, IngestionEvent},
 };
-use base64::Engine;
-use reqwest::Client;
-use std::time::Duration;
-use tracing::warn;
 
 /// Langfuse OTLP Ingestion 客户端
 ///

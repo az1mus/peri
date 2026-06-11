@@ -170,11 +170,13 @@ impl AutoClassifier for LlmAutoClassifier {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
     use peri_agent::{
         error::{AgentError, AgentResult},
         llm::types::{LlmResponse, StopReason},
     };
-    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    use super::*;
     include!("auto_classifier_test.rs");
 }

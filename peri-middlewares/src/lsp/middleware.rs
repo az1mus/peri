@@ -15,9 +15,8 @@ use peri_lsp::{
     pool::LspServerPool,
 };
 
-use crate::tool_search::core_tools::{TOOL_EDIT, TOOL_WRITE};
-
 use super::tool::LspTool;
+use crate::tool_search::core_tools::{TOOL_EDIT, TOOL_WRITE};
 
 pub struct LspMiddleware {
     pool: Arc<LspServerPool>,
@@ -95,9 +94,11 @@ impl<S: State> Middleware<S> for LspMiddleware {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use std::collections::HashMap;
+
     use peri_agent::agent::state::AgentState;
     use peri_lsp::config::LspServerConfig;
-    use std::collections::HashMap;
+
+    use super::*;
     include!("middleware_test.rs");
 }

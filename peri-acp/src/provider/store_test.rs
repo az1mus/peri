@@ -1,5 +1,6 @@
-use super::load_from;
 use std::io::Write;
+
+use super::load_from;
 
 /// 在临时目录创建 .peri/settings.json
 fn write_settings(dir: &std::path::Path, content: &str) {

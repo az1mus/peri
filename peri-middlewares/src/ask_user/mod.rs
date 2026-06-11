@@ -1,9 +1,8 @@
+// 从核心库导入 trait 和数据类型
+pub use peri_agent::ask_user::{AskUserBatchRequest, AskUserOption, AskUserQuestionData};
 use peri_agent::{agent::react::ToolCall, error::AgentError};
 
 use crate::tool_search::core_tools::TOOL_ASK_USER;
-
-// 从核心库导入 trait 和数据类型
-pub use peri_agent::ask_user::{AskUserBatchRequest, AskUserOption, AskUserQuestionData};
 
 // ─── 解析辅助 ──────────────────────────────────────────────────────────────────
 

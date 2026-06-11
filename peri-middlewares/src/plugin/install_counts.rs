@@ -1,6 +1,8 @@
-use crate::plugin::config::plugins_dir;
-use chrono::{DateTime, FixedOffset};
 use std::{collections::HashMap, path::PathBuf};
+
+use chrono::{DateTime, FixedOffset};
+
+use crate::plugin::config::plugins_dir;
 
 const INSTALL_COUNTS_URL: &str = "https://raw.githubusercontent.com/anthropics/claude-plugins-official/refs/heads/stats/stats/plugin-installs.json";
 const CACHE_FILE: &str = "install-counts-cache.json";

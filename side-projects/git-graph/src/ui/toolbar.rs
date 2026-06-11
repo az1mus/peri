@@ -1,4 +1,3 @@
-use crate::app::App;
 use ratatui::{
     layout::Rect,
     style::{Color, Modifier, Style},
@@ -7,6 +6,8 @@ use ratatui::{
     Frame,
 };
 use unicode_width::UnicodeWidthStr;
+
+use crate::app::App;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ToolbarAction {

@@ -8,6 +8,9 @@ mod theme;
 mod ui;
 mod update;
 
+use std::io;
+use std::path::PathBuf;
+
 use anyhow::Result;
 use app::App;
 use clap::{Parser, Subcommand};
@@ -17,8 +20,6 @@ use crossterm::{
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
 use ratatui::{backend::CrosstermBackend, Terminal};
-use std::io;
-use std::path::PathBuf;
 
 #[derive(Parser)]
 #[command(name = "gig", about = "Git Graph TUI", version)]

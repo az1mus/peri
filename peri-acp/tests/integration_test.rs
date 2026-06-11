@@ -30,6 +30,8 @@ async fn test_transport_full_roundtrip() {
 
 #[tokio::test]
 async fn test_broker_approval_flow() {
+    use std::sync::Arc;
+
     use peri_acp::{
         broker::AcpTransportBroker,
         transport::{mpsc::mpsc_transport_pair, AcpTransport},
@@ -38,7 +40,6 @@ async fn test_broker_approval_flow() {
         ApprovalDecision, ApprovalItem, InteractionContext, InteractionResponse,
         UserInteractionBroker,
     };
-    use std::sync::Arc;
 
     let (client, server) = mpsc_transport_pair();
     let broker = AcpTransportBroker::new(Arc::new(server), SessionId::new("test-session"));

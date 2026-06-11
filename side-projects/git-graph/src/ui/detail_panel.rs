@@ -1,6 +1,3 @@
-use crate::app::App;
-use crate::git::commit::FileStatus;
-use crate::ui::toolbar;
 use peri_widgets::Theme as _;
 use ratatui::{
     layout::{Margin, Rect},
@@ -9,6 +6,10 @@ use ratatui::{
     widgets::{Block, Paragraph, Scrollbar, ScrollbarOrientation, ScrollbarState, Wrap},
     Frame,
 };
+
+use crate::app::App;
+use crate::git::commit::FileStatus;
+use crate::ui::toolbar;
 
 pub fn draw(f: &mut Frame, area: Rect, app: &mut App) {
     let theme = &app.theme;

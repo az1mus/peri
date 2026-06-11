@@ -1,6 +1,7 @@
+use tempfile::tempdir;
+
 use super::*;
 use crate::plugin::types::{InstallScope, InstalledPlugin, KnownMarketplace, MarketplaceSource};
-use tempfile::tempdir;
 
 #[test]
 fn test_load_installed_plugins_nonexistent() {

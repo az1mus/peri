@@ -1,8 +1,10 @@
-use crate::protocol::lsp_types::PublishDiagnosticsParams;
+use std::collections::{HashMap, HashSet};
+
 use lsp_types::DiagnosticSeverity as LspDiagnosticSeverity;
 use parking_lot::{Mutex, RwLock};
 use serde::Serialize;
-use std::collections::{HashMap, HashSet};
+
+use crate::protocol::lsp_types::PublishDiagnosticsParams;
 
 type DiagnosticCallback = Box<dyn Fn(Vec<DiagnosticEntry>) + Send + Sync>;
 
@@ -213,7 +215,8 @@ impl DiagnosticsRegistry {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use lsp_types::{Diagnostic, Position, Range};
+
+    use super::*;
     include!("diagnostics_test.rs");
 }

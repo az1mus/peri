@@ -1,3 +1,5 @@
+use peri_middlewares::plugin::InstallScope;
+use peri_widgets::{BorderedPanel, ScrollState, ScrollableArea};
 use ratatui::{
     layout::Rect,
     style::{Modifier, Style},
@@ -5,8 +7,7 @@ use ratatui::{
     Frame,
 };
 
-use peri_widgets::{BorderedPanel, ScrollState, ScrollableArea};
-
+use super::detail_kv_line;
 use crate::{
     app::{
         plugin_panel::{DetailAction, PluginPanel},
@@ -14,10 +15,6 @@ use crate::{
     },
     ui::theme,
 };
-
-use peri_middlewares::plugin::InstallScope;
-
-use super::detail_kv_line;
 
 pub(crate) fn render_detail(f: &mut Frame, panel: &PluginPanel, app: &mut App, area: Rect) {
     let (lines, scroll_offset) = {

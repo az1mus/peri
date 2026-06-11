@@ -1,7 +1,6 @@
 mod presets;
 
 pub use presets::DarkTheme;
-
 use ratatui::style::Color;
 
 /// 纯 UI 颜色主题 trait——不含业务语义方法

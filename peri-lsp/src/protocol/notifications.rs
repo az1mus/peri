@@ -1,6 +1,7 @@
-use crate::jsonrpc::JsonRpcNotification;
 use lsp_types::*;
 use serde_json::Value;
+
+use crate::jsonrpc::JsonRpcNotification;
 
 /// 构建 textDocument/didOpen 通知
 pub fn did_open_notification(
