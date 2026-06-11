@@ -1,5 +1,6 @@
 use peri_agent::messages::{BaseMessage, ContentBlock, MessageContent, ToolCallRequest};
 use serde_json::json;
+use std::time::{Duration, Instant};
 
 use super::*;
 use crate::ui::message_view::aggregate_batch_groups;
