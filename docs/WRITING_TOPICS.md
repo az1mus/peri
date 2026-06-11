@@ -1,6 +1,6 @@
 # Peri 博客写作素材库
 
-已有博客覆盖的主题不再列入：compact-mechanism、edit-tool、multi-agent-patterns、perf-optimization、web-search、prompt-cache-optimization、acp-separation、introducing-peri、streaming-render。
+已有博客覆盖的主题不再列入：compact-mechanism、edit-tool、multi-agent-patterns、perf-optimization、web-search、prompt-cache-optimization、acp-separation、introducing-peri、streaming-render、concurrent-tool-dispatch、domestic-models-adaptation、domestic-models-work、riscv-peri、rewind-design。
 
 ## Prompt Cache
 
@@ -56,7 +56,7 @@
 ## 命令系统
 
 - [ ] Slash 命令的三种执行模式——立即执行、透传给 LLM、参数转换后执行，各适合什么场景
-- [ ] /rewind 如何回滚文件变更——截断对话历史的同时，逆向还原磁盘上所有被修改过的文件
+- [x] /rewind 如何回滚文件变更——截断对话历史的同时，逆向还原磁盘上所有被修改过的文件
 - [ ] /bg 命令如何在后台跑独立任务——为什么故意不给后台 Agent 配置 MCP 工具
 
 ## 文件与安全
@@ -78,3 +78,51 @@
 ## Side Project
 
 - [ ] git-graph：在终端里可视化 Git 分支历史——拓扑排序布局、分支着色、三栏视图展示 stash/remote/status
+
+## 系统提示词稳定性
+
+- [x] 冻结的设计：系统提示词不可变性的进化之路——从每轮重建到 frozen_system_prompt 模式，为什么 session 内 system prompt 必须绝对不变 → `spec/global/domains/system-prompt.md`
+- [x] Frozen Data 传播链的隐性成本——为什么新增一个 frozen 字段要同步检查 5 个文件，SubAgent 语言漂移暴露了全链路设计盲区 → `spec/global/domains/system-prompt.md#issue_2026-05-27`
+
+## 流式协议与字节级陷阱
+
+- [ ] SSE 流式 UTF-8 截断：from_utf8_lossy 为什么产生不可逆乱码——跨 chunk 边界截断多字节字符时 U+FFFD 替换后无法恢复，修复方案 pending_bytes 缓冲区 → `peri-agent/src/llm/openai.rs`, `spec/global/domains/agent.md#issue_2026-05-29`
+- [ ] 流式 JSON 的 max_tokens 截断：字段顺序决定生死——Write 工具超长内容被截断后 file_path 因字段顺序靠后而缺失，关键字段必须排在 Schema 前面 → `spec/global/domains/agent.md#issue_2026-05-15`
+- [ ] StopReason 撒谎：当 LLM 返回 end_turn 但内容含 tool_use——DeepSeek 元数据与内容不一致导致路由错误 400，修复用 has_tool_calls() 内容级检查 → `spec/archive-issues/2026-05-15-orphaned-tool-use-after-concurrent-tool-error`
+
+## 编辑工具进化史
+
+- [x] 一个编辑工具的 5 次重写：Edit → Hashline → LineEdit V1/V2/V3——每次迭代都因 LLM 生成的旧字符串与真实文件差异太大而失败，4 个计划文件跨越 1 个月 → `docs/superpowers/plans/2026-06-05-line-edit-tool` 等
+
+## 并发与竞态
+
+- [ ] 一次 Ctrl+C 的五层纵贯修复——从 ACP Server 到 UI 状态的事件路由错误：Cancel 被路由到 Error 处理器、round_start_vm_idx 失效、in_subagent() 静默吞噬父中断、ACP 无条件截断导致失忆、cancel token 未传播到 sync SubAgent → `spec/global/domains/agent.md#issue_2026-05-25` 等
+
+## 跨平台工程
+
+- [x] 一个 bash -c 包装器的三合一——MCP 客户端、Bash 工具、Hook 执行器各自手写平台判断，修复为统一 shell_command() 函数 → `peri-middlewares/src/process/mod.rs`
+
+## TUI 渲染工程
+
+- [ ] TUI 流式 Markdown 表格 holdback 机制——流式渲染中表格字符逐个到达时显示残缺列，需暂缓渲染直到完整行到达 → `peri-widgets/src/markdown/`
+- [ ] TUI Markdown LRU 缓存：避免每帧完整重解析——渲染线程中纯计算不一定是瓶颈，内存分配/回收才是 → `peri-tui/src/render/`
+- [ ] RenderThread 有界通道 + 自适应流式帧率——无帧率限制时 loading 动画吃满单核 CPU，显式 60fps + batching → `peri-tui/src/render_thread.rs`
+- [ ] WrappedLineInfo：CJK 文本在终端中的视觉行→逻辑行映射——逐字符 unicode-width 实现鼠标选区精准定位 → `peri-tui/src/wrap.rs`
+- [ ] 19 个手写输入框的统一：FieldTextarea 重构——19+ 个 String + usize 替换为统一 tui_textarea 包装器 → `docs/superpowers/plans/2026-06-07-unified-textarea`
+
+## 插件生态
+
+- [ ] 兼容 Claude Code 插件的完整设计——manifest 格式兼容（skills 字段陷阱、commands 混合数组）、MCP 环境变量 per-plugin 展开、三种安装范围 → `peri-middlewares/src/plugin/`, `spec/global/domains/plugin.md`
+- [ ] Hook 系统：4 种执行类型 × 14 种事件——通过 exit code 控制流程，Agent 类型 hook 完整 50 轮循环，防递归 → `peri-middlewares/src/hooks/`
+
+## 质量工程
+
+- [ ] 3.35% 工具调用错误率的根因分析与修复——93% 源于 subagent_type 参数缺失，用数据说话而不是凭感觉优化 → `peri-agent/src/tool_errors.rs`
+- [ ] Compact 子系统零测试——最危险的大约 2100 行代码没有测试保护，错误实现可直接损坏对话 → `peri-agent/src/agent/compact/`
+
+## 架构设计
+
+- [ ] 17 个中间件的链式编排：顺序敏感的 5 钩子设计约束——每个中间件在 5 个钩子中的插入点如何影响下游，CLAUDE.md 记录了 6 个顺序依赖 → `peri-middlewares/CLAUDE.md`
+- [ ] ACP Event Bridge 三层事件映射的语义坍缩——ExecutorEvent → AcpNotification → AgentEvent，多个 bug 揭示了协议边界处信息的渐进损失 → `peri-tui/src/app/agent.rs`
+- [ ] MCP Streamable HTTP + OAuth 2.0 完整协议集成——Stdio/HTTP 双传输、Authorization Code + PKCE、本地回调/手动粘贴混合回退、Token 0600 持久化 → `peri-middlewares/src/mcp/`
+- [ ] ServiceRegistry 职责扩散与 GlobalUiState 拆分——跨会话共享服务和纯 UI 临时状态混在一起的代价 → `peri-tui/src/app/service_registry.rs`
