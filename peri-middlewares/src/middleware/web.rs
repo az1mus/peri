@@ -10,6 +10,14 @@ impl WebMiddleware {
     pub fn new() -> Self {
         Self
     }
+
+    /// 构建 Web 工具集，供 parent_tools 等外部直接构造使用
+    pub fn build_tools() -> Vec<Box<dyn BaseTool>> {
+        vec![
+            Box::new(WebFetchTool::new()),
+            Box::new(WebSearchTool::new()),
+        ]
+    }
 }
 
 impl Default for WebMiddleware {
