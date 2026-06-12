@@ -1,6 +1,6 @@
 # Claude 的人格能提升别的模型智商——SWE-bench 实测涨 11 个点
 
-> **[CC_Pure (CCP)](https://github.com/James-FE/CC_Pure)** — 基于 [Claude Code Best (CCB)](https://github.com/claude-code-best/claude-code) 的开源增强实现，支持自定义 Persona、权限控制和多模型调度。<https://github.com/James-FE/CC_Pure>
+> **[CC_Pure (CCP)](https://github.com/GhostDragon124/CC_Pure)** — 基于 [Claude Code Best (CCB)](https://github.com/claude-code-best/claude-code) 的开源增强实现，支持自定义 Persona、权限控制和多模型调度。<https://github.com/GhostDragon124/CC_Pure>
 
 DeepSeek V4 Pro 加 CCP 工具链，90 个 SWE-bench Lite 实例分两组跑，结果差了 11 个百分点。
 
@@ -70,5 +70,5 @@ django 上的差距更系统化。37 个实例，Default 解了 56.8%，Persona 
 完整报告和 Claude Persona 定义都在 CC_Pure 仓库。
 
 CCP 基于 Claude Code Best：<https://github.com/claude-code-best/claude-code>
-项目地址：[github.com/James-FE/CC_Pure](https://github.com/James-FE/CC_Pure)
-完整报告：[ccp-claude-persona-swebench-report-v2.md](https://github.com/James-FE/CC_Pure/blob/main/docs/ccp-claude-persona-swebench-report-v2.md)
+项目地址：[github.com/GhostDragon124/CC_Pure](https://github.com/GhostDragon124/CC_Pure)
+完整报告：[ccp-claude-persona-swebench-report-v2.md](https://github.com/GhostDragon124/CC_Pure/blob/main/docs/ccp-claude-persona-swebench-report-v2.md)

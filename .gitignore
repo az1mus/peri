@@ -187,4 +187,4 @@ vendor/
 node_modules
 dist
 settings.json
-.claude/worktrees/
+.claude/
