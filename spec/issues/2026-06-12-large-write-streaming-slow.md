@@ -51,5 +51,5 @@
 - **操作人**：agent
 - **用户原意**：Write 大文件时 LLM 流式输出变慢，希望通过超时机制强制引导模型使用 append 分段写入
 - **修复内容**：在 Write 工具 invoke 中包裹 `tokio::time::timeout(Duration::from_secs(120), ...)`，超时时返回英文错误提示引导 Agent 使用 `append=true` 分段写入
-- **涉及 commit**：`f1b20650`
+- **涉及 commit**：`98e1a407`
 - **验证状态**：待验证
