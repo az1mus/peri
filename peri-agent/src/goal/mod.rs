@@ -4,5 +4,7 @@
 //! 并发状态机见 `peri-acp::session::goal_state::GoalState`。
 
 pub mod model;
+pub mod store;
 
 pub use model::{GoalAccounting, GoalStatus, ThreadGoal};
+pub use store::{GoalStore, GoalStoreError, InMemoryGoalStore};
