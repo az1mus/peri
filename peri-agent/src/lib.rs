@@ -6,6 +6,7 @@
 pub mod agent;
 pub mod ask_user;
 pub mod error;
+pub mod goal;
 pub mod hitl;
 pub mod interaction;
 pub mod llm;
