@@ -36,6 +36,7 @@ fn test_get_built_in_agent_found() {
     assert!(get_built_in_agent("plan").is_some());
     assert!(get_built_in_agent("general-purpose").is_some());
     assert!(get_built_in_agent("verification").is_some());
+    assert!(get_built_in_agent("web-researcher").is_some());
     assert!(get_built_in_agent("coder").is_some());
 }
 

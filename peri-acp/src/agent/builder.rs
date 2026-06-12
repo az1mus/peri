@@ -238,6 +238,7 @@ pub fn build_agent(
     let mut parent_tools: Vec<Box<dyn peri_agent::tools::BaseTool>> =
         FilesystemMiddleware::build_tools(&cwd);
     parent_tools.extend(TerminalMiddleware::build_tools(&cwd));
+    parent_tools.extend(WebMiddleware::build_tools());
     if let Some(ref pool) = mcp_pool {
         let mcp_tools = peri_middlewares::mcp::build_tool_bridges(pool);
         for tool in mcp_tools {

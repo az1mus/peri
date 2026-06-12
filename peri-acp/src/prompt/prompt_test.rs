@@ -395,8 +395,8 @@ fn test_format_available_agents_with_agents() {
     let lines: Vec<&str> = result.lines().filter(|l| l.starts_with("- ")).collect();
     assert_eq!(
         lines.len(),
-        7,
-        "Should have 2 project + 5 built-in agent entries"
+        8,
+        "Should have 2 project + 6 built-in agent entries"
     );
     let _ = std::fs::remove_dir_all(&dir);
 }

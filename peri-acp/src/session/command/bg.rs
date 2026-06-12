@@ -89,15 +89,16 @@ impl AgentCommand for BgCommand {
                 }
             };
 
-        // 构造父工具集（文件系统 + 终端 = Read/Write/Edit/Bash/Grep/Glob）
+        // 构造父工具集（文件系统 + 终端 + Web = Read/Write/Edit/Bash/Grep/Glob/WebFetch/WebSearch）
         // NOTE: MCP tools are intentionally excluded because:
         // 1. Background workers should not depend on external MCP servers that may be unavailable
         // 2. MCP tools may require interactive approval, which doesn't work for background agents
-        // 3. Core filesystem + terminal tools cover the majority of background task use cases
+        // 3. Core filesystem + terminal + web tools cover the majority of background task use cases
         let parent_tools: Arc<Vec<Arc<dyn peri_agent::tools::BaseTool>>> = {
             let mut tools: Vec<Box<dyn peri_agent::tools::BaseTool>> =
                 FilesystemMiddleware::build_tools(&ctx.cwd);
             tools.extend(TerminalMiddleware::build_tools(&ctx.cwd));
+            tools.extend(WebMiddleware::build_tools());
             Arc::new(
                 tools
                     .into_iter()
