@@ -19,7 +19,7 @@ enum Commands {
 
     /// Install all dependencies to target tool
     Install {
-        /// Target tool (claude, codex, copilot)
+        /// Target tool (claude)
         #[arg(long, default_value = "claude")]
         tool: String,
 

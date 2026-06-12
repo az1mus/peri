@@ -87,33 +87,17 @@ impl ToolAdapter for ClaudeAdapter {
     }
 }
 
-pub struct CodexAdapter;
-impl ToolAdapter for CodexAdapter {
-    fn target_name(&self) -> &str {
-        "codex"
-    }
-}
-
-pub struct CopilotAdapter;
-impl ToolAdapter for CopilotAdapter {
-    fn target_name(&self) -> &str {
-        "copilot"
-    }
-}
-
 /// Get adapter by name
 pub fn get_adapter(name: &str) -> Option<Box<dyn ToolAdapter>> {
     match name.to_lowercase().as_str() {
         "claude" => Some(Box::new(ClaudeAdapter)),
-        "codex" => Some(Box::new(CodexAdapter)),
-        "copilot" => Some(Box::new(CopilotAdapter)),
         _ => None,
     }
 }
 
 /// List all built-in adapter names
 pub fn list_adapters() -> Vec<&'static str> {
-    vec!["claude", "codex", "copilot"]
+    vec!["claude"]
 }
 
 /// Map adapter name to symlink name (add scope prefix on conflict)

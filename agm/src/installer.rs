@@ -229,7 +229,7 @@ impl InstallContext {
         let mut agents: Vec<(String, String)> = Vec::new();
 
         // Detect .{tool}/skills/**/SKILL.md (supports nested categories via recursion)
-        for tool_prefix in &[".claude", ".codex", ".copilot", ""] {
+        for tool_prefix in &[".claude", ""] {
             let skills_dir = if tool_prefix.is_empty() {
                 repo_root.join("skills")
             } else {

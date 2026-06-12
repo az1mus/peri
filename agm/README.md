@@ -76,8 +76,6 @@ agm.lock.json     # Lock file — exact versions resolved
 | Tool | Adapter |
 |------|---------|
 | Claude | `.claude/skills/`, `.claude/agents/` |
-| Codex | `.codex/skills/`, `.codex/agents/` |
-| Copilot | `.copilot/skills/`, `.copilot/agents/` |
 
 ## Release
 
