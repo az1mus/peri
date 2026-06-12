@@ -9,6 +9,7 @@ pub mod command;
 pub mod event_sink;
 pub mod executor;
 pub mod frozen;
+pub mod goal_state;
 pub mod state_builders;
 
 use std::{collections::HashMap, sync::Arc};
