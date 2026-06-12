@@ -2,7 +2,7 @@ use crate::error::{AgmError, Result};
 use std::path::Path;
 use std::process::Command;
 
-/// git clone 指定仓库到目标目录，checkout 到指定 commit
+/// git clone a repo to a target directory, checkout a specific commit
 pub fn clone_at_commit(repo_url: &str, commit: &str, dest: &Path) -> Result<()> {
     let output = Command::new("git")
         .args(["clone", "--no-checkout", repo_url])
@@ -29,12 +29,12 @@ pub fn clone_at_commit(repo_url: &str, commit: &str, dest: &Path) -> Result<()> 
     Ok(())
 }
 
-/// 验证 commit hash 是否合法（40 字符 hex）
+/// Validate that a commit hash is valid (40 hex chars)
 pub fn is_valid_commit_hash(hash: &str) -> bool {
     hash.len() == 40 && hash.chars().all(|c| c.is_ascii_hexdigit())
 }
 
-/// 获取仓库的所有 tags
+/// Get all tags for a repository
 pub fn list_tags(repo_dir: &Path) -> Result<Vec<String>> {
     let output = Command::new("git")
         .args(["tag", "--list"])
@@ -53,7 +53,7 @@ pub fn list_tags(repo_dir: &Path) -> Result<Vec<String>> {
         .collect())
 }
 
-/// clone 仓库到目标目录（浅层，仅 HEAD），返回 HEAD commit hash
+/// Clone a repo to a target directory (shallow, HEAD only), return HEAD commit hash
 pub fn clone_head(repo_url: &str, dest: &Path) -> Result<String> {
     let output = Command::new("git")
         .args(["clone", "--depth", "1", "--single-branch", repo_url])
@@ -75,7 +75,7 @@ pub fn clone_head(repo_url: &str, dest: &Path) -> Result<String> {
     Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
 }
 
-/// 解析仓库 HEAD commit hash（不 clone，用 git ls-remote）
+/// Resolve HEAD commit hash for a repo (without cloning, using git ls-remote)
 pub fn resolve_head(repo_url: &str) -> Result<String> {
     let output = Command::new("git")
         .args(["ls-remote", "--symref", repo_url, "HEAD"])
@@ -99,7 +99,7 @@ pub fn resolve_head(repo_url: &str) -> Result<String> {
         .ok_or_else(|| AgmError::Git("failed to parse HEAD from ls-remote output".into()))
 }
 
-/// 从 GitHub URL 解析 owner/repo
+/// Parse owner/repo from a GitHub URL
 pub fn parse_github_url(url: &str) -> Option<(String, String)> {
     let url = url.trim_end_matches('/').trim_end_matches(".git");
     // https://github.com/owner/repo

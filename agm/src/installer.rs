@@ -10,10 +10,10 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use tokio::runtime::Runtime;
 
-/// 自动探测结果：(skills, agents)，每个元素为 (name, glob) 对，glob 为 store 内的相对路径
+/// Auto-detection results: (skills, agents), each element is a (name, glob) pair, glob is relative path in store
 type DetectedTypes = (Vec<(String, String)>, Vec<(String, String)>);
 
-/// 安装上下文
+/// Installation context
 pub struct InstallContext {
     pub config: AgmConfig,
     pub store: Store,
@@ -33,7 +33,7 @@ impl InstallContext {
         let store = Store::new(config.store_path.clone());
         store.ensure_root()?;
 
-        // 确保 agm 临时目录存在（与 store 同文件系统，用于原子 rename）
+        // Ensure agm temp directory exists (same filesystem as store, for atomic rename)
         let tmp_dir = crate::config::agm_dir().join("tmp");
         std::fs::create_dir_all(&tmp_dir)?;
 
@@ -54,24 +54,24 @@ impl InstallContext {
         })
     }
 
-    /// 在 ~/.agm/tmp/ 下创建临时目录，确保与 store 同一文件系统
+    /// Create temp directory under ~/.agm/tmp/, ensuring same filesystem as store
     fn temp_dir(&self) -> Result<tempfile::TempDir> {
         let tmp_root = crate::config::agm_dir().join("tmp");
         std::fs::create_dir_all(&tmp_root)?;
         Ok(tempfile::TempDir::new_in(&tmp_root)?)
     }
 
-    /// 从 git URL 直接安装一个包（类似 npm install <url>）
+    /// Install a package directly from git URL (similar to npm install <url>)
     pub fn install_from_git(&mut self, repo_url: &str) -> Result<()> {
         let adapter = get_adapter(&self.target)
             .ok_or_else(|| AgmError::Other(format!("unknown target: {}", self.target)))?;
 
-        // 解析 URL → package name
+        // Parse URL → package name
         let (owner, repo) = git::parse_github_url(repo_url)
             .ok_or_else(|| AgmError::Other(format!("unsupported git URL: {}", repo_url)))?;
         let pkg_name = format!("@git/{}/{}", owner, repo);
 
-        // 先用 ls-remote 拿 HEAD hash，检查 store 是否已有
+        // Use ls-remote to get HEAD hash, check if store already has it
         let head_commit = git::resolve_head(repo_url)?;
         let store_path = self.store.git_package_path(repo_url, &head_commit);
 
@@ -159,7 +159,7 @@ impl InstallContext {
 
         let mut installed = Vec::new();
 
-        // 为 skills 创建 symlink
+        // Create symlinks for skills
         for (skill_name, skill_glob) in &skills {
             let target_dir = adapter.map_dir(PackageType::Skills, &self.project_root);
             let link_name = symlink_name(skill_name, &[]);
@@ -180,7 +180,7 @@ impl InstallContext {
             }
         }
 
-        // 为 agents 创建 symlink
+        // Create symlinks for agents
         for (agent_name, agent_glob) in &agents {
             let target_dir = adapter.map_dir(PackageType::Agents, &self.project_root);
             let link_name = symlink_name(agent_name, &[]);
@@ -206,13 +206,13 @@ impl InstallContext {
             println!("No skills or agents found in the repo. If the repo has an agm.package.json, it should declare exports.");
         }
 
-        // 保存 agm.json
+        // Save agm.json
         let manifest_path = self.project_root.join("agm.json");
         self.manifest
             .save(&manifest_path)
             .map_err(|e| AgmError::Other(format!("save agm.json: {}", e)))?;
 
-        // 更新 lock
+        // Update lock file
         self.update_lock(&installed)
             .map_err(|e| AgmError::Other(format!("update lock: {}", e)))?;
 
@@ -222,13 +222,13 @@ impl InstallContext {
         Ok(())
     }
 
-    /// 自动探测 repo 中的 skills 和 agents（无 agm.package.json 时）
-    /// 返回 (name, glob) 对，glob 为 store 内的相对路径
+    /// Auto-detect skills and agents in a repo (when no agm.package.json)
+    /// Returns (name, glob) pairs, glob is relative path in store
     fn auto_detect_types(&self, repo_root: &Path) -> DetectedTypes {
         let mut skills: Vec<(String, String)> = Vec::new();
         let mut agents: Vec<(String, String)> = Vec::new();
 
-        // 探测 .{tool}/skills/**/SKILL.md（递归支持嵌套分类目录）
+        // Detect .{tool}/skills/**/SKILL.md (supports nested categories via recursion)
         for tool_prefix in &[".claude", ".codex", ".copilot", ""] {
             let skills_dir = if tool_prefix.is_empty() {
                 repo_root.join("skills")
@@ -237,7 +237,7 @@ impl InstallContext {
             };
             skills.extend(find_skills_recursive(&skills_dir, repo_root));
 
-            // 探测 .{tool}/agents/*.md
+            // Detect .{tool}/agents/*.md
             let agents_dir = if tool_prefix.is_empty() {
                 repo_root.join("agents")
             } else {
@@ -265,8 +265,9 @@ impl InstallContext {
     }
 }
 
-/// 递归查找包含 SKILL.md 的目录，支持嵌套分类（如 skills/engineering/grill-me/SKILL.md）
-/// 返回 (skill名, 相对于 repo_root 的 SKILL.md 路径)
+/// Recursively find directories containing SKILL.md, supporting nested categories
+/// (e.g., skills/engineering/grill-me/SKILL.md)
+/// Returns (skill_name, path relative to repo_root)
 fn find_skills_recursive(base_dir: &Path, repo_root: &Path) -> Vec<(String, String)> {
     let mut result = Vec::new();
     let entries = match std::fs::read_dir(base_dir) {
@@ -286,7 +287,7 @@ fn find_skills_recursive(base_dir: &Path, repo_root: &Path) -> Vec<(String, Stri
             tracing::info!("auto-detected skill: {} ({})", name, glob);
             result.push((name, glob));
         } else {
-            // 递归进入子目录（如 skills/engineering/, skills/productivity/）
+            // Recurse into subdirectories (e.g., skills/engineering/, skills/productivity/)
             result.extend(find_skills_recursive(&path, repo_root));
         }
     }
@@ -386,7 +387,7 @@ impl InstallContext {
                     )?;
                 }
 
-                // 建 symlink
+                // Create symlink
                 let target_dir = adapter.map_dir(*typ, &self.project_root);
                 let link_name = symlink_name(name, &[]);
                 let store_path = match &resolution {
@@ -452,7 +453,7 @@ impl InstallContext {
     }
 }
 
-/// 解压 .tar.gz tarball
+/// Extract .tar.gz tarball
 fn extract_tarball(tarball_path: &Path, dest: &Path) -> Result<()> {
     let file = std::fs::File::open(tarball_path)?;
     let decoder = flate2::read::GzDecoder::new(file);
@@ -461,16 +462,16 @@ fn extract_tarball(tarball_path: &Path, dest: &Path) -> Result<()> {
     Ok(())
 }
 
-/// 从 glob 路径提取 skill/agent 名称（如 ".claude/skills/interview/SKILL.md" → "interview"）
+/// Extract skill/agent name from a glob path (e.g., ".claude/skills/interview/SKILL.md" → "interview")
 fn extract_skill_name(glob: &str) -> String {
     let parts: Vec<&str> = glob.split('/').collect();
-    // 找 "skills" 或 "agents" 后面的部分
+    // Find the part after "skills" or "agents"
     for (i, part) in parts.iter().enumerate() {
         if (*part == "skills" || *part == "agents") && i + 1 < parts.len() {
             return parts[i + 1].to_string();
         }
     }
-    // fallback: 用最后一个有意义的目录名
+    // fallback: use the last meaningful directory name
     parts
         .iter()
         .rev()

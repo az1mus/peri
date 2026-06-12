@@ -4,7 +4,7 @@ use std::path::Path;
 
 use crate::error::Result;
 
-/// agm.json — 项目 manifest
+/// agm.json — project manifest
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ProjectManifest {
     pub name: String,
@@ -80,7 +80,7 @@ pub enum Resolution {
     Registry { integrity: String },
 }
 
-/// agm.package.json — 包内 manifest
+/// agm.package.json — package manifest
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PackageManifest {
     pub name: String,

@@ -38,7 +38,7 @@ impl RegistryClient {
         self.token.as_ref().map(|t| format!("Bearer {}", t))
     }
 
-    /// GET /packages/:name — 获取包元数据
+    /// GET /packages/:name — fetch package metadata
     pub async fn get_package(&self, name: &str) -> Result<PackageMetadata> {
         let url = format!("{}/packages/{}", self.base_url, name);
         let mut req = self.client.get(&url);
@@ -55,7 +55,7 @@ impl RegistryClient {
         Ok(resp.json().await?)
     }
 
-    /// GET /packages/:name/:version — 获取版本元数据
+    /// GET /packages/:name/:version — fetch version metadata
     pub async fn get_version(&self, name: &str, version: &str) -> Result<VersionMetadata> {
         let url = format!("{}/packages/{}/{}", self.base_url, name, version);
         let mut req = self.client.get(&url);
@@ -72,7 +72,7 @@ impl RegistryClient {
         Ok(resp.json().await?)
     }
 
-    /// GET /packages/:name/-/:tarball — 下载 tarball
+    /// GET /packages/:name/-/:tarball — download tarball
     pub async fn download_tarball(&self, name: &str, tarball: &str, dest: &Path) -> Result<()> {
         let url = format!("{}/packages/{}/-/{}", self.base_url, name, tarball);
         let mut req = self.client.get(&url);

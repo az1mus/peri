@@ -2,7 +2,7 @@ use crate::error::{AgmError, Result};
 use crate::types::{PackageManifest, Resolution};
 use std::path::{Path, PathBuf};
 
-/// Store 管理器：~/.agm/store/
+/// Store manager: ~/.agm/store/
 pub struct Store {
     pub(crate) root: PathBuf,
 }
@@ -12,26 +12,26 @@ impl Store {
         Self { root }
     }
 
-    /// 获取 git 包在 store 中的路径: store/git_{owner}_{repo}@{commit}/
+    /// Get git package path in store: store/git_{owner}_{repo}@{commit}/
     pub fn git_package_path(&self, repo_url: &str, commit: &str) -> PathBuf {
         let id = sanitize_repo_id(repo_url);
         self.root
             .join(format!("git_{id}@{commit}", id = id, commit = commit))
     }
 
-    /// 获取 registry 包在 store 中的路径: store/<name>@<version>/
+    /// Get registry package path in store: store/<name>@<version>/
     pub fn registry_package_path(&self, name: &str, version: &str) -> PathBuf {
         let safe_name = name.replace('/', "_");
         self.root.join(format!("{}@{}", safe_name, version))
     }
 
-    /// 确保 store 根目录存在
+    /// Ensure store root directory exists
     pub fn ensure_root(&self) -> Result<()> {
         std::fs::create_dir_all(&self.root)?;
         Ok(())
     }
 
-    /// 列出 store 中所有包目录
+    /// List all package directories in store
     pub fn list_packages(&self) -> Result<Vec<PathBuf>> {
         let mut entries = Vec::new();
         if !self.root.exists() {
@@ -46,7 +46,7 @@ impl Store {
         Ok(entries)
     }
 
-    /// 读取包内 agm.package.json
+    /// Read agm.package.json from a package directory
     pub fn read_package_manifest(&self, package_dir: &Path) -> Result<PackageManifest> {
         let manifest_path = package_dir.join("agm.package.json");
         if !manifest_path.exists() {
@@ -58,7 +58,7 @@ impl Store {
         PackageManifest::load(&manifest_path)
     }
 
-    /// 删除指定包目录
+    /// Remove a package directory
     pub fn remove(&self, package_dir: &Path) -> Result<()> {
         if package_dir.exists() {
             std::fs::remove_dir_all(package_dir)?;
@@ -67,7 +67,7 @@ impl Store {
     }
 }
 
-/// 将 repo URL 转为安全的文件系统标识
+/// Convert repo URL to a safe filesystem identifier
 fn sanitize_repo_id(url: &str) -> String {
     url.trim_end_matches('/')
         .trim_end_matches(".git")
@@ -79,7 +79,7 @@ fn sanitize_repo_id(url: &str) -> String {
         .replace(['/', '@'], "_")
 }
 
-/// 将包从临时目录安装到 store
+/// Install a package from a temp directory into the store
 pub fn install_to_store(
     store: &Store,
     temp_dir: &Path,

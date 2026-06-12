@@ -2,12 +2,12 @@ use crate::error::Result;
 use crate::resolver::PackageType;
 use std::path::{Path, PathBuf};
 
-/// 工具适配器 trait
+/// Tool adapter trait
 pub trait ToolAdapter: Send + Sync {
-    /// 工具标识名
+    /// Tool identifier name
     fn target_name(&self) -> &str;
 
-    /// 类型到目标目录的映射
+    /// Map package type to target directory
     fn map_dir(&self, typ: PackageType, project_root: &Path) -> PathBuf {
         let subdir = match typ {
             PackageType::Skills => "skills",
@@ -18,7 +18,7 @@ pub trait ToolAdapter: Send + Sync {
         project_root.join(dot_dir).join(subdir)
     }
 
-    /// 安装：从 store 建 symlink 到工具目录
+    /// Install: create symlink from store to tool directory
     fn install(&self, store_path: &Path, target_dir: &Path, pkg_name: &str) -> Result<()> {
         std::fs::create_dir_all(target_dir)?;
 
@@ -59,12 +59,12 @@ pub trait ToolAdapter: Send + Sync {
         Ok(())
     }
 
-    /// 安装后的收尾钩子
+    /// Post-install hook
     fn post_install(&self) -> Result<()> {
         Ok(())
     }
 
-    /// 卸载：删除 symlink
+    /// Uninstall: remove symlink
     fn uninstall(&self, target_dir: &Path, pkg_name: &str) -> Result<()> {
         let link_path = target_dir.join(pkg_name);
         if link_path.exists() {
@@ -78,7 +78,7 @@ pub trait ToolAdapter: Send + Sync {
     }
 }
 
-// ---- 内置适配器 ----
+// ---- Built-in adapters ----
 
 pub struct ClaudeAdapter;
 impl ToolAdapter for ClaudeAdapter {
@@ -101,7 +101,7 @@ impl ToolAdapter for CopilotAdapter {
     }
 }
 
-/// 根据名称获取适配器
+/// Get adapter by name
 pub fn get_adapter(name: &str) -> Option<Box<dyn ToolAdapter>> {
     match name.to_lowercase().as_str() {
         "claude" => Some(Box::new(ClaudeAdapter)),
@@ -111,12 +111,12 @@ pub fn get_adapter(name: &str) -> Option<Box<dyn ToolAdapter>> {
     }
 }
 
-/// 列出所有内置适配器名称
+/// List all built-in adapter names
 pub fn list_adapters() -> Vec<&'static str> {
     vec!["claude", "codex", "copilot"]
 }
 
-/// 适配器名称到 symlink 名称的映射（冲突时添加 scope 前缀）
+/// Map adapter name to symlink name (add scope prefix on conflict)
 pub fn symlink_name(pkg_name: &str, existing_names: &[String]) -> String {
     let base = pkg_name.replace('/', "_").replace('@', "");
     if existing_names.contains(&base) {

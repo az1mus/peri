@@ -7,55 +7,55 @@ struct Cli {
     #[command(subcommand)]
     command: Commands,
 
-    /// 项目目录（默认当前目录）
+    /// Project directory (defaults to current directory)
     #[arg(short = 'C', long, default_value = ".", global = true)]
     dir: Option<String>,
 }
 
 #[derive(Subcommand)]
 enum Commands {
-    /// 生成 agm.json 模板
+    /// Generate agm.json template
     Init,
 
-    /// 安装所有依赖到目标工具
+    /// Install all dependencies to target tool
     Install {
-        /// 目标工具 (claude, codex, copilot)
+        /// Target tool (claude, codex, copilot)
         #[arg(long, default_value = "claude")]
         tool: String,
 
-        /// 从 git URL 直接安装（如 https://github.com/user/repo）
+        /// Install directly from git URL (e.g., https://github.com/user/repo)
         #[arg(long)]
         git: Option<String>,
     },
 
-    /// 卸载一个包
+    /// Uninstall a package
     Uninstall {
-        /// 包名
+        /// Package name
         package: String,
-        /// 目标工具
+        /// Target tool
         #[arg(long, default_value = "claude")]
         tool: String,
     },
 
-    /// 检查可升级的包
+    /// Check for upgradable packages
     Update,
 
-    /// 列出所有依赖
+    /// List all dependencies
     List,
 
-    /// 发布包到 registry
+    /// Publish package to registry
     Publish {
         /// Registry URL
         #[arg(long)]
         registry: Option<String>,
     },
 
-    /// 清理 store 中的孤儿包
+    /// Clean orphan packages from store
     Gc,
 
-    /// 更新 agm 自身
+    /// Update agm itself
     SelfUpdate {
-        /// 强制重新安装（即使已是最新）
+        /// Force reinstall even if already on latest
         #[arg(long)]
         force: bool,
     },

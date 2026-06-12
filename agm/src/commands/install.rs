@@ -8,7 +8,7 @@ pub fn execute(target: &str, git_url: Option<&str>, project_dir: Option<PathBuf>
     let dir = project_dir.unwrap_or_else(|| PathBuf::from("."));
     let manifest_path = dir.join("agm.json");
 
-    // --git 模式：直接安装 URL，没有 agm.json 则自动创建
+    // --git mode: install URL directly, auto-create agm.json if missing
     if let Some(url) = git_url {
         let manifest = if manifest_path.exists() {
             ProjectManifest::load(&manifest_path)?
@@ -40,7 +40,7 @@ pub fn execute(target: &str, git_url: Option<&str>, project_dir: Option<PathBuf>
         return Ok(());
     }
 
-    // 普通模式：从 agm.json 安装
+    // Normal mode: install from agm.json
     if !manifest_path.exists() {
         return Err(AgmError::ManifestNotFound);
     }

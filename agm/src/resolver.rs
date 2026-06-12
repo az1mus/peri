@@ -5,7 +5,7 @@ use crate::types::*;
 use semver::VersionReq;
 use std::collections::BTreeMap;
 
-/// 解析结果
+/// Resolved package result
 #[derive(Debug, Clone)]
 pub struct ResolvedPackage {
     pub name: String,
@@ -13,12 +13,12 @@ pub struct ResolvedPackage {
     pub resolution: Resolution,
 }
 
-/// 判断是否为 git 依赖（@git/ 前缀）
+/// Check if a dependency is a git dependency (@git/ prefix)
 pub fn is_git_dep(name: &str) -> bool {
     name.starts_with("@git/")
 }
 
-/// 验证 git commit hash
+/// Validate git commit hash
 pub fn validate_commit_hash(hash: &str) -> Result<()> {
     if !git::is_valid_commit_hash(hash) {
         return Err(AgmError::InvalidCommitHash(hash.into()));
@@ -26,7 +26,7 @@ pub fn validate_commit_hash(hash: &str) -> Result<()> {
     Ok(())
 }
 
-/// 从 registry 解析 semver range 到具体版本
+/// Resolve a semver range to a concrete version from the registry
 pub async fn resolve_registry_version(
     client: &RegistryClient,
     name: &str,
@@ -39,7 +39,7 @@ pub async fn resolve_registry_version(
     candidates.sort_by(|a, b| {
         let va = semver::Version::parse(a).ok();
         let vb = semver::Version::parse(b).ok();
-        vb.cmp(&va) // 降序
+        vb.cmp(&va) // descending
     });
 
     for version in &candidates {
@@ -56,7 +56,7 @@ pub async fn resolve_registry_version(
     )))
 }
 
-/// 从 manifest 收集所有需要解析的依赖
+/// Collect all dependencies from a manifest that need resolving
 pub fn collect_dependencies(manifest: &ProjectManifest) -> Vec<(String, String, PackageType)> {
     let mut deps = Vec::new();
     for (name, version) in &manifest.skills {
@@ -78,7 +78,7 @@ pub enum PackageType {
     Mcp,
 }
 
-/// 检测传递依赖冲突
+/// Detect transitive dependency conflicts
 pub fn detect_conflicts(
     resolved: &BTreeMap<String, ResolvedPackage>,
     overrides: &BTreeMap<String, String>,
