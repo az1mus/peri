@@ -33,10 +33,7 @@ impl<S: State> Middleware<S> for WebMiddleware {
     }
 
     fn collect_tools(&self, _cwd: &str) -> Vec<Box<dyn BaseTool>> {
-        vec![
-            Box::new(WebFetchTool::new()),
-            Box::new(WebSearchTool::new()),
-        ]
+        Self::build_tools()
     }
 }
 
