@@ -51,6 +51,8 @@ pub struct AcpSession {
     pub thinking: Option<ThinkingConfig>,
     /// 运行时 agent 实例（根 agent + 子 agent）
     pub active_agents: HashMap<ThreadId, AgentRuntime>,
+    /// Goal steering 状态（session 级，跨 prompt 共享）
+    pub goal_state: crate::session::goal_state::GoalState,
 }
 
 struct SessionManagerInner {
@@ -138,6 +140,10 @@ impl SessionManager {
             permission_mode: SharedPermissionMode::new(PermissionMode::AutoMode),
             thinking,
             active_agents: HashMap::new(),
+            goal_state: crate::session::goal_state::GoalState::new(
+                Arc::new(peri_agent::goal::InMemoryGoalStore::new()),
+                session_id.clone(),
+            ),
         };
 
         self.inner.sessions.insert(session_id.clone(), session);
@@ -157,6 +163,10 @@ impl SessionManager {
             permission_mode: SharedPermissionMode::new(PermissionMode::AutoMode),
             thinking: self.inner.peri_config.config.thinking.clone(),
             active_agents: HashMap::new(),
+            goal_state: crate::session::goal_state::GoalState::new(
+                Arc::new(peri_agent::goal::InMemoryGoalStore::new()),
+                session_id.to_string(),
+            ),
         }
     }
 
