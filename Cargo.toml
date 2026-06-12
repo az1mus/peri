@@ -8,6 +8,7 @@ members = [
     "peri-widgets",
     "peri-lsp",
     "side-projects/git-graph",
+    "agm",
 ]
 resolver = "2"
 
@@ -80,3 +81,7 @@ libmimalloc-sys = { version = "0.1", features = ["extended"] }
 tikv-jemallocator = "0.6"
 tikv-jemalloc-ctl = { version = "0.6", features = ["stats", "use_std"] }
 tikv-jemalloc-sys = "0.6"
+
+clap = { version = "4", features = ["derive"] }
+semver = "1"
+sha2 = "0.10"
