@@ -105,7 +105,7 @@ fn test_remove_package_symlinks_dir_symlink_does_not_follow_target() {
     let link_path = target_dir.join("skill-a");
     std::os::windows::fs::symlink_dir(&store_path, &link_path).unwrap();
 
-    remove_package_symlinks(&target_dir, &store_path.parent().unwrap()).unwrap();
+    remove_package_symlinks(&target_dir, store_path.parent().unwrap()).unwrap();
 
     assert!(!link_path.exists(), "目录 symlink 本身应被删除");
     assert!(
