@@ -18,7 +18,7 @@ fn test_remove_package_symlinks_removes_links_into_store() {
         std::os::windows::fs::symlink_dir(&store_path, &link_path).unwrap();
     }
 
-    remove_package_symlinks(&target_dir, &store_path.parent().unwrap()).unwrap();
+    remove_package_symlinks(&target_dir, store_path.parent().unwrap()).unwrap();
 
     assert!(!link_path.exists(), "指向 store 的 symlink 应被删除");
 }
@@ -46,7 +46,7 @@ fn test_remove_package_symlinks_keeps_unrelated_entries() {
     let regular_file = target_dir.join("regular.txt");
     std::fs::write(&regular_file, "hello").unwrap();
 
-    remove_package_symlinks(&target_dir, &store_path.parent().unwrap()).unwrap();
+    remove_package_symlinks(&target_dir, store_path.parent().unwrap()).unwrap();
 
     assert!(
         unrelated_link.exists() || unrelated_link.read_link().is_ok(),
