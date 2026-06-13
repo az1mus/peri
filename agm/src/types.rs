@@ -4,6 +4,29 @@ use std::path::Path;
 
 use crate::error::Result;
 
+/// Dependency declaration: either a plain version string or a detailed object with pick/omit filters.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum DependencySpec {
+    Simple(String),
+    Detailed {
+        version: String,
+        #[serde(default)]
+        pick: Vec<String>,
+        #[serde(default)]
+        omit: Vec<String>,
+    },
+}
+
+impl DependencySpec {
+    pub fn version(&self) -> &str {
+        match self {
+            DependencySpec::Simple(v) => v,
+            DependencySpec::Detailed { version, .. } => version,
+        }
+    }
+}
+
 /// agm.json — project manifest
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ProjectManifest {
@@ -19,11 +42,11 @@ pub struct ProjectManifest {
     #[serde(default)]
     pub targets: Vec<String>,
     #[serde(default)]
-    pub skills: BTreeMap<String, String>,
+    pub skills: BTreeMap<String, DependencySpec>,
     #[serde(default)]
-    pub agents: BTreeMap<String, String>,
+    pub agents: BTreeMap<String, DependencySpec>,
     #[serde(default)]
-    pub mcp: BTreeMap<String, String>,
+    pub mcp: BTreeMap<String, DependencySpec>,
     #[serde(default)]
     pub overrides: BTreeMap<String, String>,
 }

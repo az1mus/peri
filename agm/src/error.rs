@@ -38,6 +38,9 @@ pub enum AgmError {
     #[error("Registry error: {0}")]
     Registry(String),
 
+    #[error("Invalid glob pattern '{pattern}': {reason}")]
+    InvalidGlobPattern { pattern: String, reason: String },
+
     #[error("{0}")]
     Other(String),
 }

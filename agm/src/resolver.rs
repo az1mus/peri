@@ -57,16 +57,18 @@ pub async fn resolve_registry_version(
 }
 
 /// Collect all dependencies from a manifest that need resolving
-pub fn collect_dependencies(manifest: &ProjectManifest) -> Vec<(String, String, PackageType)> {
+pub fn collect_dependencies(
+    manifest: &ProjectManifest,
+) -> Vec<(String, DependencySpec, PackageType)> {
     let mut deps = Vec::new();
-    for (name, version) in &manifest.skills {
-        deps.push((name.clone(), version.clone(), PackageType::Skills));
+    for (name, spec) in &manifest.skills {
+        deps.push((name.clone(), spec.clone(), PackageType::Skills));
     }
-    for (name, version) in &manifest.agents {
-        deps.push((name.clone(), version.clone(), PackageType::Agents));
+    for (name, spec) in &manifest.agents {
+        deps.push((name.clone(), spec.clone(), PackageType::Agents));
     }
-    for (name, version) in &manifest.mcp {
-        deps.push((name.clone(), version.clone(), PackageType::Mcp));
+    for (name, spec) in &manifest.mcp {
+        deps.push((name.clone(), spec.clone(), PackageType::Mcp));
     }
     deps
 }

@@ -115,6 +115,7 @@ dependencies = [
  "clap",
  "dirs-next",
  "flate2",
+ "glob",
  "reqwest",
  "semver",
  "serde",
