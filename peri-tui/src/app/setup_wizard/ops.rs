@@ -9,7 +9,9 @@ use crate::app::FieldTextarea;
 /// 检测配置是否需要 Setup 向导
 pub fn needs_setup(config: &crate::config::AppConfig) -> bool {
     if config.providers.is_empty() {
-        return true;
+        // 没有 providers 条目时，检查是否可通过环境变量提供 provider
+        // 避免已有 env 配置但 settings.json 格式不标准时阻塞用户
+        return crate::app::agent::LlmProvider::from_env().is_none();
     }
     for provider in &config.providers {
         if provider.id.trim().is_empty() {

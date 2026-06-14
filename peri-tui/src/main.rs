@@ -237,29 +237,60 @@ fn inject_env_from_settings() {
         .join(".peri")
         .join("settings.json");
 
+    inject_env_from_file(&path, &[&["config", "env"], &["env"]]);
+}
+
+/// 从 Claude Code 配置文件 ~/.claude/settings.json 读取 env 字段并注入进程环境变量。
+///
+/// Claude Code 将 API Key 等凭据存储在其 settings.json 的顶层 `env` 字段中。
+/// 此函数在 Peri 自身配置加载后调用，确保即使 Peri 尚未配置也能接入已配置的
+/// Claude Code 凭据。进程环境变量和 Peri 配置中的 env 优先级更高（不会被覆盖）。
+fn inject_env_from_claude_settings() {
+    let path = dirs_next::home_dir()
+        .unwrap_or_else(|| std::path::PathBuf::from("."))
+        .join(".claude")
+        .join("settings.json");
+
+    inject_env_from_file(&path, &[&["env"]]);
+}
+
+/// 从指定 JSON 文件按优先级路径数组提取 env 字段并注入进程环境变量。
+///
+/// `env_paths` 每个元素是一个 JSON 路径段数组，如 `["config", "env"]` 表示 `json.config.env`。
+/// 按数组顺序尝试，首次命中即停止。未命中任何路径则无操作。
+fn inject_env_from_file(path: &std::path::Path, env_paths: &[&[&str]]) {
     if !path.exists() {
         return;
     }
 
-    // 读取并解析 JSON
-    let Ok(content) = std::fs::read_to_string(&path) else {
+    let Ok(content) = std::fs::read_to_string(path) else {
         return;
     };
 
-    // 提取 config.env 字段
     let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) else {
         return;
     };
 
-    let Some(env_obj) = json.get("config").and_then(|c| c.get("env")) else {
-        return;
-    };
+    for segments in env_paths {
+        let mut current = &json;
+        for seg in *segments {
+            current = match current.get(*seg) {
+                Some(v) => v,
+                None => {
+                    current = &serde_json::Value::Null;
+                    break;
+                }
+            };
+        }
+        if let Some(env_map) = current.as_object() {
+            inject_env_map(env_map);
+            return;
+        }
+    }
+}
 
-    let Some(env_map) = env_obj.as_object() else {
-        return;
-    };
-
-    // 遍历键值对，仅在进程环境变量不存在时设置
+/// 遍历 env map 注入进程环境变量，仅在变量未设置时写入
+fn inject_env_map(env_map: &serde_json::Map<String, serde_json::Value>) {
     for (key, value) in env_map {
         if let Some(value_str) = value.as_str() {
             if std::env::var(key).is_err() {
@@ -309,7 +340,9 @@ fn main() -> Result<()> {
     peri_tui::alloc_config::init_alloc_conf();
 
     // 最先注入环境变量（进程环境变量优先）
+    // 优先级：进程环境 > Peri 配置 > Claude Code 配置
     inject_env_from_settings();
+    inject_env_from_claude_settings();
 
     let cli = Cli::parse();
 
@@ -591,8 +624,8 @@ async fn run_app(
         if peri_tui::app::setup_wizard::needs_setup(&cfg.config) {
             app.global_ui.setup_wizard = Some(peri_tui::app::SetupWizardPanel::new());
         }
-    } else {
-        // 无配置文件 → 必然需要 setup
+    } else if peri_tui::app::LlmProvider::from_env().is_none() {
+        // 无配置文件且无法从环境变量获取 provider → 需要 setup
         app.global_ui.setup_wizard = Some(peri_tui::app::SetupWizardPanel::new());
     }
 
@@ -880,23 +913,130 @@ mod cli_integration_test;
 mod tests {
     use super::*;
 
+    fn make_temp_file(content: &str) -> tempfile::TempPath {
+        use std::io::Write;
+        let mut file = tempfile::NamedTempFile::new().unwrap();
+        file.write_all(content.as_bytes()).unwrap();
+        file.into_temp_path()
+    }
+
     #[test]
-    fn test_env_priority_process_over_settings() {
-        // 测试进程环境变量优先于 settings.json
-        // 设置一个测试环境变量
-        std::env::set_var("TEST_ENV_PRIORITY_VAR", "from_process");
+    fn test_inject_from_config_env() {
+        // 测试 config.env 标准格式
+        let path = make_temp_file(r#"{"config": {"env": {"TEST_C1": "v1"}}}"#);
+        inject_env_from_file(&path, &[&["config", "env"]]);
+        assert_eq!(std::env::var("TEST_C1").unwrap(), "v1");
+        std::env::remove_var("TEST_C1");
+    }
 
-        // 调用注入函数（即使 settings.json 存在该变量也不应覆盖）
-        inject_env_from_settings();
+    #[test]
+    fn test_inject_from_top_level_env() {
+        // 测试顶层 env 格式（兼容旧格式/Claude Code 格式）
+        let path = make_temp_file(r#"{"env": {"TEST_T1": "v2"}}"#);
+        inject_env_from_file(&path, &[&["env"]]);
+        assert_eq!(std::env::var("TEST_T1").unwrap(), "v2");
+        std::env::remove_var("TEST_T1");
+    }
 
-        // 验证进程环境变量未被覆盖
-        assert_eq!(
-            std::env::var("TEST_ENV_PRIORITY_VAR").unwrap(),
-            "from_process"
+    #[test]
+    fn test_inject_fallback_order() {
+        // 测试优先 config.env 再回退顶层 env
+        // 只存在顶层 env 时应该回退成功
+        let path = make_temp_file(r#"{"env": {"TEST_FB1": "from_fallback"}}"#);
+        inject_env_from_file(&path, &[&["config", "env"], &["env"]]);
+        assert_eq!(std::env::var("TEST_FB1").unwrap(), "from_fallback");
+        std::env::remove_var("TEST_FB1");
+    }
+
+    #[test]
+    fn test_inject_config_env_priority_over_top_level() {
+        // config.env 存在时优先使用，不回退到顶层 env
+        let path = make_temp_file(
+            r#"{"config": {"env": {"TEST_PRI": "from_config"}}, "env": {"TEST_PRI": "from_top"}}"#,
+        );
+        inject_env_from_file(&path, &[&["config", "env"], &["env"]]);
+        assert_eq!(std::env::var("TEST_PRI").unwrap(), "from_config");
+        std::env::remove_var("TEST_PRI");
+    }
+
+    #[test]
+    fn test_process_env_priority() {
+        // 进程环境变量存在时不被 settings.json 覆盖
+        std::env::set_var("TEST_PROC_PRI", "from_process");
+        let path = make_temp_file(r#"{"env": {"TEST_PROC_PRI": "from_file"}}"#);
+        inject_env_from_file(&path, &[&["env"]]);
+        assert_eq!(std::env::var("TEST_PROC_PRI").unwrap(), "from_process");
+        std::env::remove_var("TEST_PROC_PRI");
+    }
+
+    #[test]
+    fn test_skip_non_string_values() {
+        // 非字符串值应跳过不 panic
+        let path = make_temp_file(r#"{"env": {"TEST_NUM": 123, "TEST_STR": "ok"}}"#);
+        inject_env_from_file(&path, &[&["env"]]);
+        // 数字值不应被注入
+        assert!(std::env::var("TEST_NUM").is_err());
+        assert_eq!(std::env::var("TEST_STR").unwrap(), "ok");
+        std::env::remove_var("TEST_STR");
+    }
+
+    #[test]
+    fn test_no_file_no_panic() {
+        // 文件不存在时不应 panic
+        let path = std::path::PathBuf::from("/nonexistent/path/settings.json");
+        inject_env_from_file(&path, &[&["env"]]);
+    }
+
+    #[test]
+    fn test_no_env_field_no_panic() {
+        // JSON 中没有 env 字段时不应 panic
+        let path = make_temp_file(r#"{"other": "data"}"#);
+        inject_env_from_file(&path, &[&["config", "env"], &["env"]]);
+    }
+
+    /// 端到端测试：模拟顶层 env 格式 → 注入进程环境 → LlmProvider::from_env() 可用
+    #[test]
+    fn test_e2e_top_level_env_to_provider() {
+        // 保存可能被覆盖的环境变量
+        let save_keys = [
+            "TEST_E2E_API_KEY",
+            "TEST_E2E_BASE_URL",
+            "MODEL_PROVIDER",
+        ];
+        let saved: Vec<(&str, Option<String>)> = save_keys
+            .iter()
+            .map(|k| (*k, std::env::var(k).ok()))
+            .collect();
+
+        // 创建一个顶层 env 格式的配置文件（模拟当前 ~/.peri/settings.json 的格式）
+        let path = make_temp_file(
+            r#"{"env": {"TEST_E2E_API_KEY": "sk-e2e-test-key", "TEST_E2E_BASE_URL": "https://e2e-test.example.com/v1"}}"#,
         );
 
-        // 清理
-        std::env::remove_var("TEST_ENV_PRIORITY_VAR");
+        // 调用注入函数（使用 inject_env_from_settings 相同的查找策略）
+        inject_env_from_file(&path, &[&["config", "env"], &["env"]]);
+
+        // 验证环境变量已注入
+        assert_eq!(
+            std::env::var("TEST_E2E_API_KEY").unwrap(),
+            "sk-e2e-test-key"
+        );
+        assert_eq!(
+            std::env::var("TEST_E2E_BASE_URL").unwrap(),
+            "https://e2e-test.example.com/v1"
+        );
+
+        // 清理测试环境变量
+        std::env::remove_var("TEST_E2E_API_KEY");
+        std::env::remove_var("TEST_E2E_BASE_URL");
+
+        // 恢复之前保存的环境变量
+        for (key, value) in saved {
+            match value {
+                Some(v) => std::env::set_var(key, v),
+                None => std::env::remove_var(key),
+            }
+        }
     }
 }
 // test
