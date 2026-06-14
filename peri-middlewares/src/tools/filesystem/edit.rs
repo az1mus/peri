@@ -39,7 +39,7 @@ impl EditFileTool {
 fn build_not_found_hint(content: &str, old_string: &str) -> String {
     const MAX_FUZZY_LEN: usize = 5000;
     if old_string.len() > MAX_FUZZY_LEN {
-        return "建议先 Read 此文件获取最新内容再重试。".to_string();
+        return "Please Read this file to get the latest content before retrying.".to_string();
     }
 
     // 策略 1：前缀匹配
@@ -50,8 +50,8 @@ fn build_not_found_hint(content: &str, old_string: &str) -> String {
             let line_start = content[..byte_offset].lines().count() + 1;
             let line_end = line_start + prefix_lines.len() - 1;
             return format!(
-                "old_string 前 {} 行匹配到文件第 {}-{} 行，但整体不匹配。\
-                 文件可能已被修改。建议先 Read 此文件获取最新内容再重试。",
+                "old_string's first {} lines matched lines {}-{}, but the full string did not match. \
+                 The file may have been modified. Please Read this file to get the latest content before retrying.",
                 prefix_lines.len(),
                 line_start,
                 line_end
@@ -86,14 +86,14 @@ fn build_not_found_hint(content: &str, old_string: &str) -> String {
             let line_end = best_pos + window_len;
             let diff_count = window_len - best_common;
             return format!(
-                "最接近的匹配在文件第 {}-{} 行（{} 行中有 {} 行不同）。\
-                 建议先 Read 此文件获取最新内容再重试。",
-                line_start, line_end, window_len, diff_count
+                "Closest match at lines {}-{} ({} of {} lines differ). \
+                 Please Read this file to get the latest content before retrying.",
+                line_start, line_end, diff_count, window_len
             );
         }
     }
 
-    "建议先 Read 此文件获取最新内容再重试。".to_string()
+    "Please Read this file to get the latest content before retrying.".to_string()
 }
 
 #[async_trait::async_trait]
@@ -230,25 +230,25 @@ impl BaseTool for EditFileTool {
                         let line = content[..offset].lines().count() + 1;
                         let end_line = line + old_string.lines().count().saturating_sub(1);
                         if end_line > line {
-                            format!("第 {}-{} 行", line, end_line)
+                            format!("lines {}-{}", line, end_line)
                         } else {
-                            format!("第 {} 行", line)
+                            format!("line {}", line)
                         }
                     })
                     .collect();
                 let location_text = if occurrences > 10 {
                     format!(
-                        "{}（共 {} 处，仅显示前 10 处）",
-                        locations.join("、"),
+                        "{} ({} total, showing first 10)",
+                        locations.join(", "),
                         occurrences
                     )
                 } else {
-                    locations.join("、")
+                    locations.join(", ")
                 };
                 return Err(format!(
                     "Error: old_string is not unique in {} (found {} occurrences).\n\
-                     匹配位置：{location_text}。\n\
-                     请提供更多上下文使其唯一，或设置 replace_all=true。",
+                     Match locations: {location_text}.\n\
+                     Please provide more context to make old_string unique, or set replace_all=true.",
                     resolved.display(),
                     occurrences
                 )

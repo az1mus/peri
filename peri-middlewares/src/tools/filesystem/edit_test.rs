@@ -139,10 +139,13 @@
             .unwrap_err();
         let msg = err.to_string();
         assert!(
-            msg.contains("前 5 行匹配到文件第 1-5 行"),
+            msg.contains("first 5 lines matched lines 1-5"),
             "应报告前缀匹配位置: {msg}"
         );
-        assert!(msg.contains("建议先 Read"), "应建议重新 Read: {msg}");
+        assert!(
+            msg.contains("Please Read this file"),
+            "应建议重新 Read: {msg}"
+        );
     }
 
     #[tokio::test]
@@ -165,7 +168,7 @@
             .unwrap_err();
         let msg = err.to_string();
         assert!(
-            msg.contains("建议先 Read") || msg.contains("最接近的匹配"),
+            msg.contains("Please Read this file") || msg.contains("Closest match"),
             "应提供匹配提示: {msg}"
         );
     }
@@ -188,8 +191,14 @@
             .await
             .unwrap_err();
         let msg = err.to_string();
-        assert!(msg.contains("建议先 Read"), "超长 old_string 应只给建议: {msg}");
-        assert!(!msg.contains("匹配到文件"), "超长 old_string 不应做模糊匹配: {msg}");
+        assert!(
+            msg.contains("Please Read this file"),
+            "超长 old_string 应只给建议: {msg}"
+        );
+        assert!(
+            !msg.contains("matched lines"),
+            "超长 old_string 不应做模糊匹配: {msg}"
+        );
     }
 
     #[tokio::test]
@@ -206,9 +215,12 @@
             .await
             .unwrap_err();
         let msg = err.to_string();
-        assert!(msg.contains("第 2 行"), "应报告第一个匹配行号: {msg}");
-        assert!(msg.contains("第 4 行"), "应报告第二个匹配行号: {msg}");
-        assert!(msg.contains("匹配位置"), "应包含匹配位置标签: {msg}");
+        assert!(msg.contains("line 2"), "应报告第一个匹配行号: {msg}");
+        assert!(msg.contains("line 4"), "应报告第二个匹配行号: {msg}");
+        assert!(
+            msg.contains("Match locations"),
+            "应包含匹配位置标签: {msg}"
+        );
     }
 
     #[tokio::test]
@@ -229,7 +241,7 @@
         let msg = err.to_string();
         assert!(msg.contains("15 occurrences"), "应报告总匹配数: {msg}");
         // 最多报告 10 个位置
-        let location_count = msg.matches("第").count();
+        let location_count = msg.matches("line").count();
         assert!(
             location_count <= 10,
             "超过 10 个匹配时应截断位置列表，实际 {location_count} 个: {msg}"
