@@ -797,6 +797,41 @@ launch_agent 工具调用
 - **通用模式:** 循环内关键 cleanup 逻辑不能依赖 `?` 传播路径——用 try_break 宏将错误捕获到变量，循环后无条件执行 cleanup
 - **涉及文件:** peri-agent/src/agent/executor/mod.rs, peri-agent/src/agent/executor/mod_test.rs
 
+### issue_2026-06-12-subagent-missing-web-tools
+
+- **摘要:** SubAgent 缺少 WebFetch 和 WebSearch 工具
+- **状态:** Verified
+- **归档日期:** 2026-06-14
+- **关键词:** SubAgent 工具继承, WebFetch/WebSearch, parent_tools, 子Agent 工具传播
+- **问题本质:** 子Agent 构建时 `parent_tools` 构造遗漏了 WebMiddleware 的工具，导致 Fork/Normal/Background 及 /bg 五条路径均缺失 WebFetch/WebSearch。根本原因是工具传递逻辑分散在 `agent/builder.rs` 和 `bg.rs` 两个 builder 路径中，各自手写工具列表，缺乏统一的工具注册表。
+- **通用模式:** 新增核心工具到 Agent 时，必须同时排查所有子Agent 构建路径是否需要传递该工具。推荐通过静态函数统一工具构造入口（如 `WebMiddleware::build_tools()`），避免手写工具列表遗漏。
+- **架构影响:** 工具传递应采用集中式注册表，而非各 builder 路径独立构造 `parent_tools`。
+- **技术决策:** 通过 `WebMiddleware::build_tools()` 静态函数统一工具构造入口，`collect_tools()` 和 `parent_tools` 构造均委托给它。
+- **涉及文件:** peri-acp/src/agent/builder.rs, peri-middlewares/src/subagent/tool/build_agent.rs, peri-middlewares/src/subagent/tool/mod.rs, peri-middlewares/src/middleware/web.rs, peri-acp/src/session/command/bg.rs
+
+### issue_2026-06-12-web-researcher-builtin-upgrade
+
+- **摘要:** Web Researcher Agent 升级为 Built-in Agent，支持原生 WebFetch/WebSearch 及复杂研究工作流
+- **状态:** Verified
+- **归档日期:** 2026-06-14
+- **关键词:** Built-in Agent, web-researcher, 子Agent 升级, 原生工具, BUILT_IN_AGENTS
+- **问题本质:** 文件级 Agent 定义（`.claude/agents/web-researcher.md`）依赖 Bash 调用外部 npm 工具完成网页抓取，而项目已有原生 WebFetch/WebSearch 工具。升级为 Built-in Agent 后减少外部依赖，使用原生工具提升可靠性。
+- **通用模式:** Built-in Agent 应优先使用项目原生工具，而非依赖外部 CLI 工具。文件级 Agent 定义仅用于用户自定义覆盖。
+- **架构影响:** 随着 Built-in Agent 数量增长，子Agent 工具传递正确性更加关键（关联 issue_2026-06-12-subagent-missing-web-tools）。
+- **技术决策:** `include_str!` 编译期嵌入 Agent 定义，加入 `BUILT_IN_AGENTS` 数组（第 6 个 built-in agent），硬编码计数需同步更新。
+- **涉及文件:** peri-middlewares/src/subagent/built_in_agents.rs, peri-middlewares/src/subagent/built-in/web-researcher.md, .claude/agents/web-researcher.md, peri-middlewares/src/subagent/built-in/mod_test.rs, peri-middlewares/src/subagent/built-in/prompt_test.rs
+
+### issue_2026-06-12-large-write-streaming-slow
+
+- **摘要:** Write 工具超长内容流式输出时 LLM Provider 响应极慢
+- **状态:** Fixed
+- **归档日期:** 2026-06-14
+- **关键词:** Write 工具, 流式性能, 超时机制, append 模式, 大文件写入
+- **问题本质:** LLM 流式输出超大 JSON（tool_use input 包含完整 content 字段）时，provider 侧 token 生成速度显著下降，非 token 预算不足问题。与历史 issue `2026-05-15-write-tool-missing-filepath-max-tokens` 相关但维度不同——历史 issue 是 max_tokens 截断导致 JSON 不完整，本次是 provider 侧流式性能劣化。
+- **通用模式:** 工具实现应考虑极端参数情况（超大输入/输出），通过超时机制或输入校验提前拦截，并引导 LLM 采用更优策略（如 append 分段写入）。
+- **技术决策:** 用 `tokio::time::timeout(Duration::from_secs(120), ...)` 包裹 Write 工具 invoke，超时时返回英文错误提示引导 Agent 使用 `append=true` 分段写入。
+- **涉及文件:** peri-middlewares/src/tools/filesystem/write.rs
+
 ---
 
 ## 相关 Feature

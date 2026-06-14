@@ -1,3 +1,5 @@
+> 归档于 2026-06-14，原路径 spec/issues/2026-06-12-large-write-streaming-slow.md
+
 # Write 工具超长内容流式输出时 LLM Provider 响应极慢
 
 **状态**：Fixed

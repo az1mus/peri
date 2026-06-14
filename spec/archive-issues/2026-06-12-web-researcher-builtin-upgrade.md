@@ -1,3 +1,5 @@
+> 归档于 2026-06-14，原路径 spec/issues/2026-06-12-web-researcher-builtin-upgrade.md
+
 # Web Researcher Agent 升级为 Built-in Agent，支持原生 WebFetch/WebSearch 及复杂研究工作流
 
 **状态**：Verified

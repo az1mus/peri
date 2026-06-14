@@ -1641,7 +1641,51 @@
 ### with_extra_dirs
 - [SkillPreloadMiddleware 无法加载插件提供的 Skill 全文](domains/plugin.md#issue_2026-06-10-skill-preload-cannot-load-plugin-skills) — plugin
 
+### Built-in Agent
+- [Web Researcher Agent 升级为 Built-in Agent，支持原生 WebFetch/WebSearch 及复杂研究工作流](domains/agent.md#issue_2026-06-12-web-researcher-builtin-upgrade) — agent
+
+### BUILT_IN_AGENTS
+- [Web Researcher Agent 升级为 Built-in Agent，支持原生 WebFetch/WebSearch 及复杂研究工作流](domains/agent.md#issue_2026-06-12-web-researcher-builtin-upgrade) — agent
+
+### parent_tools
+- [SubAgent 缺少 WebFetch 和 WebSearch 工具](domains/agent.md#issue_2026-06-12-subagent-missing-web-tools) — agent
+
+### SubAgent 工具继承
+- [SubAgent 缺少 WebFetch 和 WebSearch 工具](domains/agent.md#issue_2026-06-12-subagent-missing-web-tools) — agent
+
+### WebFetch/WebSearch
+- [SubAgent 缺少 WebFetch 和 WebSearch 工具](domains/agent.md#issue_2026-06-12-subagent-missing-web-tools) — agent
+
+### web-researcher
+- [Web Researcher Agent 升级为 Built-in Agent，支持原生 WebFetch/WebSearch 及复杂研究工作流](domains/agent.md#issue_2026-06-12-web-researcher-builtin-upgrade) — agent
+
+### Write 工具
+- [Write 工具超长内容流式输出时 LLM Provider 响应极慢](domains/agent.md#issue_2026-06-12-large-write-streaming-slow) — agent
+
+### append 模式
+- [Write 工具超长内容流式输出时 LLM Provider 响应极慢](domains/agent.md#issue_2026-06-12-large-write-streaming-slow) — agent
+
+### 大文件写入
+- [Write 工具超长内容流式输出时 LLM Provider 响应极慢](domains/agent.md#issue_2026-06-12-large-write-streaming-slow) — agent
+
+### 子Agent 工具传播
+- [SubAgent 缺少 WebFetch 和 WebSearch 工具](domains/agent.md#issue_2026-06-12-subagent-missing-web-tools) — agent
+
+### 子Agent 升级
+- [Web Researcher Agent 升级为 Built-in Agent，支持原生 WebFetch/WebSearch 及复杂研究工作流](domains/agent.md#issue_2026-06-12-web-researcher-builtin-upgrade) — agent
+
+### 原生工具
+- [Web Researcher Agent 升级为 Built-in Agent，支持原生 WebFetch/WebSearch 及复杂研究工作流](domains/agent.md#issue_2026-06-12-web-researcher-builtin-upgrade) — agent
+
+### 流式性能
+- [Write 工具超长内容流式输出时 LLM Provider 响应极慢](domains/agent.md#issue_2026-06-12-large-write-streaming-slow) — agent
+
+### 超时机制
+- [Write 工具超长内容流式输出时 LLM Provider 响应极慢](domains/agent.md#issue_2026-06-12-large-write-streaming-slow) — agent
+
 ## 更新记录
+
+- 2026-06-14: 归档 3 个 issue（SubAgent Web 工具缺失、web-researcher 升级、Write 大文件流式慢）
 
 - 2026-06-11: 归档 19 个 issue（tui 12 + agent 3 + compact 1 + mcp 1 + tools 1 + plugin 1），新增 56 个关键词索引
 

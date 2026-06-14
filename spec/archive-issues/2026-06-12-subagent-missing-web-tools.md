@@ -1,3 +1,5 @@
+> 归档于 2026-06-14，原路径 spec/issues/2026-06-12-subagent-missing-web-tools.md
+
 # SubAgent 缺少 WebFetch 和 WebSearch 工具
 
 **状态**：Verified
