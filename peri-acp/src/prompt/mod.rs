@@ -83,17 +83,25 @@ impl PromptEnv {
 
 /// 扫描 `.claude/agents/` 目录，格式化为 agent 列表字符串。
 ///
-/// 格式：`- {agent_id}: {description}`
+/// 格式：`- {agent_id} [{model_tier}] [{access}]: {description}`
+/// 其中 `model_tier` 为 haiku/sonnet/opus/inherit，
+/// `access` 为 readonly/writes（标识该 agent 是否会修改文件）。
 /// agent_id 即 subagent_type 参数值（文件名去掉 .md），作为主标识符。
 /// 无 agent 时返回提示信息。
 fn format_available_agents(cwd: &str, extra_agent_dirs: &[std::path::PathBuf]) -> String {
-    let agents = peri_middlewares::scan_agents_with_extra_dirs(cwd, extra_agent_dirs);
+    let agents = peri_middlewares::scan_agents_detailed(cwd, extra_agent_dirs);
     if agents.is_empty() {
         return "No agents currently configured. You can add agent definitions in `.claude/agents/`.".to_string();
     }
     agents
         .iter()
-        .map(|(agent_id, _name, description)| format!("- {}: {}", agent_id, description))
+        .map(|(agent_id, _name, description, cap)| {
+            let access = if cap.can_mutate { "writes" } else { "readonly" };
+            format!(
+                "- {} [{}] [{}]: {}",
+                agent_id, cap.model_tier, access, description
+            )
+        })
         .collect::<Vec<_>>()
         .join("\n")
 }

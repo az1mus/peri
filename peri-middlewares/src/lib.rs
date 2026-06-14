@@ -69,8 +69,9 @@ pub use skills::{
     list_skills, load_global_skills_dir, load_skill_metadata, SkillMetadata, SkillsMiddleware,
 };
 pub use subagent::{
-    scan_agents, scan_agents_with_extra_dirs, BackgroundTask, BackgroundTaskRegistry,
-    BackgroundTaskStatus, SkillPreloadMiddleware, SubAgentMiddleware, SubAgentTool,
+    infer_agent_capability, scan_agents, scan_agents_detailed, scan_agents_with_extra_dirs,
+    AgentCapability, BackgroundTask, BackgroundTaskRegistry, BackgroundTaskStatus,
+    SkillPreloadMiddleware, SubAgentMiddleware, SubAgentTool,
 };
 pub use tool_search::{
     is_deferred_tool, resolve_effective_tool_name, ToolSearchMiddleware, CORE_TOOLS,

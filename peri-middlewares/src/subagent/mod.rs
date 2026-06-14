@@ -58,7 +58,10 @@ use peri_agent::{
     tools::BaseTool,
 };
 
-use crate::{agent_define::AgentOverrides, parse_agent_file, tools::BoxToolWrapper};
+use crate::{
+    agent_define::AgentOverrides, claude_agent_parser::ClaudeAgentFrontmatter, parse_agent_file,
+    tools::BoxToolWrapper,
+};
 
 /// SubAgentMiddleware - injects `Agent` tool into the parent agent
 ///
@@ -432,6 +435,140 @@ pub fn scan_agents_with_extra_dirs(
                 result.push((agent_id, name, description));
             }
         }
+    }
+
+    result.sort_by(|a, b| a.0.cmp(&b.0));
+    result
+}
+
+/// Agent 运行时能力画像，用于主 Agent 调度决策。
+///
+/// 主 Agent 在 Prompt 中看到此信息后可以判断：
+/// - 能否并行执行（只读 agent 可安全并发）
+/// - 质量/成本/延迟预期（模型级别）
+#[derive(Debug, Clone)]
+pub struct AgentCapability {
+    /// 模型级别：`haiku` / `sonnet` / `opus` / `inherit`
+    pub model_tier: String,
+    /// 该 agent 是否会修改文件（有 Write/Edit 权限 = true）
+    pub can_mutate: bool,
+}
+
+/// 从 Agent frontmatter 推断运行时能力画像。
+pub fn infer_agent_capability(fm: &ClaudeAgentFrontmatter) -> AgentCapability {
+    let model_tier = fm
+        .model
+        .as_deref()
+        .filter(|m| !m.is_empty() && *m != "inherit")
+        .unwrap_or("inherit")
+        .to_string();
+
+    let disallowed: Vec<String> = fm.disallowed_tools.to_vec();
+    let can_mutate = if fm.tools.to_vec().is_empty() {
+        // tools 为空 = 继承父工具，除非 Write/Edit 在 disallowed 中
+        // 简化：disallowed 含 Write/Edit 则不可变
+        !(disallowed.contains(&"Write".to_string()) && disallowed.contains(&"Edit".to_string()))
+    } else {
+        // 白名单模式：是否含有 Write 或 Edit
+        let tools = fm.tools.to_vec();
+        tools.contains(&"Write".to_string()) || tools.contains(&"Edit".to_string())
+    };
+
+    AgentCapability {
+        model_tier,
+        can_mutate,
+    }
+}
+
+/// 扫描 agent 目录并返回完整信息（含能力画像）。
+///
+/// 项目级 agent 优先，同名 agent_id 去重。返回 `(agent_id, name, description, capability)`。
+pub fn scan_agents_detailed(
+    cwd: &str,
+    extra_dirs: &[PathBuf],
+) -> Vec<(String, String, String, AgentCapability)> {
+    let mut result = Vec::new();
+    let mut seen_ids = std::collections::HashSet::new();
+
+    // 辅助闭包：扫描单个目录
+    let scan_dir =
+        |dir: &Path, result: &mut Vec<_>, seen_ids: &mut std::collections::HashSet<_>| {
+            if !dir.is_dir() {
+                return;
+            }
+            let entries = match std::fs::read_dir(dir) {
+                Ok(e) => e,
+                Err(_) => return,
+            };
+            for entry in entries.flatten() {
+                let path = entry.path();
+                let (agent_id, file_path): (String, PathBuf) = if path.is_file() {
+                    if path.extension().and_then(|e| e.to_str()) != Some("md") {
+                        continue;
+                    }
+                    let id = path
+                        .file_stem()
+                        .unwrap_or_default()
+                        .to_string_lossy()
+                        .to_string();
+                    (id, path)
+                } else if path.is_dir() {
+                    let nested = path.join("agent.md");
+                    if !nested.is_file() {
+                        continue;
+                    }
+                    let id = path
+                        .file_name()
+                        .unwrap_or_default()
+                        .to_string_lossy()
+                        .to_string();
+                    (id, nested)
+                } else {
+                    continue;
+                };
+                if !seen_ids.insert(agent_id.clone()) {
+                    continue;
+                }
+                let content = match std::fs::read_to_string(&file_path) {
+                    Ok(c) => c,
+                    Err(_) => continue,
+                };
+                if let Some(agent) = parse_agent_file(&content) {
+                    let name = if agent.frontmatter.name.is_empty() {
+                        agent_id.clone()
+                    } else {
+                        agent.frontmatter.name.clone()
+                    };
+                    let desc = agent.frontmatter.description.clone();
+                    let cap = infer_agent_capability(&agent.frontmatter);
+                    result.push((agent_id, name, desc, cap));
+                }
+            }
+        };
+
+    // 1. 项目级 agent（最高优先级，先添加则占住 seen_ids）
+    let agents_dir = Path::new(cwd).join(".claude").join("agents");
+    scan_dir(&agents_dir, &mut result, &mut seen_ids);
+
+    // 2. 内置 agent（IFF 同 ID 未被项目级覆盖）
+    for built_in in list_built_in_agents() {
+        if seen_ids.insert(built_in.agent_id.to_string()) {
+            if let Some(agent) = parse_agent_file(built_in.content) {
+                let name = if agent.frontmatter.name.is_empty() {
+                    built_in.agent_id.to_string()
+                } else {
+                    agent.frontmatter.name.clone()
+                };
+                let desc = agent.frontmatter.description.clone();
+                let cap = infer_agent_capability(&agent.frontmatter);
+                result.push((built_in.agent_id.to_string(), name, desc, cap));
+            }
+        }
+    }
+
+    // 3. 插件 agent（最低优先级）
+    for dir in extra_dirs {
+        scan_dir(dir, &mut result, &mut seen_ids);
     }
 
     result.sort_by(|a, b| a.0.cmp(&b.0));

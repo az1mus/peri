@@ -318,7 +318,7 @@ fn test_available_agents_placeholder_replaced() {
     };
     let result = build_system_prompt(None, dir.to_str().unwrap(), features, &[], None, None);
     assert!(
-        result.contains("- tester: A test agent"),
+        result.contains("- tester [inherit] [writes]: A test agent"),
         "Should contain formatted agent entry, got: {}",
         result
     );
@@ -339,7 +339,7 @@ fn test_available_agents_placeholder_empty_dir() {
     };
     let result = build_system_prompt(None, dir.to_str().unwrap(), features, &[], None, None);
     assert!(
-        result.contains("- explore:"),
+        result.contains("- explore [haiku] [readonly]:"),
         "Should contain built-in agents even without .claude/agents/ directory"
     );
     assert!(
@@ -379,16 +379,16 @@ fn test_format_available_agents_with_agents() {
 
     let result = format_available_agents(dir.to_str().unwrap(), &[]);
     assert!(
-        result.contains("- reviewer: Reviews code"),
+        result.contains("- reviewer [inherit] [writes]: Reviews code"),
         "Should contain reviewer entry"
     );
     assert!(
-        result.contains("- analyst: Analyzes data"),
+        result.contains("- analyst [inherit] [writes]: Analyzes data"),
         "Should contain analyst entry"
     );
     // Should also contain built-in agents (coder, explore, general-purpose, plan, verification)
     assert!(
-        result.contains("- explore:"),
+        result.contains("- explore [haiku] [readonly]:"),
         "Should contain built-in explore agent"
     );
     // Verify project agents + built-in agents
@@ -406,7 +406,7 @@ fn test_format_available_agents_empty_dir() {
     let result = format_available_agents("/nonexistent/path/that/does/not/exist", &[]);
     // Built-in agents are always available
     assert!(
-        result.contains("- explore:"),
+        result.contains("- explore [haiku] [readonly]:"),
         "Should contain built-in agents even without .claude/agents/ directory"
     );
     assert!(

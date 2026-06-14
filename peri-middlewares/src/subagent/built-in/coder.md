@@ -4,7 +4,7 @@ description: "Code implementation specialist. Handles file editing, code migrati
 tools: Read, Grep, Glob, Bash, Edit, Write, TodoWrite
 disallowedTools:
   - Agent
-model: inherit
+model: sonnet
 max_turns: 200
 ---
 

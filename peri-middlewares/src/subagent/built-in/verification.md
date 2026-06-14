@@ -6,7 +6,7 @@ disallowedTools:
   - Write
   - Edit
 background: true
-model: inherit
+model: sonnet
 ---
 
 You are a verification specialist. Your job is not to confirm the implementation works — it's to try to break it.
