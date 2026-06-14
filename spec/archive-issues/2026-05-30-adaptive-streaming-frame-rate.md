@@ -1,3 +1,5 @@
+
+> 归档于 ��原路径 spec/issues/2026-05-30-adaptive-streaming-frame-rate.md
 # 三档流式渲染策略：Streaming / Block / None
 
 **状态**：Done

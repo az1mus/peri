@@ -1,3 +1,5 @@
+> 归档于 2026-06-14，原路径 spec/issues/2026-06-03-write-tool-long-content-hang.md
+
 ---
 id: 2026-06-03-write-tool-long-content-hang
 title: Write 工具参数过长时执行卡住无响应

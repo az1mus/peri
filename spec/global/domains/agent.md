@@ -832,6 +832,111 @@ launch_agent 工具调用
 - **技术决策:** 用 `tokio::time::timeout(Duration::from_secs(120), ...)` 包裹 Write 工具 invoke，超时时返回英文错误提示引导 Agent 使用 `append=true` 分段写入。
 - **涉及文件:** peri-middlewares/src/tools/filesystem/write.rs
 
+### issue_2026-06-01-skill-prefix-hints-unknown-command
+**摘要:** Skill 名在 TUI Hints 浮层重复显示——skills 列表（有 description）和 agent_commands HashSet（无 description）两个数据源无去重
+**状态:** Fixed
+**归档日期:** 2026-06-14
+**关键词:** Hints 去重, agent_commands, 双数据源, ACP 命令分类
+**问题本质:** ACP 构建可用命令时将 skill 名同时加入 agent_commands，TUI 从 skills 和 agent_commands 两个独立列表构建候选项时无去重，同一 skill 出现两次
+**通用模式:** 多条数据源合并渲染时必须显式去重，不能在渲染层假设数据源互斥。ACP 到 TUI 的命令传递应做好分类（静态命令 vs skill 命令），让消费方无需猜测
+**技术决策:** `update_agent_commands()` 中过滤已存在于 skills 列表的条目
+**涉及文件:** peri-acp/src/dispatch/commands.rs, peri-tui/src/acp_server/notify.rs, peri-tui/src/app/agent_ops/acp_bridge.rs, peri-tui/src/app/command_system.rs, peri-tui/src/ui/main_ui/popups/hints.rs, peri-tui/src/app/hint_ops.rs
+**CLAUDE.md 链接:** false
+
+### issue_2026-06-09-coder-builtin-agent
+**摘要:** 新建 coder 内置 Agent 类型，从 general-purpose 拆分代码实现职责，缩减工具集节省上下文
+**状态:** Done
+**归档日期:** 2026-06-14
+**关键词:** Built-in Agent, coder, 工具减量, 上下文优化, 反循环指导
+**问题本质:** general-purpose 的 92.3% 任务是 coder 类，但全工具集（含 WebSearch/WebFetch/Agent/AskUserQuestion）占用 system prompt 空间，上下文被工具输出占满后 agent 陷入重复搜索循环（极端案例同一 pattern 562 次 Grep）
+**通用模式:** Built-in Agent 应针对使用场景优化工具集和迭代上限。通过数据分析（P95 消息量、重复搜索频率）指导参数设计。system prompt 应嵌入反退化行为指导（"搜索前先确认是否已有结果在上下文中"）
+**技术决策:** 工具集从 11 个减至 7 个（移除 WebSearch/WebFetch/Agent/AskUserQuestion）；迭代上限 200（P95=153 + 30% 余量）；`include_str!` 编译期嵌入 Agent 定义，加入 BUILT_IN_AGENTS 数组
+**涉及文件:** peri-middlewares/src/subagent/built-in/coder.md, peri-middlewares/src/subagent/built_in_agents.rs
+**CLAUDE.md 链接:** false
+
+### issue_2026-06-03-concurrent-bg-agent-next-prompt-hangs
+**摘要:** 并发 bg agent 完成后，同一 session 的下一个 prompt 永久卡死——Langfuse flush 阻塞 event pump 导致 prompt_lock 不释放
+**状态:** Fixed
+**归档日期:** 2026-06-14
+**关键词:** Langfuse flush 阻塞, event pump, prompt_lock 死锁, pump_done_tx
+**问题本质:** Langfuse flush（HTTP 30s timeout × retry）在 push_done() 之后、pump_done_tx.send() 之前阻塞等待，导致 wait_for_pump() 永久阻塞 → execute_prompt() 不返回 → ACP server 的 prompt_lock 不释放 → 新 prompt 永久等待锁。Ctrl+C 无法恢复因为新 prompt 的 cancel_token 尚未创建
+**通用模式:** 外部遥测/I/O 的 flush 操作绝不能阻塞核心事件泵。fire-and-forget 模式 + pump 完成信号提前发送 + 等待端添加超时安全网
+**技术决策:** pump_done_tx.send() 移到 Langfuse flush 之前；flush 改为 drop(handle) fire-and-forget；wait_for_pump 添加 10s timeout
+**涉及文件:** peri-acp/src/session/executor.rs
+**CLAUDE.md 链接:** true（Langfuse 阻塞问题此前未独立成已知陷阱，建议在 CLAUDE.md 中补充）
+
+### issue_2026-06-01-hook-permission-request-fires-in-bypass
+**摘要:** PermissionRequest 钩子在 bypass 权限模式下不应触发但仍触发，与 Claude Code 规范不符
+**状态:** Fixed
+**归档日期:** 2026-06-14
+**关键词:** PermissionRequest, bypass 模式, HookMiddleware, 权限门控
+**问题本质:** HookMiddleware 不检查 permission_mode，对所有敏感工具无条件触发 PermissionRequest。Claude Code 规范中 bypass/dont-ask 模式下不应展示权限对话框，因此也不应触发 PermissionRequest
+**通用模式:** Hook 触发条件需感知全局权限模式，中间件行为与权限系统应正交检查。不能仅依赖工具本身的敏感性标记决定是否触发 hook
+**技术决策:** before_tool 中增加 permission_mode != "bypass" 门控；PreToolUse 不受影响（独立于权限系统）
+**涉及文件:** peri-middlewares/src/hooks/middleware.rs
+**CLAUDE.md 链接:** false
+
+### issue_2026-06-06-global-settings-hooks-not-loaded
+**摘要:** ~/.claude/settings.json 全局 Hook 配置未加载生效，所有事件类型 hook 均不触发
+**状态:** Fixed
+**归档日期:** 2026-06-14
+**关键词:** 全局 settings, Hook 加载, 启动初始化, loader
+**问题本质:** TUI 启动时 load_global_settings_hooks() 未被正确调用或加载路径错误，启动日志中无 "Loaded N hooks from ~/.claude/settings.json"
+**涉及文件:** peri-middlewares/src/hooks/loader.rs, peri-tui/src/main.rs, peri-acp/src/agent/builder.rs, peri-middlewares/src/hooks/middleware.rs
+**CLAUDE.md 链接:** false
+
+### issue_2026-05-29-llm-stream-error-causes-amnesia
+**摘要:** LLM 流式读取失败后 agent 丢失当前轮次全部上下文——history 保护条件过窄，仅覆盖 Cancelled 路径
+**状态:** Fixed
+**归档日期:** 2026-06-14
+**关键词:** LLM 流式错误, agent amnesia, history truncation, stop_reason 保护不足
+**问题本质:** prompt.rs 的 history 保护条件要求 stop_reason == Cancelled，但 LLM 流式错误、LLM 重试耗尽、MaxIterationsExceeded 等路径在有进展时也会 truncate history，丢弃 agent 已写入 state 的当前轮次消息
+**通用模式:** 取消/错误后的 history 保护条件应从"是否取消"改为"是否有进展"（检查 result.messages.len()）。任何错误路径在 agent 已有有效产出时都应保留 state
+**涉及文件:** peri-tui/src/acp_server/prompt.rs, peri-acp/src/session/executor.rs, peri-agent/src/agent/executor/mod.rs
+**CLAUDE.md 链接:** true（与 issue_2026-05-26-ctrl-c-interrupt-causes-agent-amnesia 同根因不同触发条件）
+
+### issue_2026-05-29-new-thread-deadlock-and-update-config-inconsistency
+**摘要:** new_thread() 死锁风险（block_in_place + block_on）+ session/update_config 先持久化后验证导致 config 与 provider 状态不一致
+**状态:** Fixed
+**归档日期:** 2026-06-14
+**关键词:** block_in_place 死锁, 配置事务性, 验证顺序, provider 不一致
+**问题本质:** (1) block_in_place + block_on 在 tokio runtime 上同步等待 ACP new_session()，可能耗尽所有 worker 线程导致死锁；(2) update_config 先写入 peri_config 再验证 LlmProvider，写入成功但验证失败时 config 与 provider 状态不一致
+**通用模式:** 配置更新遵循"先验证再持久化"的事务性顺序。tokio runtime 上不应使用 block_in_place + block_on 等待需要 runtime 协程的异步操作
+**涉及文件:** peri-tui/src/app/thread_ops.rs, peri-tui/src/acp_server/requests.rs
+**CLAUDE.md 链接:** false
+
+### issue_2026-06-06-write-tool-append-mode
+**摘要:** Write 工具新增 append 参数支持增量写入，降低超长文件全量覆写的上下文消耗
+**状态:** Fixed
+**归档日期:** 2026-06-14
+**关键词:** Write append, 上下文消耗, 增量写入, 工具参数扩展
+**问题本质:** Write 仅全量覆写，大文件（>200行）content 参数占用 4.2% 上下文且不可压缩，最大观测 71.1KB/2367 行（占 128K 上下文的 14.2%）。61.4% 的 Write 是盲写（不先 Read）
+**通用模式:** 工具应提供增量操作选项降低 LLM 上下文消耗。append/overwrite 双模式是文件写入的标准设计。工具描述应引导 LLM 对大文件使用增量模式
+**技术决策:** append 可选布尔参数，默认 false；true 时用 O_APPEND 追加，文件不存在自动创建，tool_result 不回传内容（`Appended N lines, file total: M`）
+**涉及文件:** peri-middlewares/src/tools/filesystem/write.rs, peri-middlewares/src/tools/filesystem/write_test.rs
+**CLAUDE.md 链接:** false
+
+### issue_2026-06-10-prompt-suggestion-not-working
+**摘要:** Prompt Suggestion 功能完整实现（17 单元测试通过）但端到端无效果，功能已全部撤回
+**状态:** Reverted（代码已完全还原）
+**归档日期:** 2026-06-14
+**关键词:** 多层数据流, 端到端验证缺失, fire-and-forget, 测试≠可用
+**问题本质:** 9 段数据流（executor spawn → LLM generate → filter pipeline → emit SuggestionReady → ACP event mapper → TransportEventSink → TUI acp_client → agent_ops → main_ui placeholder）任一段断裂即功能完全不可见。未逐段运行时验证就声称"功能完成"
+**通用模式:** 跨多层（agent → ACP → TUI）的新功能必须在每个数据流环节添加运行时日志逐段验证。单元测试通过 ≠ 端到端可用。fire-and-forget task 的生命周期和错误处理需显式管理，否则静默失败
+**涉及文件:** （已全部还原：peri-acp/src/suggestion/* 已删除，peri-agent/src/agent/events.rs、peri-acp/src/session/executor.rs、peri-acp/src/event/mapper.rs、peri-tui/src/app/agent.rs、peri-tui/src/app/events.rs、peri-tui/src/app/agent_ops/mod.rs、peri-tui/src/ui/main_ui/mod.rs、peri-tui/src/event/keyboard/normal_keys.rs 修改已撤回）
+**CLAUDE.md 链接:** false
+
+### issue_2026-06-02-read-tool-path-alias-for-file_path
+**摘要:** LLM 调用 Read 工具时 1.74%（158/9,058）使用 path 参数名代替 file_path，因 Glob/Grep 的 schema 使用 path 导致参数名混淆
+**状态:** Fixed
+**归档日期:** 2026-06-14
+**关键词:** 参数别名, path vs file_path, tool_dispatch 兜底, 执行层兼容
+**问题本质:** Claude Code 工具 schema 有意设计不一致：Glob/Grep 用 path（搜索范围），Read/Write/Edit 用 file_path（操作目标）。LLM 在前后调用不同类别工具时产生参数名混淆
+**通用模式:** 工具参数名不一致时，执行层做静默兼容（参数名别名表）而非仅依赖 LLM 遵守 schema。不改 schema 保持规范严格，执行层兜底。可复用已有 TOOL_ALIASES 模式
+**技术决策:** 在 tool_dispatch.rs 新增 PARAM_ALIASES 常量 ["path" → "file_path"]，invoke 前静默转换 + tracing::warn 日志监测。不改工具 schema
+**涉及文件:** peri-agent/src/agent/executor/tool_dispatch.rs
+**CLAUDE.md 链接:** false
+
 ---
 
 ## 相关 Feature

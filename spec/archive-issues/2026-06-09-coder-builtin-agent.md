@@ -1,3 +1,5 @@
+
+> 归档于 ��原路径 spec/issues/2026-06-09-coder-builtin-agent.md
 # 创建 coder 内置 Agent 类型
 
 **状态**：Done

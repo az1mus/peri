@@ -237,6 +237,7 @@
 
 ### 消息重复
 - [DeepSeek多轮对话中agent_state_messages消息重复导致API 400错误](domains/agent.md#issue_2026-05-14-deepseek-multi-turn-tool-result-duplication) — agent
+- [compact 持久化恢复时消息重复](domains/compact.md#issue_2026-06-02-session-restore-compact-message-duplication) — compact
 
 ### last_message_count
 - [DeepSeek多轮对话中agent_state_messages消息重复导致API 400错误](domains/agent.md#issue_2026-05-14-deepseek-multi-turn-tool-result-duplication) — agent
@@ -794,6 +795,7 @@
 
 ### session恢复
 - [Session 恢复后 System Prompt 和 Compact Summary 被渲染为可见消息](domains/message-pipeline.md#issue_2026-05-20-session-restore-renders-system-prompt) — message-pipeline
+- [compact 持久化恢复时消息重复](domains/compact.md#issue_2026-06-02-session-restore-compact-message-duplication) — compact
 
 ### System消息过滤
 - [Session 恢复后 System Prompt 和 Compact Summary 被渲染为可见消息](domains/message-pipeline.md#issue_2026-05-20-session-restore-renders-system-prompt) — message-pipeline
@@ -1643,6 +1645,7 @@
 
 ### Built-in Agent
 - [Web Researcher Agent 升级为 Built-in Agent，支持原生 WebFetch/WebSearch 及复杂研究工作流](domains/agent.md#issue_2026-06-12-web-researcher-builtin-upgrade) — agent
+- [Coder 升级为 Built-in Agent，工具减量和反循环 prompt](domains/agent.md#issue_2026-06-09-coder-builtin-agent) — agent
 
 ### BUILT_IN_AGENTS
 - [Web Researcher Agent 升级为 Built-in Agent，支持原生 WebFetch/WebSearch 及复杂研究工作流](domains/agent.md#issue_2026-06-12-web-researcher-builtin-upgrade) — agent
@@ -1664,6 +1667,7 @@
 
 ### append 模式
 - [Write 工具超长内容流式输出时 LLM Provider 响应极慢](domains/agent.md#issue_2026-06-12-large-write-streaming-slow) — agent
+- [Write 工具 append 模式分段写入减少上下文消耗](domains/agent.md#issue_2026-06-06-write-tool-append-mode) — agent
 
 ### 大文件写入
 - [Write 工具超长内容流式输出时 LLM Provider 响应极慢](domains/agent.md#issue_2026-06-12-large-write-streaming-slow) — agent
@@ -1683,8 +1687,132 @@
 ### 超时机制
 - [Write 工具超长内容流式输出时 LLM Provider 响应极慢](domains/agent.md#issue_2026-06-12-large-write-streaming-slow) — agent
 
+### system-reminder 标签
+- [system-reminder 标签导致 UserBubble 折叠和上下文注入](domains/compact.md#issue_2026-06-02-system-reminder-compact-summary) — compact
+
+### UserBubble 折叠
+- [system-reminder 标签导致 UserBubble 折叠和上下文注入](domains/compact.md#issue_2026-06-02-system-reminder-compact-summary) — compact
+
+### 上下文注入
+- [system-reminder 标签导致 UserBubble 折叠和上下文注入](domains/compact.md#issue_2026-06-02-system-reminder-compact-summary) — compact
+
+### compact 持久化
+- [compact 持久化恢复时消息重复](domains/compact.md#issue_2026-06-02-session-restore-compact-message-duplication) — compact
+
+### compact 渲染
+- [compact 渲染打破 text_selection 和 loading 状态](domains/compact.md#issue_2026-06-07-compact-breaks-rendering-selection-loading) — compact
+
+### text_selection
+- [compact 渲染打破 text_selection 和 loading 状态](domains/compact.md#issue_2026-06-07-compact-breaks-rendering-selection-loading) — compact
+
+### loading 丢失
+- [compact 渲染打破 text_selection 和 loading 状态](domains/compact.md#issue_2026-06-07-compact-breaks-rendering-selection-loading) — compact
+
+### 斜杠命令
+- [未知斜杠命令静默 fallback 吞掉用户输入](domains/tui.md#issue_2026-06-05-unknown-slash-command-input-swallowed) — tui
+
+### 命令分发
+- [未知斜杠命令静默 fallback 吞掉用户输入](domains/tui.md#issue_2026-06-05-unknown-slash-command-input-swallowed) — tui
+
+### 静默 fallback
+- [未知斜杠命令静默 fallback 吞掉用户输入](domains/tui.md#issue_2026-06-05-unknown-slash-command-input-swallowed) — tui
+
+### 内联补全
+- [Skills/Commands 内联补全触发与 SlashHintState 和 @mention 回溯](domains/tui.md#issue_2026-06-06-inline-slash-trigger-for-skills-and-commands) — tui
+
+### SlashHintState
+- [Skills/Commands 内联补全触发与 SlashHintState 和 @mention 回溯](domains/tui.md#issue_2026-06-06-inline-slash-trigger-for-skills-and-commands) — tui
+
+### @mention 回溯
+- [Skills/Commands 内联补全触发与 SlashHintState 和 @mention 回溯](domains/tui.md#issue_2026-06-06-inline-slash-trigger-for-skills-and-commands) — tui
+
+### 数据源去重
+- [数据源去重导致 ACP 命令和 skill hints 显示异常](domains/agent.md#issue_2026-06-01-skill-prefix-hints-unknown-command) — agent
+
+### ACP 命令
+- [数据源去重导致 ACP 命令和 skill hints 显示异常](domains/agent.md#issue_2026-06-01-skill-prefix-hints-unknown-command) — agent
+
+### skill hints
+- [数据源去重导致 ACP 命令和 skill hints 显示异常](domains/agent.md#issue_2026-06-01-skill-prefix-hints-unknown-command) — agent
+
+### 工具减量
+- [Coder 升级为 Built-in Agent，工具减量和反循环 prompt](domains/agent.md#issue_2026-06-09-coder-builtin-agent) — agent
+
+### 反循环 prompt
+- [Coder 升级为 Built-in Agent，工具减量和反循环 prompt](domains/agent.md#issue_2026-06-09-coder-builtin-agent) — agent
+
+### Langfuse flush
+- [Langfuse flush 阻塞 event pump 导致并发 BG Agent 后下一 prompt 挂起](domains/agent.md#issue_2026-06-03-concurrent-bg-agent-next-prompt-hangs) — agent
+
+### event pump 阻塞
+- [Langfuse flush 阻塞 event pump 导致并发 BG Agent 后下一 prompt 挂起](domains/agent.md#issue_2026-06-03-concurrent-bg-agent-next-prompt-hangs) — agent
+
+### 遥测死锁
+- [Langfuse flush 阻塞 event pump 导致并发 BG Agent 后下一 prompt 挂起](domains/agent.md#issue_2026-06-03-concurrent-bg-agent-next-prompt-hangs) — agent
+
+### Hook 权限
+- [Hook PermissionRequest 在 bypass 模式下错误触发](domains/agent.md#issue_2026-06-01-hook-permission-request-fires-in-bypass) — agent
+
+### PermissionRequest
+- [Hook PermissionRequest 在 bypass 模式下错误触发](domains/agent.md#issue_2026-06-01-hook-permission-request-fires-in-bypass) — agent
+
+### bypass 检查
+- [Hook PermissionRequest 在 bypass 模式下错误触发](domains/agent.md#issue_2026-06-01-hook-permission-request-fires-in-bypass) — agent
+
+### 全局 Hook
+- [全局 Hook 设置未从 settings.json 启动加载](domains/agent.md#issue_2026-06-06-global-settings-hooks-not-loaded) — agent
+
+### settings.json
+- [全局 Hook 设置未从 settings.json 启动加载](domains/agent.md#issue_2026-06-06-global-settings-hooks-not-loaded) — agent
+
+### 启动加载
+- [全局 Hook 设置未从 settings.json 启动加载](domains/agent.md#issue_2026-06-06-global-settings-hooks-not-loaded) — agent
+
+### LLM 流式错误
+- [LLM 流式错误导致 Agent 失忆，history 未保护](domains/agent.md#issue_2026-05-29-llm-stream-error-causes-amnesia) — agent
+
+### Agent 失忆
+- [LLM 流式错误导致 Agent 失忆，history 未保护](domains/agent.md#issue_2026-05-29-llm-stream-error-causes-amnesia) — agent
+
+### history 保护
+- [LLM 流式错误导致 Agent 失忆，history 未保护](domains/agent.md#issue_2026-05-29-llm-stream-error-causes-amnesia) — agent
+
+### block_in_place 死锁
+- [block_in_place 死锁、配置验证和持久化顺序不一致](domains/agent.md#issue_2026-05-29-new-thread-deadlock-and-update-config-inconsistency) — agent
+
+### 配置验证
+- [block_in_place 死锁、配置验证和持久化顺序不一致](domains/agent.md#issue_2026-05-29-new-thread-deadlock-and-update-config-inconsistency) — agent
+
+### 持久化顺序
+- [block_in_place 死锁、配置验证和持久化顺序不一致](domains/agent.md#issue_2026-05-29-new-thread-deadlock-and-update-config-inconsistency) — agent
+
+### 参数别名
+- [Read 工具 file_path 参数别名兼容](domains/agent.md#issue_2026-06-02-read-tool-path-alias-for-file_path) — agent
+
+### file_path
+- [Read 工具 file_path 参数别名兼容](domains/agent.md#issue_2026-06-02-read-tool-path-alias-for-file_path) — agent
+
+### 工具兼容
+- [Read 工具 file_path 参数别名兼容](domains/agent.md#issue_2026-06-02-read-tool-path-alias-for-file_path) — agent
+
+### 分段写入
+- [Write 工具 append 模式分段写入减少上下文消耗](domains/agent.md#issue_2026-06-06-write-tool-append-mode) — agent
+
+### 上下文消耗
+- [Write 工具 append 模式分段写入减少上下文消耗](domains/agent.md#issue_2026-06-06-write-tool-append-mode) — agent
+
+### 多层数据流
+- [多层数据流问题导致端到端 PredictionReady 建议不生效](domains/agent.md#issue_2026-06-10-prompt-suggestion-not-working) — agent
+
+### 端到端验证
+- [多层数据流问题导致端到端 PredictionReady 建议不生效](domains/agent.md#issue_2026-06-10-prompt-suggestion-not-working) — agent
+
+### PredictionReady
+- [多层数据流问题导致端到端 PredictionReady 建议不生效](domains/agent.md#issue_2026-06-10-prompt-suggestion-not-working) — agent
+
 ## 更新记录
 
+- 2026-06-14: 归档 27 个 Fixed/Done issue（本轮第二次大批量归档）
 - 2026-06-14: 归档 3 个 issue（SubAgent Web 工具缺失、web-researcher 升级、Write 大文件流式慢）
 
 - 2026-06-11: 归档 19 个 issue（tui 12 + agent 3 + compact 1 + mcp 1 + tools 1 + plugin 1），新增 56 个关键词索引

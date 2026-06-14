@@ -1,3 +1,5 @@
+
+> 归档于 ��原路径 spec/issues/2026-06-09-remove-lineedit-beta-feature.md
 # 移除 LineEdit beta 特性
 
 **状态**：Done

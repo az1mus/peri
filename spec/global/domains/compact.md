@@ -143,6 +143,41 @@
 - **架构影响:** `full_compact()` 增加 `cwd` 参数为摘要 LLM 提供路径锚点；`extract_recent_files` 兼容 file_path 和 path 两种参数名
 - **涉及文件:** peri-agent/src/agent/compact/full.rs, peri-agent/src/agent/compact/re_inject.rs, peri-middlewares/src/compact_middleware.rs
 
+### issue_2026-06-02-system-reminder-compact-summary
+
+- **摘要:** Compact 摘要包裹 `<system-reminder>` 标签，TUI 折叠展示，减少显示干扰
+- **状态:** Fixed
+- **归档日期:** 2026-06-14
+- **关键词:** compact summary, system-reminder, TUI 折叠, UserBubble 渲染
+- **问题本质:** Compact 后的摘要文本以完整 Human/UserBubble 渲染，占用大片显示空间；用户无法区分"真实用户输入"和"系统注入的上下文摘要"
+- **通用模式:** 系统注入的上下文信息（如 compact 摘要）应与普通用户输入区分渲染——通过标签包裹让 TUI 识别并折叠为简略提示行，同时 LLM 侧已有 `14_system_reminder.md` 指导静默处理
+- **技术决策:** Human 摘要消息包裹 `<system-reminder>` 标签；re_inject 产生的 System 消息保持原样不纳入标签；TUI 检测标签后默认折叠为单行 `📋 上下文已压缩（N 个文件，M 个技能）`，可展开查看详情
+- **涉及文件:** peri-middlewares/src/compact_middleware.rs, peri-tui/src/ui/message_view/mod.rs, peri-tui/src/ui/message_render.rs, peri-tui/src/app/agent_ops/mod.rs
+- **CLAUDE.md 链接:** false
+
+### issue_2026-06-02-session-restore-compact-message-duplication
+
+- **摘要:** Session 恢复后 compact 前后的消息同时存在，导致对话重复
+- **状态:** Fixed
+- **归档日期:** 2026-06-14
+- **关键词:** session restore, 消息重复, compact 持久化, ThreadStore
+- **问题本质:** 会话触发 compact 后关闭 TUI 再恢复，compact 前被移除的旧消息和 compact 后新消息同时出现。ThreadStore 持久化时不应把已被 compact 移除的旧消息也写入存储
+- **通用模式:** 持久化消息时必须反映内存中 compact 后的实际消息状态——compact 已在内存中移除旧消息，持久化层应保存当前 state.messages() 的快照，而非追加/累积历史
+- **涉及文件:** peri-tui/src/acp_server/prompt.rs, peri-middlewares/src/compact_middleware.rs
+- **CLAUDE.md 链接:** false
+
+### issue_2026-06-07-compact-breaks-rendering-selection-loading
+
+- **摘要:** Compact 后文字拖选蓝色高亮消失 + Auto-compact 后 Loading spinner 丢失
+- **状态:** Fixed
+- **归档日期:** 2026-06-14
+- **关键词:** compact, 文字选区, SELECTION_BG, loading spinner, compact_manual 标志, text_selection, wrap_map
+- **问题本质:** 两个独立根因——(1) `handle_compact_started()` 对所有 compact（含 auto）无条件设 `compact_manual=true`，导致 auto-compact 完成后 `handle_compact_completed()` 错误清除 loading；(2) compact 触发的 `RebuildAll` 完全替换 view_messages 和 RenderCache 后，`text_selection` 中的旧 visual 坐标与新 `wrap_map` 错位，导致选区高亮消失和复制内容错乱
+- **通用模式:** 同一处理函数服务多条执行路径（auto vs manual compact）时，必须区分路径语义设置标志；UI 状态（text_selection）与 RenderCache 存在隐式坐标依赖，RebuildAll 重建 RenderCache 后必须清除/重建 text_selection
+- **技术决策:** 移除 `handle_compact_started` 中的 `compact_manual=true`，loading 统一由 `Done` 事件结束（manual compact 是 `CommandKind::Immediate`，executor 调用 `push_done()`）；compact 开始/完成时调用 `text_selection.clear()` 防止旧坐标与新 wrap_map 错位
+- **涉及文件:** peri-tui/src/app/agent_compact.rs, peri-tui/src/ui/main_ui/message_area.rs, peri-tui/src/app/text_selection.rs, peri-tui/src/ui/render_thread.rs
+- **CLAUDE.md 链接:** false
+
 ---
 
 ## 相关 Feature

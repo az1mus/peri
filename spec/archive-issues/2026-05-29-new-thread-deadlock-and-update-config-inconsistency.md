@@ -1,3 +1,5 @@
+
+> 归档于 ��原路径 spec/issues/2026-05-29-new-thread-deadlock-and-update-config-inconsistency.md
 # new_thread() 死锁风险 + session/update_config 状态不一致
 
 **状态**：Fixed

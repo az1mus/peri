@@ -1,3 +1,5 @@
+
+> 归档于 ��原路径 spec/issues/2026-06-02-read-tool-path-alias-for-file_path.md
 # Read/Write/Edit 工具缺 file_path：LLM 使用了 path 别名
 
 **状态**：Fixed

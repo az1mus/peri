@@ -1130,6 +1130,26 @@ submit_message(text)
 - **通用模式:** 第三方 API 兼容层的回归难以从代码层面排查——需要实际请求体对比。搁置待复现时捕获请求体
 - **涉及文件:** peri-agent/src/llm/anthropic/invoke.rs, peri-agent/src/llm/anthropic/cache.rs
 
+### issue_2026-06-05-unknown-slash-command-input-swallowed
+
+- **摘要:** 未知 Slash Command 输入被吞掉，应作为普通消息提交
+- **状态:** Fixed
+- **归档日期:** 2026-06-14
+- **关键词:** slash command 分发, 未知命令 fallback, 输入丢失, 普通消息提交
+- **问题本质:** 以 `/` 开头但不是已知命令/Skill/Agent 命令的输入被系统视为"未知命令"并显示错误提示后丢弃，输入内容不会被提交给 Agent。根因在 `normal_keys.rs` 的 slash command 分发逻辑中，所有匹配分支失败后构造错误消息并 push 到 view_messages，但缺少 `return Action::Submit(text)` fallback
+- **通用模式:** 命令分发链的末端应有一个静默 fallback——当输入格式匹配命令语法但内容不是已知命令时，不应判定为错误，而应作为普通文本提交。歧义匹配（多个前缀匹配）也应走 fallback 而非报错。只有完全确定的命令语法错误（如缺少必需参数）才应显示错误
+- **涉及文件:** peri-tui/src/event/keyboard/normal_keys.rs
+
+### issue_2026-06-06-inline-slash-trigger-for-skills-and-commands
+
+- **摘要:** TUI 输入框不支持在消息任意位置内联触发 `/` 补全弹窗
+- **状态:** Fixed
+- **归档日期:** 2026-06-14
+- **关键词:** 内联 slash, hint 弹窗, slash command 检测, 局部替换, 光标位置
+- **问题本质:** slash command 和 skill 提示弹窗只在消息行首输入 `/` 时触发（`starts_with('/')`），用户在消息任意位置输入 `/` 不会弹出补全列表。补全结果替换整个 textarea 而非局部 token，多行消息的第二行也不支持
+- **通用模式:** 内联触发检测应参考 @mention 的 `AtMentionState::detect()` 模式——在光标前回溯查找最近的触发前缀 token，要求前缀前为空白字符或行首（避免 `and/or` 等正常文本误触发）。补全时应局部替换 token 而非整段文本。Enter 提交后消息中任意位置的 `/command` 仍需正常触发对应逻辑（SkillPreloadMiddleware 已支持）
+- **涉及文件:** peri-tui/src/app/hint_ops.rs, peri-tui/src/ui/main_ui/popups/hints.rs, peri-tui/src/event/keyboard/normal_keys.rs
+
 ---
 
 ## 相关 Feature

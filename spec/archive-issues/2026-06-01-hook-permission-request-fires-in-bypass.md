@@ -1,3 +1,5 @@
+
+> 归档于 ��原路径 spec/issues/2026-06-01-hook-permission-request-fires-in-bypass.md
 # PermissionRequest 钩子在 bypass 模式下不应触发
 
 **状态**：Fixed

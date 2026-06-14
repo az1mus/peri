@@ -1,3 +1,5 @@
+
+> 归档于 ��原路径 spec/issues/2026-05-28-ask-user-popup-auto-close.md
 # AskUser 弹窗短暂显示后自动关闭
 
 **状态**：Fixed

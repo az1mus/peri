@@ -1,3 +1,5 @@
+
+> 归档于 ��原路径 spec/issues/2026-06-02-system-reminder-compact-summary.md
 # Compact 摘要文本包裹 `<system-reminder>` 标签，TUI 折叠展示
 
 **状态**：Fixed
