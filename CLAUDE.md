@@ -2,17 +2,18 @@
 
 ## 项目概述
 
-Rust Agent 框架，8 个 Workspace Crate（含 `side-projects/git-graph`）。
+Rust Agent 框架，9 个 Workspace Crate（含 `side-projects/git-graph` 和 `agm`）。
 
 | Crate | 职责 |
 |-------|------|
 | `peri-agent` | 核心：ReAct 循环、Middleware trait、LLM 适配器、工具系统、持久化（SQLite）、遥测 |
 | `peri-middlewares` | 中间件：文件系统、终端、HITL、SubAgent、Skills、Todo、Cron、MCP、Hooks、Plugin、LSP |
-| `peri-widgets` | Widget 组件库，仅依赖 ratatui + pulldown-cmark |
+| `peri-widgets` | Widget 组件库，核心依赖 ratatui + pulldown-cmark |
 | `peri-acp` | **ACP 服务层**：Agent Client Protocol 实现，通过 MpscTransport/StdioTransport 桥接 TUI/IDE 与 Agent |
-| `peri-tui` | TUI 应用，依赖 peri-acp（通过 ACP 协议与 Agent 通信）+ peri-widgets |
+| `peri-tui` | TUI 应用，依赖 peri-acp（运行时通信）+ peri-agent/middlewares/widgets（类型依赖） |
 | `langfuse-client` | Langfuse 遥测客户端（独立） |
 | `peri-lsp` | LSP 客户端库（独立，被 middlewares 使用） |
+| `agm` | Agent Package Manager：pnpm 风格的 AI agent 依赖管理器（通过 agm.json 管理 Skills/Agents 安装） |
 
 `rmcp` crate（v1.7）直接引用，不再需要本地 patch。
 
@@ -25,7 +26,7 @@ Rust Agent 框架，8 个 Workspace Crate（含 `side-projects/git-graph`）。
 - `peri-widgets`、`peri-lsp`、`langfuse-client` → 无 workspace 内部依赖（独立基础库）
 - `peri-middlewares` → `peri-agent`、`peri-lsp`
 - `peri-acp` → `peri-agent`、`peri-middlewares`、`peri-lsp`、`langfuse-client`
-- `peri-tui` → `peri-acp`（运行时通信）+ `peri-agent`、`peri-middlewares`、`peri-lsp`、`langfuse-client`、`peri-widgets`（类型依赖，用于 UI 渲染的类型如 `BaseMessage`/`ContentBlock`）
+- `peri-tui` → `peri-acp`（运行时通信）+ `peri-agent`、`peri-middlewares`、`peri-lsp`、`peri-widgets`（类型依赖，用于 UI 渲染的类型如 `BaseMessage`/`ContentBlock`）
 
 **TUI→ACP 通信**: TUI 运行时仅通过 `peri-acp` 的 `MpscTransport`（in-memory channel pair）与 ACP Server 通信。ACP Server 持有 Agent 构建和执行逻辑，TUI 作为纯 ACP client 前端消费 `AcpNotification` 事件。
 
@@ -47,25 +48,25 @@ scripts/start-tui.sh                 # 启动 TUI（RELAY_PORT=3001）
 
 **ReAct 循环**（`peri-agent`）：AgentInput → collect_tools → before_agent → loop(500) { before_model → LLM → after_model → [工具调用] before_tool → 并发执行 → after_tool → emit | [回答] → emit TextChunk + StateSnapshot → after_agent }。TUI 覆盖 `max_iterations(500)`（核心默认 10）。
 
-**[TRAP]** `tool_dispatch.rs` 延迟写入：`collect_tool_results` 执行 before_tool + 并发调用 + 收集结果，**不写 state**；`dispatch_tools` 最后统一写入 AI 消息 + 所有 tool_result。禁止在 `collect_tool_results` 中调用 `state.add_message`。错误路径：before_tool 错误/Cancel 返回 `Err`（state 未修改）；执行阶段 Cancel/deferred_error 返回 `Ok((.., true, ..))`，`dispatch_tools` 写入 state 后再返回 `Err`。链上 17 个中间件的 `before_tool`/`after_tool`/`on_error` 均不读 `state.messages()`，新增中间件必须遵守。`ExecutorEvent::MessageAdded` 被 TUI 丢弃，TUI 通过 `StateSnapshot` + 流式事件维护状态。（详见 spec/global/domains/agent.md#issue_2026-05-15-orphaned-tool-use-after-concurrent-tool-error）
+**[TRAP]** `tool_dispatch.rs` 延迟写入：`collect_tool_results` 执行 before_tool + 并发调用 + 收集结果，**不写 state**；`dispatch_tools` 最后统一写入 AI 消息 + 所有 tool_result。禁止在 `collect_tool_results` 中调用 `state.add_message`。错误路径：before_tool 错误/Cancel 返回 `Err`（state 未修改）；执行阶段 Cancel/deferred_error 返回 `Ok((.., true, ..))`，`dispatch_tools` 写入 state 后再返回 `Err`。链上 18 个中间件的 `before_tool`/`after_tool`/`on_error` 均不读 `state.messages()`，新增中间件必须遵守。`AgentEvent::MessageAdded` 被 TUI 丢弃，TUI 通过 `StateSnapshot` + 流式事件维护状态。（详见 spec/global/domains/agent.md#issue_2026-05-15-orphaned-tool-use-after-concurrent-tool-error）
 
-**[TRAP]** 新增/修改事件类型语义（如工具前文本从 AiReasoning 改为 TextChunk）时，必须同步检查 TUI 侧事件映射层（`map_executor_event`）。新增 ExecutorEvent 变体时必须同步更新映射，事件丢弃会导致下游状态不一致。（详见 spec/global/domains/agent.md#issue_2026-05-11-streaming-text-invisible-with-tools，spec/global/domains/message-pipeline.md#issue_2026-05-13-streaming-text-tool-aggregation-visual-issues）
+**[TRAP]** 新增/修改事件类型语义（如工具前文本从 AiReasoning 改为 TextChunk）时，必须同步检查 TUI 侧事件映射层（`map_executor_event`）。新增 AgentEvent 变体时必须同步更新映射，事件丢弃会导致下游状态不一致。（详见 spec/global/domains/agent.md#issue_2026-05-11-streaming-text-invisible-with-tools，spec/global/domains/message-pipeline.md#issue_2026-05-13-streaming-text-tool-aggregation-visual-issues）
 
 **[TRAP]** 多工具并发的结果处理循环中，P3/P4 错误路径提前返回会导致后续 tool_result 缺失。必须用 deferred_error 模式——先收集所有错误，循环结束后统一判断。所有 tool_result 必须始终写入 state。（详见 spec/global/domains/agent.md#issue_2026-05-14-orphaned-tool-use-without-tool-result，spec/global/domains/agent.md#issue_2026-05-15-tool-execution-error-stops-agent，spec/global/domains/agent.md#issue_2026-05-18-agent-tool-calls-execute-serially）
 
 **[TRAP]** `prepended_ids` 只追踪 `prepend_message`（头部 insert System），不能计入 `add_message`（尾部 push）。cleanup 用 `take_while(|m| m.is_system())` 只收集头部连续 System 消息，禁止用长度差计算。新增中间件的 `add_message` 注入不受 cleanup 影响，也不能假设 cleanup 会清理它们。（详见 spec/global/domains/agent.md#issue_2026-05-26-skillpreload-anthropic-400-tool-result-orphan）
 
-**消息类型**：`BaseMessage`（Human/Ai/System/Tool），`ContentBlock`（Text/Image/Document/ToolUse/ToolResult/Reasoning/Unknown）。
+**消息类型**：`BaseMessage`（Human/Ai/System/Tool），`ContentBlock`（Text/Image/Document/ToolUse/ToolResult/Unknown）。`ReasoningContentBlock` 是独立 SDK 类型，不在 `ContentBlock` 枚举中。
 
 **LLM 适配层**：`BaseModel` trait（OpenAI/Anthropic）→ `BaseModelReactLLM` → `ReactLLM`。`RetryableLLM<L>` 指数退避重试。
 
 **[TRAP]** `Interrupted`/`Error` + `Done` 互斥：`Interrupted`/`Error` 先 `request_rebuild()` + 添加通知，设 `reconcile_already_done=true`，后续 `Done` 跳过 `request_rebuild()` 防止覆盖通知。（详见 spec/global/domains/agent.md#issue_2026-05-25-interrupt-undo-last-user-message）**[TRAP]** Cancel 后历史不应无条件截断：ACP server 在 `result.ok==false` 时无条件 truncate history 会丢失 agent 已写入 state 的消息。应检查 `result.messages.len()` 判断是否有进展，有则保留。（详见 spec/global/domains/agent.md#issue_2026-05-26-ctrl-c-interrupt-causes-agent-amnesia）**[TRAP]** executor 中 `?` 传播会跳过 `cleanup_prepended`，导致 before_agent 注入的 system 消息泄漏到 state。循环内关键 cleanup 必须用 try_break 宏将错误捕获到变量，循环后无条件执行 cleanup。（详见 spec/global/domains/agent.md#issue_2026-06-06-test-gap-llm-error-cleanup-prepended）
 
-**系统提示词**：`build_system_prompt()` 在 `session/new` 时调用一次，产出 `frozen_system_prompt` 存入 `SessionState`，后续轮次直接复用。段落文件位于 `peri-tui/prompts/sections/`（01-06 静态 + 07-15 动态，共 15 个），通过 `__SYSTEM_PROMPT_DYNAMIC_BOUNDARY__` 边界标记分隔——标记前可缓存，标记后不影响前缀缓存。`PromptFeatures` 控制条件段落注入。Agent 构建在 system prompt 末尾追加 Git Attribution 段落（动态区域内不影响缓存前缀）。
+**系统提示词**：`build_system_prompt()` 在 `peri-acp/src/prompt/mod.rs` 中实现（通过 `concat!` 引用 `peri-tui/prompts/sections/`），`session/new` 时调用一次，产出 `frozen_system_prompt` 存入 `SessionState.frozen`，后续轮次直接复用。段落文件位于 `peri-tui/prompts/sections/`（01-06 静态 + 07, 10-15 动态，共 13 个，08/09 不存在），通过 `__SYSTEM_PROMPT_DYNAMIC_BOUNDARY__` 边界标记分隔——标记前可缓存，标记后不影响前缀缓存。`PromptFeatures` 控制条件段落注入。Agent 构建在 system prompt 末尾追加 Git Attribution 段落（动态区域内不影响缓存前缀）。
 
 ## Thinking/推理模式
 
-`ThinkingConfig` 控制推理参数。Anthropic 用 `thinking + output_config.effort`，OpenAI 用 `reasoning_effort`。`budget_tokens` 最小 1024，`max_tokens` 必须 > `budget_tokens`。
+`ThinkingConfig` 控制推理参数。Anthropic 用 `thinking + output_config.effort`，OpenAI 用 `reasoning_effort`。`budget_tokens` 默认 8000，最小值 1024 的限制已移除（`--effort` 传 0 时可为 0）。`max_tokens` 必须 > `budget_tokens`。
 
 **OpenAI Reasoning 回传**（`openai.rs`）：
 
@@ -105,7 +106,7 @@ scripts/start-tui.sh                 # 启动 TUI（RELAY_PORT=3001）
 
 ## 中间件链执行顺序
 
-详见 `peri-middlewares/CLAUDE.md`。17 个中间件按固定顺序组成链，末尾 `[ReActAgent.with_system_prompt()]` prepend。
+详见 `peri-middlewares/CLAUDE.md`。18 个中间件按固定顺序组成链，末尾 `[ReActAgent.with_system_prompt()]` prepend。
 
 ## ACP/TUI 分层架构
 
@@ -181,7 +182,7 @@ session/new → frozen_date → frozen_claude_md + frozen_claude_local_md
 
 | 目录 | 内容 |
 |------|------|
-| `docs/blogs/` | 技术博客（streaming-render、compact-mechanism、prompt-cache 等 11 篇） |
+| `docs/blogs/` | 技术博客（streaming-render、compact-mechanism、prompt-cache 等 31+ 篇） |
 | `.claude/skills/blog-writer/SKILL.md` | 博客写作风格指南，写博客时触发 blog-writer skill |
 | `docs/superpowers/specs/` | Superpowers 插件设计规范 |
 | `docs/superpowers/plans/` | Superpowers 插件实现计划 |
@@ -282,6 +283,6 @@ session/new → frozen_date → frozen_claude_md + frozen_claude_local_md
 - **`std::sync::RwLockReadGuard` 不是 `Send`**，async 中不能跨 `.await` 持有，用 `parking_lot::RwLock`。
 - **`CommandRegistry::dispatch` 借用限制 [TRAP]**：`&self` + `&mut App` 冲突，当前用 `std::mem::take` + put-back 解决。
 - **`ServiceRegistry` 与 `GlobalUiState`**：`App` 状态拆分为 `ServiceRegistry`（跨会话共享）和 `GlobalUiState`（纯 UI 临时状态）。面板 dispatch 宏位于 `event/macros.rs`。
-- **`app/mod.rs` 模块组织**：使用 `include!` 按功能类别分组声明（`.inc` 文件）。
+- **`app/mod.rs` 模块组织**：使用标准 `mod`/`pub mod` 声明按功能类别分组。
 - **跨平台 spawn [TRAP]**：所有子进程 spawn 必须通过 `shell_command()` 统一 wrapper，Windows 用 `cmd /C`、Unix 用 `bash -c`。新增 spawn 时必须复用。
 - **MultiplexBroker 竞速 [TRAP]**：ChannelBroker 不支持 Questions 交互类型，不应与 TUI broker 参与竞速。（详见 spec/global/domains/agent.md#issue_2026-05-29-ask-user-tool-auto-complete）

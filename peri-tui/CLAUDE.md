@@ -46,7 +46,7 @@ TUI 输入 → AcpTuiClient.new_session() / .prompt()
 
 **[INFO]** `MessageViewModel` 已不再包含 `message_id` 字段。SubAgentGroup 使用 `instance_id: Option<String>` 标识。
 
-**[TRAP]** frozen_subagent_vms 按 agent_id + 位置匹配（先 instance_id 精确匹配，失败后按顺序 agent_id 匹配）。`begin_round()` 清空 frozen_vms 和 ephemeral_notes，但 `done()` 不清空 frozen_subagent_vms（允许 Done→下一轮之间消费）。（详见 spec/global/domains/message-pipeline.md#issue_2026-05-16-frozen-subagent-vms-cross-round-accumulation-duplication）
+**[TRAP]** frozen_subagent_vms 按 agent_id + 位置匹配（先 instance_id 精确匹配，失败后按顺序 agent_id 匹配）。`begin_round()` 清空 `frozen_subagent_vms`，但 `done()` 不清空（允许 Done→下一轮之间消费）。`ephemeral_notes` 位于 `MessageState`，仅 compact 时显式清空，日常通过 RebuildAll 的 `anchor >= prefix_len` 过滤隐式失效。（详见 spec/global/domains/message-pipeline.md#issue_2026-05-16-frozen-subagent-vms-cross-round-accumulation-duplication）
 
 ## 主布局
 
@@ -66,12 +66,12 @@ TUI 输入 → AcpTuiClient.new_session() / .prompt()
 
 ### 弹窗系统
 
-统一通过 `InteractionPrompt` 枚举互斥管理。5 种弹窗：
-- **HITL 审批**（`popups/hitl.rs`）：批量工具调用逐个审批
-- **AskUser 问答**（`popups/ask_user.rs`）：Tab 栏切换 + 选项列表 + 自定义输入
-- **OAuth 授权**（`popups/oauth.rs`）：URL 显示 + 浏览器打开
-- **Setup Wizard**（`popups/setup_wizard.rs`）：首次配置向导
-- **Rewind 确认**（`popups/rewind.rs`）：双击 Esc 触发，确认后回滚到指定消息
+统一通过 `InteractionPrompt` 枚举互斥管理（3 种：Approval/Questions/Rewind）。OAuth 授权和 Setup Wizard 通过 `GlobalUiState` 独立管理，不在 InteractionPrompt 中。
+- **HITL 审批**（`popups/hitl.rs`）：批量工具调用逐个审批（`InteractionPrompt::Approval`）
+- **AskUser 问答**（`popups/ask_user.rs`）：Tab 栏切换 + 选项列表 + 自定义输入（`InteractionPrompt::Questions`）
+- **Rewind 确认**（`popups/rewind.rs`）：双击 Esc 触发，确认后回滚到指定消息（`InteractionPrompt::Rewind`）
+- **OAuth 授权**（`popups/oauth.rs`）：通过 `GlobalUiState.oauth_prompt` 独立管理
+- **Setup Wizard**（`popups/setup_wizard.rs`）：通过 `GlobalUiState.setup_wizard` 独立管理
 
 ### 面板系统
 
@@ -95,11 +95,9 @@ Welcome Card 或消息列表 + 滚动条 + spinner。视口裁剪渲染（`viewp
 
 ## i18n
 
-`LcRegistry` 存储在 `ServiceRegistry.lc` 中，翻译资源通过 `include_str!` 编译时嵌入 `locales/{lang}/main.ftl`。
+`LcRegistry` 存储在 `ServiceRegistry.lc` 中，翻译资源通过 `include!` 编译时嵌入 `locales/{lang}/main.ftl`。
 
-**[TRAP]** `FluentBundle::get_message` 返回的 `FluentMessage` 生命周期绑定在 bundle 上，`tr()` 方法必须返回 `String` 而非 `&str`。
-
-Command trait 的 `description()` 接收 `&LcRegistry` 参数并返回 `String`。`CommandRegistry::match_prefix()` 和 `list()` 均需 `&LcRegistry`。
+`Command trait` 的 `description()` 接收 `&LcRegistry` 参数并返回 `String`。`CommandRegistry::match_prefix()` 和 `list()` 均需 `&LcRegistry`。
 
 ## 状态管理
 

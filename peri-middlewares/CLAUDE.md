@@ -1,6 +1,6 @@
 # peri-middlewares
 
-中间件实现 crate，依赖 `peri-agent` 和 `peri-lsp`。17 个中间件按固定顺序组成链。
+中间件实现 crate，依赖 `peri-agent` 和 `peri-lsp`。18 个中间件按固定顺序组成链。
 
 ## 中间件链执行顺序
 
@@ -22,6 +22,7 @@
 15. McpMiddleware            ← MCP 工具和资源（pool 成功时注册）
 16. ToolSearchMiddleware     ← SearchExtraTools/ExecuteExtraTool 代理
 17. LspMiddleware            ← LSP 工具 + after_tool 文件变更同步
+18. CompactMiddleware        ← 上下文压缩（before_model 钩子，含 once-per-prompt 守卫）
 [ReActAgent.with_system_prompt()] ← prepend
 ```
 
@@ -29,7 +30,7 @@
 
 ## MCP 中间件
 
-`McpMiddleware` 基于 `rmcp` crate。配置合并：全局 `~/.peri/settings.json` + 项目 `{cwd}/.mcp.json`（同名覆盖）。工具命名 `mcp__{server_name}__{tool_name}`。插件 MCP 使用 `{plugin_name}__{server_name}` 前缀命名空间。
+`McpMiddleware` 基于 `rmcp` crate。配置三层合并：全局 `~/.peri/settings.json` → 插件层 → 项目 `{cwd}/.mcp.json`（含内容 hash 去重）。工具命名 `mcp__{server_name}__{tool_name}`。插件 MCP 使用 `plugin:{plugin_name}:{server_name}` 前缀命名空间。
 
 **[TRAP]** `ClaudeSettings` 的 `extraKnownMarketplaces` 和 `enabledPlugins` 需同时支持对象和数组格式。**`enabledPlugins` 写入必须用对象格式** `{"id": true}`。
 
@@ -63,7 +64,7 @@
 
 ## SubAgents
 
-`.claude/agents/` 下定义，支持扁平 `{agent_id}.md` 和嵌套 `{agent_id}/agent.md`。`tools` 为空继承父工具（排除 Agent 防递归），有值仅保留允许列表，`disallowedTools` 额外排除。插件 agent 通过 `scan_agents_with_extra_dirs` 追加搜索路径。内置 agents（explore/general-purpose/plan/verification）编译期嵌入，同名被项目级覆盖。
+`.claude/agents/` 下定义，支持扁平 `{agent_id}.md` 和嵌套 `{agent_id}/agent.md`。`tools` 为空继承父工具（排除 Agent 防递归），有值仅保留允许列表，`disallowedTools` 额外排除。插件 agent 通过 `scan_agents_with_extra_dirs` 追加搜索路径。内置 agents（coder/explore/general-purpose/plan/verification/web-researcher 共 6 个）编译期嵌入，同名被项目级覆盖。
 
 **[TRAP]** Background agent 工具完全依赖 `register_tool` 传递，跨 async 边界需确保 Arc 引用生命周期。多语义叠加（fork+background）需明确优先级，跨轮次累积数据（frozen_vms）必须有清理机制。（详见 spec/global/domains/agent.md#issue_2026-05-12-background-agent-display-and-continuation-bugs）
 
