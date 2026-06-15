@@ -57,6 +57,7 @@ thiserror.workspace = true
 futures-util = "0.3"
 walkdir = "2.5"
 fuzzy-matcher = "0.3"
+libc = "0.2"
 
 [target.'cfg(not(target_os = "windows"))'.dependencies]
 mimalloc.workspace = true

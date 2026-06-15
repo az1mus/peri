@@ -73,7 +73,9 @@ pub use rewind_prompt::{FileChangeInfo, RewindItem, RewindMode, RewindPrompt};
 // ── System Infrastructure ────────────────────────────────────────────────────
 mod chat_session;
 mod command_system;
+mod ime;
 mod session_metadata;
+pub use ime::textarea_cursor_pos;
 pub use chat_session::ChatSession;
 #[cfg(test)]
 pub(crate) use chat_session::RunningBgAgent;

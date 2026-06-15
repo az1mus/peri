@@ -14,7 +14,10 @@ use ratatui::{
     Frame,
 };
 
-use crate::{app::App, ui::theme};
+use crate::{
+    app::{textarea_cursor_pos, App},
+    ui::theme,
+};
 
 pub fn render(f: &mut Frame, app: &mut App) {
     // Setup 向导：全屏覆盖，优先于所有正常界面
@@ -247,17 +250,32 @@ fn render_session_column(f: &mut Frame, app: &mut App, area: Rect) {
     }
 
     // 输入框渲染
-    let textarea_ref = &app.session_mgr.current_mut().ui.textarea;
     // 应用失焦时隐藏光标
     let should_hide_cursor = !app.focused;
     if should_hide_cursor {
-        let mut ta = textarea_ref.clone();
+        let mut ta = app.session_mgr.current_mut().ui.textarea.clone();
         ta.set_cursor_style(Style::default().fg(theme::DIM));
         f.render_widget(&ta, chunks[5]);
     } else {
-        f.render_widget(textarea_ref, chunks[5]);
+        f.render_widget(&app.session_mgr.current_mut().ui.textarea, chunks[5]);
     }
     app.session_mgr.current_mut().ui.textarea_area = Some(chunks[5]);
+    // 将终端光标定位到输入框光标处，使 IME 合成窗口跟随输入位置
+    // 仅在聚焦时设置（失焦时终端光标由 ratatui 自动隐藏）
+    if app.focused {
+        // Block 有左 padding(2) + 顶/底边框(1)，内部文本区域偏移 (2, 1)
+        let inner = ratatui::layout::Rect {
+            x: chunks[5].x + 2,
+            y: chunks[5].y + 1,
+            width: chunks[5].width.saturating_sub(2),
+            height: chunks[5].height.saturating_sub(2),
+        };
+        if let Some((cx, cy)) =
+            textarea_cursor_pos(&app.session_mgr.current().ui.textarea, inner)
+        {
+            f.set_cursor_position((cx, cy));
+        }
+    }
 
     // Prediction placeholder 叠加（textarea 为空 + 有 prediction 时显示）
     if let Some(ref pred) = app.session_mgr.current().ui.prediction {

@@ -3263,6 +3263,7 @@ dependencies = [
  "fluent-bundle",
  "futures-util",
  "fuzzy-matcher",
+ "libc",
  "libmimalloc-sys",
  "mimalloc",
  "parking_lot",
