@@ -2,9 +2,30 @@ use super::*;
 use crate::config::{AppConfig, ProviderConfig};
 
 #[test]
-fn test_needs_setup_empty_providers() {
+fn test_needs_setup_empty_providers_no_env() {
     let config = AppConfig::default();
-    assert!(needs_setup(&config));
+    // 无 providers 且显式移除所有已知 API key 环境变量 → 需要 setup
+    // 显式设为空值模拟"没有配置"的场景
+    std::env::set_var("MODEL_PROVIDER", "__nonexistent__");
+    std::env::remove_var("OPENAI_API_KEY");
+    std::env::remove_var("ANTHROPIC_API_KEY");
+    assert!(
+        needs_setup(&config),
+        "无 providers 且无有效 env 时应需要 setup"
+    );
+}
+
+#[test]
+fn test_needs_setup_empty_providers_but_env_key() {
+    let config = AppConfig::default();
+    // 无 providers 但 OPENAI_API_KEY + MODEL_PROVIDER=openai → 不需要 setup
+    std::env::set_var("MODEL_PROVIDER", "openai");
+    std::env::set_var("OPENAI_API_KEY", "sk-fake-test-key");
+    std::env::remove_var("ANTHROPIC_API_KEY");
+    assert!(
+        !needs_setup(&config),
+        "有 OPENAI_API_KEY env 时应不需要 setup"
+    );
 }
 
 #[test]
