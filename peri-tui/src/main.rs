@@ -998,11 +998,7 @@ mod tests {
     #[test]
     fn test_e2e_top_level_env_to_provider() {
         // 保存可能被覆盖的环境变量
-        let save_keys = [
-            "TEST_E2E_API_KEY",
-            "TEST_E2E_BASE_URL",
-            "MODEL_PROVIDER",
-        ];
+        let save_keys = ["TEST_E2E_API_KEY", "TEST_E2E_BASE_URL", "MODEL_PROVIDER"];
         let saved: Vec<(&str, Option<String>)> = save_keys
             .iter()
             .map(|k| (*k, std::env::var(k).ok()))
