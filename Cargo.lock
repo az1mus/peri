@@ -252,21 +252,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "assert_cmd"
-version = "2.2.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2aa3a22042e45de04255c7bf3626e239f450200fd0493c1e382263544b20aea6"
-dependencies = [
- "anstyle",
- "bstr",
- "libc",
- "predicates",
- "predicates-core",
- "predicates-tree",
- "wait-timeout",
-]
-
-[[package]]
 name = "async-channel"
 version = "2.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1202,12 +1187,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "difflib"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6184e33543162437515c2e2b48714794e37845ec9851711914eec9d308f6ebe8"
-
-[[package]]
 name = "digest"
 version = "0.10.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1506,15 +1485,6 @@ checksum = "843fba2746e448b37e26a819579957415c8cef339bf08564fe8b7ddbd959573c"
 dependencies = [
  "crc32fast",
  "miniz_oxide",
-]
-
-[[package]]
-name = "float-cmp"
-version = "0.10.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b09cf3155332e944990140d967ff5eceb70df778b34f77d8075db46e4704e6d8"
-dependencies = [
- "num-traits",
 ]
 
 [[package]]
@@ -1827,40 +1797,6 @@ checksum = "f0d8a4362ccb29cb0b265253fb0a2728f592895ee6854fd9bc13f2ffda266ff1"
 dependencies = [
  "opaque-debug",
  "polyval",
-]
-
-[[package]]
-name = "gig"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "arboard",
- "assert_cmd",
- "clap",
- "crossterm",
- "git2",
- "peri-widgets",
- "predicates",
- "ratatui",
- "ropey",
- "syntect",
- "sysinfo",
- "tempfile",
- "tracing",
- "unicode-width",
-]
-
-[[package]]
-name = "git2"
-version = "0.21.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ddddbf932745a6be37109b6112d3ee09696106f848449069d3a57bba937ab82e"
-dependencies = [
- "bitflags 2.13.0",
- "libc",
- "libgit2-sys",
- "log",
- "openssl-sys",
 ]
 
 [[package]]
@@ -2619,19 +2555,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "68ab91017fe16c622486840e4c83c9a37afeff978bd239b5293d61ece587de66"
 
 [[package]]
-name = "libgit2-sys"
-version = "0.18.5+1.9.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "005d6ae6eac1912906073e069f7db60b1fa98e052a68227824afe3e3a1c59ca2"
-dependencies = [
- "cc",
- "libc",
- "libz-sys",
- "openssl-sys",
- "pkg-config",
-]
-
-[[package]]
 name = "libm"
 version = "0.2.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2666,18 +2589,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2e99fb7a497b1e3339bc746195567ed8d3e24945ecd636e3619d20b9de9e9149"
 dependencies = [
  "cc",
- "pkg-config",
- "vcpkg",
-]
-
-[[package]]
-name = "libz-sys"
-version = "1.1.29"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "85bc9657773828b90eeb625adff10eeac83cc21bbfd8e23a03eaa8a33c9e28d9"
-dependencies = [
- "cc",
- "libc",
  "pkg-config",
  "vcpkg",
 ]
@@ -2960,12 +2871,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "normalize-line-endings"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "61807f77802ff30975e01f4f071c8ba10c022052f98b3294119f3e615d13e5be"
-
-[[package]]
 name = "ntapi"
 version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3201,28 +3106,6 @@ name = "openssl-probe"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7c87def4c32ab89d880effc9e097653c8da5d6ef28e6b539d313baaacfbafcbe"
-
-[[package]]
-name = "openssl-src"
-version = "300.6.1+3.6.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "46eb8fb9fb3b61ce1c0f8a026c4c1a0714d3a9e138e7fbde78753ce2babc3846"
-dependencies = [
- "cc",
-]
-
-[[package]]
-name = "openssl-sys"
-version = "0.9.117"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b47e7e6bb2c38cd930d25a23b40fa52e068c10e85f3e03a7f5ba5aaca5713695"
-dependencies = [
- "cc",
- "libc",
- "openssl-src",
- "pkg-config",
- "vcpkg",
-]
 
 [[package]]
 name = "option-ext"
@@ -3779,36 +3662,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "predicates"
-version = "3.1.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ada8f2932f28a27ee7b70dd6c1c39ea0675c55a36879ab92f3a715eaa1e63cfe"
-dependencies = [
- "anstyle",
- "difflib",
- "float-cmp",
- "normalize-line-endings",
- "predicates-core",
- "regex",
-]
-
-[[package]]
-name = "predicates-core"
-version = "1.0.10"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cad38746f3166b4031b1a0d39ad9f954dd291e7854fcc0eed52ee41a0b50d144"
-
-[[package]]
-name = "predicates-tree"
-version = "1.0.13"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d0de1b847b39c8131db0467e9df1ff60e6d0562ab8e9a16e568ad0fdb372e2f2"
-dependencies = [
- "predicates-core",
- "termtree",
-]
-
-[[package]]
 name = "prettyplease"
 version = "0.2.37"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4332,16 +4185,6 @@ checksum = "72f81bee8c8ef9b577d1681a70ebbc962c232461e397b22c208c43c04b67a155"
 dependencies = [
  "rmp",
  "serde",
-]
-
-[[package]]
-name = "ropey"
-version = "1.6.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "93411e420bcd1a75ddd1dc3caf18c23155eda2c090631a85af21ba19e97093b5"
-dependencies = [
- "smallvec",
- "str_indices",
 ]
 
 [[package]]
@@ -5180,12 +5023,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
 
 [[package]]
-name = "str_indices"
-version = "0.4.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d08889ec5408683408db66ad89e0e1f93dff55c73a4ccc71c427d5b277ee47e6"
-
-[[package]]
 name = "stringprep"
 version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5399,12 +5236,6 @@ checksum = "411c5bf740737c7918b8b1fe232dca4dc9f8e754b8ad5e20966814001ed0ac6b"
 dependencies = [
  "libc",
 ]
-
-[[package]]
-name = "termtree"
-version = "0.5.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8f50febec83f5ee1df3015341d8bd429f2d1cc62bcba7ea2076759d315084683"
 
 [[package]]
 name = "termwiz"
@@ -6090,15 +5921,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6d9b2acfb050df409c972a37d3b8e08cdea3bddb0c09db9d53137e504cfabed0"
 dependencies = [
  "utf8parse",
-]
-
-[[package]]
-name = "wait-timeout"
-version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "09ac3b126d3914f9849036f826e054cbabdc8519970b8998ddaf3b5bd3c65f11"
-dependencies = [
- "libc",
 ]
 
 [[package]]

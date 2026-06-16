@@ -2,7 +2,7 @@
 
 ## 项目概述
 
-Rust Agent 框架，9 个 Workspace Crate（含 `side-projects/git-graph` 和 `agm`）。
+Rust Agent 框架，8 个 Workspace Crate（含 `agm`）。
 
 | Crate | 职责 |
 |-------|------|
@@ -17,7 +17,7 @@ Rust Agent 框架，9 个 Workspace Crate（含 `side-projects/git-graph` 和 `a
 
 `rmcp` crate（v1.7）直接引用，不再需要本地 patch。
 
-**其他目录**：`scripts/`（启动脚本）、`docs/`（博客、设计文档、协议规范，见下）、`side-projects/`（实验性项目，其中 `git-graph` 已纳入 workspace）。
+**其他目录**：`scripts/`（启动脚本）、`docs/`（博客、设计文档、协议规范，见下）、`side-projects/`（实验性项目）。
 
 ## 依赖关系
 
