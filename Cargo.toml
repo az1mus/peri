@@ -7,7 +7,6 @@ members = [
     "langfuse-client",
     "peri-widgets",
     "peri-lsp",
-    "side-projects/git-graph",
     "peri-web-pty",
     "agm",
 ]
