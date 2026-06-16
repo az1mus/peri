@@ -52,6 +52,24 @@ StateSnapshot 事件触发
 
 ---
 
+## Issue 经验附录
+
+> 本节记录已归档的 storage 领域 issue，提取通用经验和反模式。
+
+---
+
+### issue_2026-06-01-thread-browser-full-table-scan-high-memory
+- **摘要:** ThreadBrowser 全量 SQLite 查询导致高内存占用
+- **状态:** Fixed
+- **归档日期:** 2026-06-16
+- **关键词:** SQLite 全量查询, 内存优化, Lazy Loading
+- **问题本质:** `list_threads()` 加载了不需要的 `cached_context` 大字段（~1MB/thread），列表场景不需要完整消息历史 JSON
+- **通用模式:** 列表查询与详情查询应使用不同的列集——大字段按需加载，列表仅取元数据列
+- **技术决策:** `THREAD_META_COLUMNS` 常量将列表列与详情列分离，列表用 `NULL as cached_context` 占位，`load_context()` 按需单独加载
+- **涉及文件:** peri-agent/src/thread/sqlite_store.rs, peri-agent/src/thread/types.rs, peri-tui/src/app/thread_ops.rs
+
+---
+
 ## 相关 Feature
 - → [agent.md#20260322_F001_agent-storage-refactor](./agent.md#20260322_F001_agent-storage-refactor) — SQLite WAL 持久化替代 JSONL（初始实现）
 - → [agent.md#feature_20260326_F006_message-uuid-v7](./agent.md#feature_20260326_F006_message-uuid-v7) — message_id 为主键

@@ -1,3 +1,5 @@
+> 归档于 2026-06-16，原路径 spec/issues/2026-06-01-thread-browser-full-table-scan-high-memory.md
+
 # Issue: ThreadBrowser 全量 SQLite 查询导致高内存占用
 
 > 日期: 2026-06-01

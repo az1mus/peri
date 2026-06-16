@@ -1810,8 +1810,46 @@
 ### PredictionReady
 - [多层数据流问题导致端到端 PredictionReady 建议不生效](domains/agent.md#issue_2026-06-10-prompt-suggestion-not-working) — agent
 
+### MCP 状态栏
+- [MCP 初始化失败后状态栏红色错误提示无法消失](domains/tui.md#issue_2026-06-16-mcp-failed-status-bar-persistent-error) — tui
+
+### 错误恢复
+- [MCP 初始化失败后状态栏红色错误提示无法消失](domains/tui.md#issue_2026-06-16-mcp-failed-status-bar-persistent-error) — tui
+
+### 状态持久化
+- [MCP 初始化失败后状态栏红色错误提示无法消失](domains/tui.md#issue_2026-06-16-mcp-failed-status-bar-persistent-error) — tui
+
+### Windows 跨平台
+- [Windows 环境下表单输入框 overlay textarea 水平偏移](domains/tui.md#issue_2026-06-16-form-textarea-overlay-offset-windows) — tui
+- [Windows 环境下鼠标滚轮消息区滚动时输入框优先截获滚动事件](domains/tui.md#issue_2026-06-16-mouse-wheel-scroll-textarea-priority-windows) — tui
+
+### textarea overlay
+- [Windows 环境下表单输入框 overlay textarea 水平偏移](domains/tui.md#issue_2026-06-16-form-textarea-overlay-offset-windows) — tui
+
+### 渲染偏移
+- [Windows 环境下表单输入框 overlay textarea 水平偏移](domains/tui.md#issue_2026-06-16-form-textarea-overlay-offset-windows) — tui
+
+### ConPTY 事件泄漏
+- [Windows 环境下鼠标滚轮消息区滚动时输入框优先截获滚动事件](domains/tui.md#issue_2026-06-16-mouse-wheel-scroll-textarea-priority-windows) — tui
+
+### 鼠标滚轮
+- [Windows 环境下鼠标滚轮消息区滚动时输入框优先截获滚动事件](domains/tui.md#issue_2026-06-16-mouse-wheel-scroll-textarea-priority-windows) — tui
+
+### 事件过滤
+- [Windows 环境下鼠标滚轮消息区滚动时输入框优先截获滚动事件](domains/tui.md#issue_2026-06-16-mouse-wheel-scroll-textarea-priority-windows) — tui
+
+### SQLite 全量查询
+- [ThreadBrowser 全量 SQLite 查询导致高内存占用](domains/storage.md#issue_2026-06-01-thread-browser-full-table-scan-high-memory) — storage
+
+### Lazy Loading
+- [ThreadBrowser 全量 SQLite 查询导致高内存占用](domains/storage.md#issue_2026-06-01-thread-browser-full-table-scan-high-memory) — storage
+
+### THREAD_META_COLUMNS
+- [ThreadBrowser 全量 SQLite 查询导致高内存占用](domains/storage.md#issue_2026-06-01-thread-browser-full-table-scan-high-memory) — storage
+
 ## 更新记录
 
+- 2026-06-16: 归档 4 个 issue（tui 3 + storage 1），新增 12 个关键词索引
 - 2026-06-14: 归档 27 个 Fixed/Done issue（本轮第二次大批量归档）
 - 2026-06-14: 归档 3 个 issue（SubAgent Web 工具缺失、web-researcher 升级、Write 大文件流式慢）
 

@@ -1,3 +1,5 @@
+> 归档于 2026-06-16，原路径 spec/issues/2026-06-16-form-textarea-overlay-offset-windows.md
+
 # Windows 环境下表单输入框 overlay textarea 水平偏移，与静态文字重叠
 
 **状态**：Verified

@@ -26,6 +26,8 @@ One **13 MB binary**, **~50 MB of RAM**, **98% cache hits**. Bring your own API 
   - Frozen system prompt + boundary marker = near-zero wasted tokens
 - 🌐 **Any LLM**
   - Anthropic, OpenAI, DeepSeek, GLM, Qwen. Swap mid-session, no restart
+- 🪟 **Cross-platform**
+  - macOS, Linux, Windows — one binary. ConPTY-aware event handling, unified overlay textarea, cross-platform spawn
 - 🔌 **Drop-in Claude Code compatible**
   - Existing Claude Code config just works. Skills, hooks, MCP, plugins — zero migration
 - 🔍 **Tool Search**
@@ -38,6 +40,8 @@ One **13 MB binary**, **~50 MB of RAM**, **98% cache hits**. Bring your own API 
   - Hours-long sessions stay fast and cheap, automatically
 - 📦 **agm**
   - `agm install` any skill or agent. One lockfile, any tool
+- 🌐 **Web Terminal (`peri web`)**
+  - Browser-based remote shell, one command. xterm.js + multi-pane split, auto open browser
 - 🔧 **Built-in LSP & observability**
   - Language-aware intelligence out of the box. Langfuse traces, token usage, cache monitor
 
@@ -106,6 +110,8 @@ Peri's code is 99% AI-generated, primarily by DeepSeek and GLM-5.2. The developm
 Each fix that reveals a non-obvious constraint gets written back into `CLAUDE.md` as a **TRAP** — a hard rule the agent follows on every subsequent iteration. The dozens of TRAPs in the repo weren't authored by humans; they were extracted by the agent at the scene of each bug. That's how quality compounds without human code review.
 
 → Read the full story: [Nobody Coding](docs/blogs/ai-coding-paradigm/nobody-coding.md)
+
+---
 
 ---
 

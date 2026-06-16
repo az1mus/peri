@@ -1152,6 +1152,39 @@ submit_message(text)
 
 ---
 
+### issue_2026-06-16-mcp-failed-status-bar-persistent-error
+- **摘要:** MCP 初始化失败后状态栏红色错误提示无法消失
+- **状态:** Verified
+- **归档日期:** 2026-06-16
+- **关键词:** MCP 状态栏, 错误恢复, 状态持久化
+- **问题本质:** McpInitStatus::Failed 是终端状态，缺乏自动恢复逻辑——重连成功后状态未清除
+- **通用模式:** 错误状态应设计为可恢复，提供手动清除或自动恢复路径；终端状态需要配套的重置机制
+- **涉及文件:** peri-middlewares/src/mcp/client.rs, peri-tui/src/ui/main_ui/status_bar.rs
+
+---
+
+### issue_2026-06-16-form-textarea-overlay-offset-windows
+- **摘要:** Windows 环境下表单输入框 overlay textarea 水平偏移，与静态文字重叠
+- **状态:** Verified
+- **归档日期:** 2026-06-16
+- **关键词:** Windows 跨平台, textarea overlay, 渲染偏移
+- **问题本质:** Windows Terminal 渲染行为与 macOS/Linux 不同，overlay textarea 定位不精确导致底层静态文字穿透
+- **通用模式:** 跨平台 UI 组件需统一 overlay 策略——活跃字段不渲染静态值，仅由 textarea 独占显示，避免平台渲染差异
+- **涉及文件:** peri-tui/src/ui/main_ui/popups/setup_wizard.rs, peri-tui/src/ui/main_ui/panels/config.rs, peri-tui/src/ui/main_ui/panels/login.rs, peri-tui/src/app/field_textarea.rs
+
+---
+
+### issue_2026-06-16-mouse-wheel-scroll-textarea-priority-windows
+- **摘要:** Windows 环境下鼠标滚轮消息区滚动时输入框优先截获滚动事件
+- **状态:** Fixed（Fix #2 待验证）
+- **归档日期:** 2026-06-16
+- **关键词:** ConPTY 事件泄漏, 鼠标滚轮, 事件过滤, Windows 跨平台
+- **问题本质:** ConPTY 将 MouseScroll 拆分为 Key(Up/Down) + MouseScroll 事件对，事件分离导致 Key 泄漏到 textarea 并被优先消费
+- **通用模式:** 跨平台事件处理必须考虑终端模拟层的差异（ConPTY vs macOS Terminal.app vs xterm），需要在事件分发前统一过滤平台特有伪事件
+- **涉及文件:** peri-tui/src/event/mod.rs, peri-tui/src/event/keyboard/normal_keys.rs, peri-tui/src/app/thread_ops.rs
+
+---
+
 ## 相关 Feature
 
 - → [agent.md#20260322_F001_agent-storage-refactor](./agent.md#20260322_F001_agent-storage-refactor) — SQLite 持久化，TUI 消息渲染依赖此存储

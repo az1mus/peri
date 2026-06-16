@@ -1,3 +1,5 @@
+> 归档于 2026-06-16，原路径 spec/issues/2026-06-16-mouse-wheel-scroll-textarea-priority-windows.md
+
 # Windows 环境下鼠标滚轮消息区滚动时输入框优先截获滚动事件
 
 **状态**：Fixed（Fix #2 待验证）

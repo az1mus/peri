@@ -1,3 +1,5 @@
+> 归档于 2026-06-16，原路径 spec/issues/2026-06-16-mcp-failed-status-bar-persistent-error.md
+
 # MCP 初始化失败后状态栏红色错误提示无法消失
 
 **状态**：Verified
