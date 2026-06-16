@@ -9,7 +9,10 @@ pub mod keyboard;
 mod macros;
 pub mod mouse;
 
+use std::cell::RefCell;
 use std::time::Duration;
+#[cfg(target_os = "windows")]
+use std::time::Instant;
 
 use anyhow::Result;
 use ratatui::crossterm::event::{
@@ -22,6 +25,26 @@ use crate::app::{
     App,
 };
 use crate::{with_global_panels, with_session_panels};
+
+// ── Event stash ──────────────────────────────────────────────────────────────
+
+// Thread-local event buffer for stashing non-scroll events encountered
+// during `coalesce_mouse_events`. When coalescing hits a non-scroll event
+// (keypress, click, etc.), the event is stashed here instead of replacing
+// the scroll, so the scroll is processed first and the stashed event is
+// returned on the next read.
+thread_local! {
+    static EVENT_STASH: RefCell<Option<Event>> = const { RefCell::new(None) };
+}
+
+// Timestamp of the most recent MouseScroll event seen by the filter.
+// Used to detect orphaned wheel-generated Key(Up/Down) events that have
+// no paired MouseScroll following them in the queue (the last Key in
+// each interleaved batch).
+#[cfg(target_os = "windows")]
+thread_local! {
+    static LAST_MOUSE_SCROLL_TIME: RefCell<Option<Instant>> = const { RefCell::new(None) };
+}
 
 // ── Action ──────────────────────────────────────────────────────────────────
 
@@ -51,9 +74,17 @@ pub async fn next_event(app: &mut App) -> Result<Option<Action>> {
         }
     }
 
+    // 关键修复：函数开头消费 stash。早期实现把 take 放在内层 loop 开头，
+    // 晚于 poll(50ms) 超时返回 Ok(None) 路径——stash 有事件但队列为空时会
+    // 反复超时返回，stash 一直挂着，导致后续用户按键被旧 stashed 事件
+    // 抢先处理，主输入框光标位置与实际编辑位置不同步（按一次 ← 左移两次）。
+    // UI 计时（quit/rewind）优先级高于事件，已在上面先于 stash take 处理。
+    let stashed = EVENT_STASH.with(|s| s.borrow_mut().take());
+
     // Mouse-availability probe: on first user input after startup, determine
-    // whether the terminal supports mouse events.
-    if app.global_ui.mouse_available.is_none() {
+    // whether the terminal supports mouse events. probe 仅启动时跑一次，
+    // stash 此时不可能有值；保留 stash 短路以防御性避免 stash 事件被探测路径吞掉。
+    if app.global_ui.mouse_available.is_none() && stashed.is_none() {
         // Wait for the first event (up to 1 s); this is not counted as normal poll timeout
         if event::poll(Duration::from_secs(1))? {
             let ev = event::read()?;
@@ -73,11 +104,34 @@ pub async fn next_event(app: &mut App) -> Result<Option<Action>> {
         }
     }
 
-    if !event::poll(Duration::from_millis(50))? {
-        return Ok(None);
-    }
-
-    let ev = event::read()?;
+    // stash 有事件时跳过 poll 直接用 stashed，避免 poll 超时返回 Ok(None)
+    // 跳过 stash 消费。stash 为空时保持原 poll 超时行为。
+    let ev = if let Some(stashed) = stashed {
+        // stash 事件来源（coalesce_mouse_events 或 Windows filter）已过
+        // 一次处理，不再重新走 Windows filter——filter 的 peek 路径在
+        // stash 命中时队列状态不确定，可能引入不必要的延迟或丢失。
+        stashed
+    } else {
+        if !event::poll(Duration::from_millis(50))? {
+            return Ok(None);
+        }
+        // Windows: mouse wheel movement may generate spurious Key(Up/Down)
+        // events alongside MouseScroll events. Filter these out before
+        // coalescing so that scroll events are handled correctly. When the
+        // filter discards a spurious Key, loop to read the next real event.
+        #[cfg(target_os = "windows")]
+        {
+            loop {
+                let ev = event::read()?;
+                if let Some(ev) = filter_mouse_wheel_keys(ev) {
+                    break ev;
+                }
+            }
+        }
+        // Non-Windows: no filter needed, read directly.
+        #[cfg(not(target_os = "windows"))]
+        event::read()?
+    };
 
     // Scroll/Drag event coalescing: drain queued mouse events to avoid
     // redundant redraws during rapid scrolling or scrollbar dragging.
@@ -92,6 +146,105 @@ pub async fn next_event(app: &mut App) -> Result<Option<Action>> {
     handle_event(app, ev).await
 }
 
+// ── Mouse-wheel key filter (Windows only) ─────────────────────────────────
+
+/// On Windows Terminal (via ConPTY), a single mouse wheel tick can generate
+/// both a `Key(Up/Down)` event AND `MouseScrollUp/Down` events. The key
+/// event arrives interleaved with the scroll events in the input queue,
+/// causing the textarea to scroll (via `handle_up`/`handle_down`) before
+/// the messages area.
+///
+/// This function uses a two-phase strategy:
+///
+/// **Phase 1 — peek forward**: when a bare `Key(Up/Down)` is read, peek at
+/// the next event. If a `MouseScroll` follows immediately in the queue, the
+/// key is discarded and the mouse scroll is returned instead.
+///
+/// **Phase 2 — look backward**: when a bare `Key(Up/Down)` arrives without
+/// a paired MouseScroll (orphaned last Key in an interleaved batch), and a
+/// MouseScroll was recently processed (< 200 ms), the Key is discarded as
+/// spurious (returns `None`). This prevents the orphaned Key from reaching
+/// `handle_up`/`handle_down` and scrolling the textarea.
+///
+/// Trade-off: a genuine Key(Up/Down) press within 200 ms of a mouse scroll
+/// will be discarded. In practice this is far less disruptive than the
+/// textarea intercepting wheel scroll events.
+#[cfg(target_os = "windows")]
+fn filter_mouse_wheel_keys(ev: Event) -> Option<Event> {
+    // Record MouseScroll timestamps for backward-looking checks (Phase 2).
+    // A normal MouseScroll event passes through unchanged.
+    if matches!(
+        &ev,
+        Event::Mouse(m) if matches!(m.kind, MouseEventKind::ScrollUp | MouseEventKind::ScrollDown)
+    ) {
+        LAST_MOUSE_SCROLL_TIME.with(|s| *s.borrow_mut() = Some(Instant::now()));
+        return Some(ev);
+    }
+
+    let is_bare_updown = matches!(&ev,
+        Event::Key(k) if matches!(k.code, KeyCode::Up | KeyCode::Down)
+            && k.modifiers == KeyModifiers::NONE
+            && k.kind == KeyEventKind::Press
+    );
+    if !is_bare_updown {
+        return Some(ev);
+    }
+
+    // Phase 1: peek forward for an immediately following MouseScroll.
+    // Two-stage peek to handle the common case where ConPTY delivers the
+    // MouseScroll with a micro-delay after the Key(Up/Down).
+    //
+    // Stage 1a — instant peek: catch MouseScroll already in the queue.
+    // Stage 1b — brief wait: give ConPTY time to buffer the MouseScroll
+    //   when it hasn't arrived yet. The wait duration is adaptive:
+    //   • 10 ms when this is the first scroll in a batch (no Phase 2
+    //     backstop — a leaked Key would reach the textarea unconditionally).
+    //   • 3 ms when a recent MouseScroll exists (Phase 2 backstop will
+    //     catch any remaining leak, so the shorter wait suffices).
+    //
+    // Genuine arrow-key presses are unaffected: the first press may incur
+    // a ~10 ms delay (imperceptible), and the poll returns false quickly.
+    let has_recent_scroll = LAST_MOUSE_SCROLL_TIME.with(|s| {
+        s.borrow()
+            .map(|t| t.elapsed() < Duration::from_millis(200))
+            .unwrap_or(false)
+    });
+
+    if event::poll(Duration::ZERO).unwrap_or(false) {
+        if let Ok(next) = event::read() {
+            if matches!(&next,
+                Event::Mouse(m) if matches!(m.kind, MouseEventKind::ScrollUp | MouseEventKind::ScrollDown)
+            ) {
+                LAST_MOUSE_SCROLL_TIME.with(|s| *s.borrow_mut() = Some(Instant::now()));
+                return Some(next);
+            }
+            EVENT_STASH.with(|s| *s.borrow_mut() = Some(next));
+        }
+    } else {
+        let wait_ms = if has_recent_scroll { 3 } else { 10 };
+        if event::poll(Duration::from_millis(wait_ms)).unwrap_or(false) {
+            if let Ok(next) = event::read() {
+                if matches!(&next,
+                    Event::Mouse(m) if matches!(m.kind, MouseEventKind::ScrollUp | MouseEventKind::ScrollDown)
+                ) {
+                    LAST_MOUSE_SCROLL_TIME.with(|s| *s.borrow_mut() = Some(Instant::now()));
+                    return Some(next);
+                }
+                EVENT_STASH.with(|s| *s.borrow_mut() = Some(next));
+            }
+        }
+    }
+
+    // Phase 2: check backward — was a MouseScroll recently processed?
+    if has_recent_scroll {
+        // Orphaned wheel-generated Key detected. Discard it to prevent
+        // textarea scrolling. Loop in next_event() reads the next event.
+        return None;
+    }
+
+    Some(ev)
+}
+
 // ── Mouse event coalescing ───────────────────────────────────────────────
 
 /// Coalesces rapid-fire mouse scroll/drag events from the crossterm queue.
@@ -102,8 +255,8 @@ pub async fn next_event(app: &mut App) -> Result<Option<Action>> {
 /// within one poll cycle (~50ms) result in only ±3 lines moved instead of N×3.
 /// Drag(Left) is unaffected since only the final position matters.
 ///
-/// Non-coalesceable events (click, keypress, etc.) terminate the drain and
-/// replace the pending scroll as the returned event (not dropped).
+/// Non-coalesceable events (click, keypress, etc.) are stashed for the next
+/// read via `EVENT_STASH` rather than replacing the current scroll event.
 fn coalesce_mouse_events(ev: Event) -> Event {
     // Only activate coalescing for scroll and drag mouse events
     match &ev {
@@ -119,8 +272,8 @@ fn coalesce_mouse_events(ev: Event) -> Event {
     let mut last_ev = ev;
 
     // Drain all queued scroll/drag events, keeping only the last one.
-    // Non-scroll/drag events terminate the drain and become the result
-    // so they are not lost.
+    // Non-scroll/drag events are stashed for the next read so the scroll
+    // event is not replaced.
     while event::poll(Duration::ZERO).unwrap_or(false) {
         let next = match event::read() {
             Ok(e) => e,
@@ -133,16 +286,15 @@ fn coalesce_mouse_events(ev: Event) -> Event {
                 | MouseEventKind::Drag(MouseButton::Left) => {
                     last_ev = next;
                 }
-                // Other mouse events (click, release, move): stop draining,
-                // return this event instead so it's handled normally
+                // Other mouse events (click, release, move): stash, stop draining
                 _ => {
-                    last_ev = next;
+                    EVENT_STASH.with(|s| *s.borrow_mut() = Some(next));
                     break;
                 }
             },
-            // Non-mouse events: stop draining, return this event
+            // Non-mouse events: stash, stop draining
             _ => {
-                last_ev = next;
+                EVENT_STASH.with(|s| *s.borrow_mut() = Some(next));
                 break;
             }
         }
