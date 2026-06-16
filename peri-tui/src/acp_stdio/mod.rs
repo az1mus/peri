@@ -19,11 +19,10 @@ pub async fn run_acp_stdio(cwd: String) -> anyhow::Result<()> {
             CancelNotification, CloseSessionRequest, CloseSessionResponse, ForkSessionRequest,
             InitializeRequest, ListSessionsRequest, LoadSessionRequest, NewSessionRequest,
             PromptRequest, ResumeSessionRequest, SetSessionConfigOptionRequest,
-            SetSessionModeRequest, SetSessionModelRequest,
+            SetSessionModeRequest,
         },
-        Agent, Client, ConnectionTo,
+        Agent, Client, ConnectionTo, Stdio,
     };
-    use agent_client_protocol_tokio::Stdio;
 
     let ctx_clone = ctx.clone();
 
@@ -79,16 +78,6 @@ pub async fn run_acp_stdio(cwd: String) -> anyhow::Result<()> {
             },
             agent_client_protocol::on_receive_request!(),
         )
-        // ── session/set_model ──
-        .on_receive_request(
-            {
-                let ctx = ctx_clone.clone();
-                async move |req: SetSessionModelRequest, responder, cx: ConnectionTo<Client>| {
-                    session::config::handle_set_model(&ctx, req, responder, cx).await
-                }
-            },
-            agent_client_protocol::on_receive_request!(),
-        )
         // ── session/set_config_option ──
         .on_receive_request(
             {
@@ -117,7 +106,7 @@ pub async fn run_acp_stdio(cwd: String) -> anyhow::Result<()> {
             {
                 let ctx = ctx_clone.clone();
                 async move |req: CloseSessionRequest, responder, _cx: ConnectionTo<Client>| {
-                    session::control::handle_close(&ctx, &req.session_id.0);
+                    session::control::handle_close(&ctx, &req.session_id.0).await;
                     let _ = responder.respond(CloseSessionResponse::new());
                     Ok(())
                 }

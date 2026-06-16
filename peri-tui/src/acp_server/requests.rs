@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use agent_client_protocol::schema::{
     CloseSessionResponse, ForkSessionResponse, ListSessionsResponse, LoadSessionResponse,
     NewSessionResponse, ResumeSessionResponse, SessionId, SessionInfo,
-    SetSessionConfigOptionResponse, SetSessionModeResponse, SetSessionModelResponse,
+    SetSessionConfigOptionResponse, SetSessionModeResponse,
 };
 use peri_acp::dispatch::config_update::make_config_options;
 use peri_acp::{dispatch, transport::types::AcpError};
@@ -15,7 +15,7 @@ use serde_json::Value;
 use tracing::{debug, info};
 
 use super::{
-    apply_thinking_effort, build_mode_state, build_model_state,
+    apply_thinking_effort, build_mode_state,
     notify::{extract_session_id, send_available_commands_update, send_config_option_update},
     parse_permission_mode, AcpServerConfig, SessionState,
 };
@@ -75,26 +75,19 @@ pub(crate) async fn handle_request(
             );
 
             // ── Freeze system prompt data at session creation ──
-            let frozen_date = chrono::Local::now().format("%Y-%m-%d").to_string();
-            let frozen_language = cfg.peri_config.read().config.language.clone();
-
-            let frozen_data = peri_acp::session::frozen::build_frozen_session_data(
+            // 通过 SessionManager 统一构造路径，并登记 AcpSession 记录以支撑
+            // cascade cancel 子 agent 与 goal_state（见 SessionManager::ensure_session）。
+            cfg.session_manager.ensure_session(&session_id, &cwd);
+            let frozen_data = cfg.session_manager.build_frozen_data(
                 &cwd,
-                frozen_language.as_deref(),
                 &cfg.plugin_skill_dirs,
                 &cfg.plugin_agent_dirs,
-                &frozen_date,
             );
 
             let state = sessions.get_mut(&session_id).unwrap();
             state.frozen = Some(frozen_data);
             info!(session_id = %session_id, "ACP session created with ThreadStore");
             let modes = build_mode_state(&cfg.permission_mode);
-            let models = {
-                let p = cfg.provider.read();
-                let c = cfg.peri_config.read();
-                build_model_state(&p, &c)
-            };
             let config_options = {
                 let c = cfg.peri_config.read();
                 let p = cfg.provider.read();
@@ -102,7 +95,6 @@ pub(crate) async fn handle_request(
             };
             let resp = NewSessionResponse::new(SessionId::new(&*session_id))
                 .modes(modes)
-                .models(models)
                 .config_options(config_options);
             // Scan skills for AvailableCommands
             let skill_dirs = peri_middlewares::SkillsMiddleware::resolve_dirs_static(
@@ -111,32 +103,6 @@ pub(crate) async fn handle_request(
             );
             let skills = peri_middlewares::skills::list_skills(&skill_dirs);
             send_available_commands_update(transport, &session_id, &skills).await;
-            serde_json::to_value(resp)
-                .map_err(|e| AcpError::new(-32603, format!("Serialize failed: {e}")))
-        }
-
-        "session/set_model" => {
-            let model_id = params.get("modelId").and_then(|v| v.as_str()).unwrap_or("");
-            let session_id = extract_session_id(params, "");
-            {
-                let mut c = cfg.peri_config.write();
-                c.config.active_alias = model_id.to_string();
-            }
-            let new_provider = {
-                let c = cfg.peri_config.read();
-                LlmProvider::from_config_for_alias(&c, model_id)
-            };
-            if let Some(new_provider) = new_provider {
-                info!(model_id = %model_id, model = %new_provider.model_name(), "Model changed");
-                *cfg.provider.write() = new_provider;
-            }
-            // Model switch → invalidate cached LLM instances (Main Agent + SubAgent)
-            if let Some(s) = sessions.get_mut(session_id) {
-                s.agent_pool.invalidate();
-            }
-            persist_config(cfg);
-            let resp = SetSessionModelResponse::new();
-            send_config_option_update(transport, session_id, cfg).await;
             serde_json::to_value(resp)
                 .map_err(|e| AcpError::new(-32603, format!("Serialize failed: {e}")))
         }
@@ -250,25 +216,17 @@ pub(crate) async fn handle_request(
             }
 
             // ── Freeze session data at load time ──
-            let frozen_date = chrono::Local::now().format("%Y-%m-%d").to_string();
-            let frozen_language = cfg.peri_config.read().config.language.clone();
-            let frozen_data = peri_acp::session::frozen::build_frozen_session_data(
+            cfg.session_manager.ensure_session(req_session_id, cwd);
+            let frozen_data = cfg.session_manager.build_frozen_data(
                 cwd,
-                frozen_language.as_deref(),
                 &cfg.plugin_skill_dirs,
                 &cfg.plugin_agent_dirs,
-                &frozen_date,
             );
             if let Some(s) = sessions.get_mut(req_session_id) {
                 s.frozen = Some(frozen_data);
             }
 
             let modes = build_mode_state(&cfg.permission_mode);
-            let models = {
-                let p = cfg.provider.read();
-                let c = cfg.peri_config.read();
-                build_model_state(&p, &c)
-            };
             let config_options = {
                 let c = cfg.peri_config.read();
                 let p = cfg.provider.read();
@@ -276,7 +234,6 @@ pub(crate) async fn handle_request(
             };
             let resp = LoadSessionResponse::new()
                 .modes(modes)
-                .models(models)
                 .config_options(config_options);
             // Scan skills for AvailableCommands (same as session/new)
             let skill_dirs = peri_middlewares::SkillsMiddleware::resolve_dirs_static(
@@ -334,6 +291,8 @@ pub(crate) async fn handle_request(
                 }
                 info!(session_id = %req_session_id, "Session closed");
             }
+            // 同步从 SessionManager 移除 AcpSession 记录（取消所有 cascade 子 agent）
+            let _ = cfg.session_manager.close_session(req_session_id).await;
             let resp = CloseSessionResponse::new();
             serde_json::to_value(resp)
                 .map_err(|e| AcpError::new(-32603, format!("Serialize failed: {e}")))
@@ -366,14 +325,11 @@ pub(crate) async fn handle_request(
             }
 
             // ── Freeze session data at resume time ──
-            let frozen_date = chrono::Local::now().format("%Y-%m-%d").to_string();
-            let frozen_language = cfg.peri_config.read().config.language.clone();
-            let frozen_data = peri_acp::session::frozen::build_frozen_session_data(
+            cfg.session_manager.ensure_session(req_session_id, cwd);
+            let frozen_data = cfg.session_manager.build_frozen_data(
                 cwd,
-                frozen_language.as_deref(),
                 &cfg.plugin_skill_dirs,
                 &cfg.plugin_agent_dirs,
-                &frozen_date,
             );
             if let Some(s) = sessions.get_mut(req_session_id) {
                 s.frozen = Some(frozen_data);
@@ -401,7 +357,7 @@ pub(crate) async fn handle_request(
             let (new_thread_id, copied_history) =
                 dispatch::fork_session(cfg.thread_store.as_ref(), source_id, &source_history, cwd)
                     .await
-                    .map_err(|e| AcpError::new(-32603, e))?;
+                    .map_err(|e| AcpError::new(-32603, format!("{e}")))?;
 
             let new_session_id = new_thread_id.clone();
             sessions.insert(
@@ -419,14 +375,11 @@ pub(crate) async fn handle_request(
             );
 
             // ── Freeze session data at fork time ──
-            let frozen_date = chrono::Local::now().format("%Y-%m-%d").to_string();
-            let frozen_language = cfg.peri_config.read().config.language.clone();
-            let frozen_data = peri_acp::session::frozen::build_frozen_session_data(
+            cfg.session_manager.ensure_session(&new_session_id, cwd);
+            let frozen_data = cfg.session_manager.build_frozen_data(
                 cwd,
-                frozen_language.as_deref(),
                 &cfg.plugin_skill_dirs,
                 &cfg.plugin_agent_dirs,
-                &frozen_date,
             );
             if let Some(s) = sessions.get_mut(&new_session_id) {
                 s.frozen = Some(frozen_data);
