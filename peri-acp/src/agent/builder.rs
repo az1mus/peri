@@ -118,7 +118,7 @@ pub struct AcpAgentConfig {
     pub plugin_skill_dirs: Vec<std::path::PathBuf>,
     pub plugin_agent_dirs: Vec<std::path::PathBuf>,
     pub hook_groups: Vec<Vec<RegisteredHook>>,
-    pub hook_session_start: bool,
+    pub session_start_source: Option<String>,
     pub mcp_pool: Option<Arc<peri_middlewares::mcp::McpClientPool>>,
     /// Channel 共享状态（None = 不启用 channel 功能，不使用 MultiplexBroker）
     pub channel_state: Option<Arc<ChannelState>>,
@@ -181,7 +181,7 @@ pub fn build_agent(
         plugin_skill_dirs,
         plugin_agent_dirs,
         hook_groups,
-        hook_session_start,
+        session_start_source,
         mcp_pool,
         channel_state,
         tool_search_index,
@@ -385,6 +385,13 @@ pub fn build_agent(
         .unwrap_or_default();
 
     // SubAgent middleware
+    // [TRAP] SubAgent 复用 main agent 在 session/new 时捕获的 frozen CLAUDE.md/Skills，
+    // 否则文件中途变更会让 SubAgent 看到不同内容，违反第一优先级不变量。
+    // Arc<String> 共享：main agent 这里 clone 一份 String 给 SubAgent 的 Arc，
+    // 避免每轮 build_tool 重复 clone 大字符串。
+    let sub_frozen_claude_md = frozen_claude_md.as_ref().map(|s| Arc::new(s.clone()));
+    let sub_frozen_claude_local_md = frozen_claude_local_md.as_ref().map(|s| Arc::new(s.clone()));
+    let sub_frozen_skill_summary = frozen_skill_summary.as_ref().map(|s| Arc::new(s.clone()));
     let mut subagent = SubAgentMiddleware::new(
         parent_tools,
         Some(Arc::clone(&event_handler) as Arc<dyn AgentEventHandler>),
@@ -395,7 +402,12 @@ pub fn build_agent(
     .with_parent_messages(parent_messages)
     .with_background_registry(Arc::clone(&background_registry))
     .with_bg_event_sender(bg_event_tx)
-    .with_registered_hooks(vec![]);
+    .with_registered_hooks(vec![])
+    .with_frozen_data(
+        sub_frozen_claude_md,
+        sub_frozen_claude_local_md,
+        sub_frozen_skill_summary,
+    );
     if let Some(ts) = thread_store {
         subagent = subagent.with_thread_store(ts);
     }
@@ -427,7 +439,7 @@ pub fn build_agent(
     // 将 Git Attribution 追加到系统提示词末尾（动态区域，不影响缓存前缀）
     let attribution = peri_middlewares::GitAttributionMiddleware::attribution_text(&model_name);
     let system_prompt = format!(
-        "{}\n\n## Git Attribution\n\nWhen creating git commits, append the following line to the commit message:\n\n```\n{}\n```\n\nThis tracks AI contributions and should always be included in commit messages for code you authored.",
+        "{}\n\n## Git Attribution\n\nWhen the user asks you to commit, append the following line to the commit message:\n\n```\n{}\n```\n\nThis tracks AI contributions for code you authored. Only include it when you are already creating a commit at the user's request.",
         system_prompt, attribution
     );
 
@@ -483,7 +495,7 @@ pub fn build_agent(
     tracing::info!(
         groups = hook_groups.len(),
         total_hooks = all_hooks.len(),
-        session_start = hook_session_start,
+        session_start = session_start_source.is_some(),
         "Builder: assembling HookMiddleware from groups"
     );
     let mut executor = executor;
@@ -507,7 +519,7 @@ pub fn build_agent(
                 "",
                 permission_mode.clone(),
                 provider_name.clone(),
-                hook_session_start && i == 0,
+                session_start_source.clone(),
             );
             tracing::info!(
                 group_index = i,

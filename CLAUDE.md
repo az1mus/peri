@@ -87,6 +87,10 @@ scripts/start-tui.sh                 # 启动 TUI（RELAY_PORT=3001）
 
 唯一例外是 `__SYSTEM_PROMPT_DYNAMIC_BOUNDARY__` 边界标记之后动态区域内的占位符值变化（如日期、cwd），但即使是动态区域，其**结构/模板/段落数量**也必须在会话内保持不变。新增中间件在 `before_agent` 阶段注入 System 消息时，必须确保注入内容和位置跨轮次稳定。
 
+**[TRAP]** 中途纠正/警告消息（工具连续失败提示、`<stop_hook_feedback>`、goal steering、compact 续接等）必须用 `BaseMessage::human("<system-reminder>...</system-reminder>")` 注入，**禁止** `BaseMessage::system(...)`。`anthropic/invoke.rs` 和 `openai/invoke.rs` 会遍历整个 `messages` 数组，把**所有** `BaseMessage::System` 消息（不分位置）hoist 到顶层 system prompt，导致 frozen system prompt 被污染、Prompt Cache 失效。已采用此模式的实现：`goal_middleware.rs`、`compact_middleware.rs`、`tool_dispatch.rs`（连续失败警告）、`hooks/middleware.rs`（stop_hook_feedback）。新增中途纠正路径必须复用同一模式。（详见 spec/global/domains/system-prompt.md#issue_2026-06-17-mid-conversation-system-message-breaks-frozen-prompt）
+
+**[TRAP]** SubAgent 中间件链必须复用 main agent 在 `session/new` 时捕获的 frozen CLAUDE.md/Skills 数据，禁止重新读盘。否则会话中 CLAUDE.md/skills 文件变更会让 SubAgent 看到与 main agent 不同的内容，违反第一优先级不变量。frozen 数据通过 `SubAgentMiddleware::with_frozen_data` → `SubAgentTool::with_frozen_data` → `SubAgentMiddlewareConfig::with_frozen` → `build_subagent_middlewares` 透传，最终调用 `AgentsMdMiddleware::with_frozen_content` / `SkillsMiddleware::with_frozen_summary`。`Option<Arc<String>>` 共享避免每轮 `build_tool` 重复 clone 大字符串。（详见 spec/global/domains/system-prompt.md#issue_2026-06-17-subagent-ignores-frozen-claude-md）
+
 ## Tool Search 延迟加载
 
 工具分三层：**Core（12 个）**——Read/Write/Edit/Glob/Grep/folder_operations/Bash/WebFetch/WebSearch/Agent/AskUserQuestion/TodoWrite，始终对 LLM 可见；**Meta（2 个）**——`SearchExtraTools`/`ExecuteExtraTool`，始终可见，用于按需发现和执行 deferred tools；**Deferred（其余）**——Cron*、MCP 工具、LspTool 等，LLM 不直接可见，通过 Meta 工具桥接。核心工具定义以 `tool_search/core_tools.rs` 中的 `CORE_TOOLS` 为准。新增工具优先配置为 deferred tool，避免膨胀核心工具列表。
@@ -103,6 +107,21 @@ scripts/start-tui.sh                 # 启动 TUI（RELAY_PORT=3001）
 历史踩坑已全部修复并固化到 frozen_system_prompt + cached_prompt + boundary 标记机制中。（详见 spec/global/domains/message-pipeline.md，spec/global/domains/system-prompt.md#issue_2026-05-23-mcp-tools-instability-breaks-anthropic-cache）
 
 **[TRAP]** `prepend_message` 的 `insert(0)` 右移导致 StateSnapshot 快照范围扩大，泄露 System 消息到 `agent_state_messages`。StateSnapshot 应始终 `.filter(|m| !m.is_system())`。（详见 spec/global/domains/system-prompt.md#issue_2026-05-13-system-prompt-dynamic-parts-duplicated-in-consecutive-calls）
+
+### 新增/删除 Core 工具检查清单
+
+新增或删除 Core 工具时，必须同步更新以下触点（漏改任一项都会导致 LLM 工具列表与文档/MCP/HITL 不一致）：
+
+1. `peri-middlewares/src/tool_search/core_tools.rs` —— `CORE_TOOLS` HashSet + 对应 `TOOL_*` 常量
+2. `peri-middlewares/src/tool_search/search_tool.rs` & `execute_tool.rs` —— 已改为通过 `core_tools_sorted_csv()` 动态生成（P1-1），无需手改，但需确认 description 内容正确
+3. `peri-tui/prompts/sections/05_using_tools.md` —— 用户可见的"选择正确工具"指引，必须列出该工具
+4. `peri-middlewares/src/hitl/mod.rs` —— `is_edit_tool()` 与默认审批列表（如工具涉及文件修改/命令执行）
+5. `peri-acp/src/event/mapper.rs`（或对应路径）—— `ToolKind` 映射，决定 TUI 图标显示
+6. `peri-tui/src/tool_display.rs` —— TUI 简称/全称映射
+7. `core_tools_test.rs` —— 更新"动态生成 CSV 包含所有工具"的断言列表
+8. 若是 Edit/Write 类工具，额外检查 `GitAttributionMiddleware` 的 before_tool/after_tool 钩子是否需要追踪
+
+删除 Core 工具时反向操作，且必须 grep 全仓库确认无残留引用。
 
 ## 中间件链执行顺序
 
@@ -135,7 +154,8 @@ session/new → frozen_date → frozen_claude_md + frozen_claude_local_md
 - `DISABLE_COMPACT` / `DISABLE_AUTO_COMPACT` / `COMPACT_THRESHOLD`：每轮读取 env
 - `peri_config`、Provider Snapshot、context_window：每轮从 `Arc<RwLock<>>` 克隆快照
 - 整个中间件链、AgentState、Cancel Token、Langfuse Tracer：每轮全新构造
-- **[TRAP]** `PromptFeatures::detect()` 仍每轮重新读取 `YOLO_MODE`，`is_git_repo` 也每轮重新检查——两者未随 frozen 数据传递，可能导致 SubAgent 与 Main Agent 行为不一致。（详见 spec/global/domains/system-prompt.md#issue_2026-05-27-language-injection-subagent-drift-cache-isolation）
+
+**[TRAP]** `PromptFeatures::detect()` 与 SubAgent 漂移：`PromptFeatures::detect()` 仍每轮重新读取 `YOLO_MODE`，`is_git_repo` 也每轮重新检查——两者未随 frozen 数据传递。这违反"系统提示词稳定性第一优先级"的派生不变量：SubAgent 在会话进行中可能因 env 变化或 git 状态变化而看到与 Main Agent 不同的 `PromptFeatures`，从而注入不同的 prompt 段落。新增依赖 `PromptFeatures` 的中间件时必须明确：（1）该特征应否被 frozen；（2）若不 frozen，SubAgent 链路是否会因此与 Main Agent 漂移；（3）漂移是否会破坏 prompt cache 前缀。详见 spec/global/domains/system-prompt.md#issue_2026-05-27-language-injection-subagent-drift-cache-isolation。
 
 **ACP Slash Commands**（符合 agentclientprotocol.com）：
 - `CommandKind`（`Immediate`/`Passthrough`/`Transform`）分类执行

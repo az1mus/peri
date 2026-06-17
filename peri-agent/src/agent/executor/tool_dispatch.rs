@@ -47,6 +47,44 @@ fn normalize_params(input: serde_json::Value) -> serde_json::Value {
 /// 连续失败检测阈值
 const CONSECUTIVE_FAILURE_THRESHOLD: usize = 5;
 
+/// 将错误 output 归一化为稳定的失败类别（去除路径/UUID/时间戳等动态内容）。
+/// 用于连续失败检测的 key 构造，确保同种错误类型能累计计数（P0-1）。
+fn classify_failure_kind(output: &str) -> &'static str {
+    let lower = output.to_ascii_lowercase();
+    if lower.contains("not found")
+        || lower.contains("toolnotfound")
+        || lower.contains("no such file")
+        || lower.contains("does not exist")
+        || lower.contains("unknown tool")
+    {
+        "not_found"
+    } else if lower.contains("timeout") || lower.contains("timed out") {
+        "timeout"
+    } else if lower.contains("permission denied")
+        || lower.contains("rejected")
+        || lower.contains("not approved")
+        || lower.contains("was blocked")
+    {
+        "rejected"
+    } else if lower.contains("missing")
+        && (lower.contains("parameter") || lower.contains("argument") || lower.contains("required"))
+    {
+        "missing_input"
+    } else if lower.contains("invalid") || lower.contains("malformed") {
+        "invalid_input"
+    } else if lower.contains("exit code") || lower.contains("stderr") {
+        "exec_failed"
+    } else {
+        "other"
+    }
+}
+
+/// 构造连续失败检测 key：保留 `tool_name:` 前缀（供重置 retain 使用），
+/// 后缀为错误类别（避免动态内容导致 key 永不重合）。
+fn make_failure_key(tool_name: &str, output: &str) -> String {
+    format!("{}:{}", tool_name, classify_failure_kind(output))
+}
+
 /// 工具名解析：精确匹配 → 大小写无关匹配 → 语义别名。
 fn resolve_tool<'a>(
     name: &str,
@@ -122,7 +160,7 @@ pub(crate) async fn dispatch_tools<L: ReactLLM, S: State>(
     for (_, result) in &results {
         // 连续失败追踪
         if result.is_error {
-            let key = format!("{}:{}", result.tool_name, result.output);
+            let key = make_failure_key(&result.tool_name, &result.output);
             let count = consecutive_failures.entry(key).or_insert(0);
             *count += 1;
             if *count >= CONSECUTIVE_FAILURE_THRESHOLD {
@@ -132,10 +170,14 @@ pub(crate) async fn dispatch_tools<L: ReactLLM, S: State>(
                     "连续 {} 次相同错误，注入纠正消息",
                     count
                 );
-                state.add_message(BaseMessage::system(format!(
-                    "Warning: Tool '{}' has failed {} consecutive times with the same error. \
+                // [TRAP] 必须用 Human + <system-reminder> 注入，禁止 BaseMessage::system。
+                // System 消息会被 anthropic/openai invoke hoist 到 system prompt 顶部，
+                // 违反 frozen_system_prompt 稳定性（第一优先级）。
+                // （与 goal_middleware.rs / compact_middleware.rs 注入路径一致）
+                state.add_message(BaseMessage::human(format!(
+                    "<system-reminder>\nWarning: Tool '{}' has failed {} consecutive times with the same error. \
                      Stop retrying and analyze the root cause. Consider using a different approach \
-                     or asking the user for guidance.",
+                     or asking the user for guidance.\n</system-reminder>",
                     result.tool_name, count
                 )));
             }
@@ -152,7 +194,16 @@ pub(crate) async fn dispatch_tools<L: ReactLLM, S: State>(
         let tool_msg_clone = tool_msg.clone();
         state.add_message(tool_msg);
         agent.emit(AgentEvent::MessageAdded(tool_msg_clone));
+
+        // P0-5：累积工具结果 token 估算，让 TokenTracker 在下次 LLM 调用前感知 tool_result 注入，
+        // 避免大工具结果组合在 compact 阈值检查前就把 context 推到极限。
+        state
+            .token_tracker_mut()
+            .add_estimated_tool_tokens(&result.output);
     }
+
+    // 阶段 C：所有 tool_result 写入完成，触发 PostToolBatch hook
+    agent.chain.run_after_tools_batch(state, &results).await?;
 
     // 写入完成后再返回错误
     if was_cancelled {

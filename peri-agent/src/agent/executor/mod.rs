@@ -155,7 +155,20 @@ impl<L: ReactLLM, S: State> ReActAgent<L, S> {
     }
 
     /// 更新系统提示词（用于同一 agent 实例的新轮次）
+    ///
+    /// **[TRAP]** 系统提示词应在 `session/new` 时一次性冻结（第一优先级不变量）。
+    /// 多次调用会触发 warning + debug_assert，防止误用破坏 prompt cache。
+    /// 不返回 `Result` 以保持调用方签名简洁（误用非致命，但有调试断言）。
     pub fn set_system_prompt(&mut self, prompt: impl Into<String>) {
+        if self.system_prompt.is_some() {
+            tracing::warn!(
+                "set_system_prompt called more than once — system prompt should be frozen at session/new"
+            );
+            debug_assert!(
+                false,
+                "set_system_prompt called more than once — violates prompt stability invariant"
+            );
+        }
         self.system_prompt = Some(prompt.into());
     }
 
@@ -218,8 +231,10 @@ impl<L: ReactLLM, S: State> ReActAgent<L, S> {
             .collect();
 
         // 将所有工具写入共享注册表（供 ExecuteExtraTool 代理执行使用）
+        // 每轮 clear 防止已断开的 MCP/SubAgent 工具永久残留（P0-2）
         if let Some(ref shared) = self.shared_tools {
             let mut map = shared.write();
+            map.clear();
             for arc in &tool_arcs {
                 map.insert(arc.name().to_string(), Arc::clone(arc));
             }
@@ -356,6 +371,21 @@ impl<L: ReactLLM, S: State> ReActAgent<L, S> {
                     .await,
                     loop_error
                 );
+                if let Some(reason) = &output.block_continue {
+                    tracing::info!(
+                        reason = %reason,
+                        step = step + 1,
+                        "Stop hook block_continue: resuming agent loop"
+                    );
+                    // 发出快照 + 消费通知后再继续循环
+                    self::final_answer::emit_snapshot_and_drain_notifications(
+                        self,
+                        state,
+                        &mut snapshot_anchor,
+                    )
+                    .await;
+                    continue;
+                }
                 final_result = Some(output);
                 break;
             }
@@ -414,11 +444,18 @@ impl<L: ReactLLM, S: State> ReActAgent<L, S> {
 
     /// 移除 execute() 开头通过 before_agent + with_system_prompt prepend 的临时 system 消息。
     /// compact 发生时这些 ID 已不存在于 state 中，retain 无操作。
+    ///
+    /// [TRAP] 额外检查 `m.is_system()` 是防御性加固：prepended_ids 来自 take_while(System)，
+    /// 仅头部 System 消息进入此集合（mod.rs:275）。当前实现依赖 UUIDv7 唯一性保证
+    /// retain 不会误删非 prepended 消息。增加 role 检查可防止未来若引入确定性/测试 ID
+    /// 时的潜在误删——SC#5 加固。
     fn cleanup_prepended(state: &mut S, ids: &[MessageId]) {
         if ids.is_empty() {
             return;
         }
-        state.messages_mut().retain(|m| !ids.contains(&m.id()));
+        state
+            .messages_mut()
+            .retain(|m| !(ids.contains(&m.id()) && m.is_system()));
     }
 }
 

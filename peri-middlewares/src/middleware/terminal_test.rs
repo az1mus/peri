@@ -185,9 +185,9 @@ async fn test_bash_default_timeout_is_120_seconds() {
 }
 
 #[tokio::test]
-async fn test_bash_description_and_run_in_background_parsed() {
+async fn test_bash_legacy_params_ignored() {
+    // P0-3: schema 已移除 description/run_in_background，旧 tool_call 中残留字段应被静默忽略
     let tool = BashTool::new(std::env::temp_dir().to_str().unwrap());
-    // description 和 run_in_background 不影响执行
     let result = tool
         .invoke(serde_json::json!({
             "command": "echo ok",
@@ -200,41 +200,21 @@ async fn test_bash_description_and_run_in_background_parsed() {
 }
 
 #[test]
-fn test_truncate_bytes_ascii() {
-    let s = "hello world";
-    assert_eq!(truncate_bytes(s, 5), "hello");
-}
-
-#[test]
-fn test_truncate_bytes_within_limit() {
-    let s = "hello";
-    assert_eq!(truncate_bytes(s, 100), "hello");
-}
-
-#[test]
-fn test_truncate_bytes_utf8_safe() {
-    // 中文字符每个占 3 字节，在字节 7 处截断（是字符边界）
-    let s = "你好世界";
-    assert_eq!(truncate_bytes(s, 6), "你好");
-}
-
-#[test]
-fn test_truncate_bytes_utf8_mid_character() {
-    // "你好" = 6 bytes, 在字节 5 处截断（不是字符边界）
-    // 应回退到字节 3 处（"你" 的末尾）
-    let s = "你好世界";
-    let result = truncate_bytes(s, 5);
-    assert_eq!(result, "你", "应在字符边界截断，实际: {}", result);
-}
-
-#[test]
-fn test_truncate_bytes_empty_string() {
-    assert_eq!(truncate_bytes("", 10), "");
-}
-
-#[test]
-fn test_truncate_bytes_zero_max() {
-    assert_eq!(truncate_bytes("hello", 0), "");
+fn test_bash_schema_no_legacy_params() {
+    // P0-3: schema 不应声明 description/run_in_background
+    let tool = BashTool::new(std::env::temp_dir().to_str().unwrap());
+    let params = tool.parameters();
+    let props = params["properties"].as_object().unwrap();
+    assert!(
+        !props.contains_key("description"),
+        "schema 不应再声明 description 参数"
+    );
+    assert!(
+        !props.contains_key("run_in_background"),
+        "schema 不应再声明 run_in_background 参数"
+    );
+    assert!(props.contains_key("command"), "command 应保留");
+    assert!(props.contains_key("timeout"), "timeout 应保留");
 }
 
 #[test]

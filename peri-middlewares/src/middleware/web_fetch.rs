@@ -5,12 +5,16 @@ use serde_json::Value;
 
 use super::web_common::WEB_CREDIBILITY_WARNING;
 use crate::tools::output_persist::persist_truncated_output;
+use crate::tools::output_truncate::truncate_bytes;
 
 /// Tavily 抓取后端地址
 const TAVILY_BASE_URL: &str = "https://tavily.claude-code-best.win";
 
 /// 内容截断行数上限
 const MAX_CONTENT_LINES: usize = 2000;
+
+/// 内容字节数上限（兜底：行数未超限但总字节过大时触发）
+const MAX_CONTENT_CHARS: usize = 100_000;
 
 /// Tavily /extract 响应结构
 #[derive(Deserialize)]
@@ -61,19 +65,39 @@ impl Default for WebFetchTool {
     }
 }
 
-/// 按行数截断内容
+/// 按行数 + 字节数两层截断内容
+/// 1. 先按行数截断（行数超限时触发落盘）
+/// 2. 再按字节数兜底（行数未超限但字节超限时也触发落盘）
 fn truncate_content(content: &str, max_lines: usize) -> String {
     let lines: Vec<&str> = content.lines().collect();
-    if lines.len() <= max_lines {
-        content.to_string()
-    } else {
+    if lines.len() > max_lines {
+        // 行数超限：head 截断 + 落盘 + 字节兜底检查
         let truncated: String = lines[..max_lines].join("\n");
         let persist_hint = persist_truncated_output(content);
-        format!(
-            "{truncated}\n[内容已截断，原始内容共 {} 行]{persist_hint}",
+        let mut result = format!(
+            "{truncated}\n[Content truncated: original had {} lines]{persist_hint}",
             lines.len()
-        )
+        );
+        // 行截断后仍可能字节超限（截断后的头部 + 提示信息）
+        if result.len() > MAX_CONTENT_CHARS {
+            let byte_truncated = truncate_bytes(&result, MAX_CONTENT_CHARS);
+            result = format!(
+                "{byte_truncated}\n[Output truncated: exceeds {} byte limit]{persist_hint}",
+                MAX_CONTENT_CHARS
+            );
+        }
+        return result;
     }
+    // 行数未超限，检查字节数
+    if content.len() > MAX_CONTENT_CHARS {
+        let persist_hint = persist_truncated_output(content);
+        let byte_truncated = truncate_bytes(content, MAX_CONTENT_CHARS);
+        return format!(
+            "{byte_truncated}\n[Content truncated: exceeds {} byte limit]{persist_hint}",
+            MAX_CONTENT_CHARS
+        );
+    }
+    content.to_string()
 }
 
 #[async_trait]
@@ -92,11 +116,11 @@ impl BaseTool for WebFetchTool {
             "properties": {
                 "url": {
                     "type": "string",
-                    "description": "要抓取的完整 URL（http/https）"
+                    "description": "The full URL to fetch (http/https)"
                 },
                 "prompt": {
                     "type": "string",
-                    "description": "可选。提取内容的指导提示，附在结果前供 LLM 参考"
+                    "description": "Optional. Guidance prompt for how to use the fetched content, prepended to the result for the LLM"
                 }
             },
             "required": ["url"]
@@ -163,7 +187,7 @@ impl BaseTool for WebFetchTool {
         let truncated = truncate_content(raw_content, MAX_CONTENT_LINES);
 
         let result = match prompt {
-            Some(p) => format!("{WEB_CREDIBILITY_WARNING}提示: {p}\n\n{truncated}"),
+            Some(p) => format!("{WEB_CREDIBILITY_WARNING}Prompt: {p}\n\n{truncated}"),
             None => format!("{WEB_CREDIBILITY_WARNING}{truncated}"),
         };
 

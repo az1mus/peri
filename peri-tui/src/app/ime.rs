@@ -1,13 +1,29 @@
-//! IME composition window positioning.
+//! IME composition window positioning (Windows-only).
 //!
-//! On terminal emulators, the IME composition window position is determined by
-//! the terminal cursor position. If the terminal cursor stays at (0, 0) — the
-//! top-left corner — the IME candidate window appears there instead of following
-//! the text input box.
+//! On Windows terminal emulators, the IME composition window position is
+//! determined by the terminal cursor position. If the terminal cursor stays at
+//! (0, 0) — the top-left corner — the IME candidate window appears there
+//! instead of following the text input box.
 //!
 //! This module calculates the textarea cursor's terminal-coordinate position.
 //! The render loop calls `Frame::set_cursor` with this position so the terminal
 //! knows where to anchor the IME composition window.
+//!
+//! ## Why Windows-only
+//!
+//! macOS and Linux terminal emulators generally handle IME composition window
+//! positioning adequately without explicit cursor hints. Enabling this module
+//! on those platforms would disable tui-textarea's default REVERSED buffer
+//! cursor (to avoid double-cursor visual) and rely on the inferred terminal
+//! cursor coordinates — but the inference formula (`cursor - (width - 1)`)
+//! diverges from tui-textarea's sticky-scroll behavior on long lines, causing
+//! the cursor to disappear at end of long lines (see
+//! spec/issues/2026-06-17-main-textarea-cursor-invisible-long-line.md).
+//!
+//! Windows users accept this trade-off because IME candidate tracking is a
+//! stronger UX requirement there. On macOS/Linux the REVERSED buffer cursor is
+//! used directly with no terminal-cursor dependency.
+#![cfg(target_os = "windows")]
 
 use ratatui::layout::Rect;
 use tui_textarea::TextArea;
@@ -35,13 +51,6 @@ fn display_width_before(s: &str, char_count: usize) -> usize {
 /// Calculate the terminal-grid position of the visible textarea cursor.
 ///
 /// Returns `None` if the textarea has zero visible area.
-///
-/// # 限制
-///
-/// 滚动偏移基于"光标始终在可见区域内"的简化假设推断。这与 `tui-textarea`
-/// 的 `next_scroll_top` 在 cursor-driven auto-scroll 场景下的行为一致，
-/// 但**不支持显式 `textarea.scroll()` 调用**后的状态（视口可能比光标更靠下）。
-/// 当前 peri-tui 没有调用 `textarea.scroll()`，因此本限制不影响实际使用。
 pub fn textarea_cursor_pos(textarea: &TextArea, textarea_area: Rect) -> Option<(u16, u16)> {
     let visible_height = textarea_area.height as usize;
     let visible_width = textarea_area.width as usize;
@@ -55,7 +64,9 @@ pub fn textarea_cursor_pos(textarea: &TextArea, textarea_area: Rect) -> Option<(
     let scroll_row = cursor_row.saturating_sub(visible_height.saturating_sub(1));
     let visible_row = cursor_row.saturating_sub(scroll_row);
 
-    // Horizontal scroll (in display columns, accounting for CJK width and tab stops)
+    // Horizontal scroll: infer scroll offset from cursor position.
+    // tui-textarea keeps cursor within the visible area, so the leftmost scrolled
+    // column is cursor_col - (visible_width - 1).
     let cursor_line = textarea
         .lines()
         .get(cursor_row)
@@ -63,7 +74,12 @@ pub fn textarea_cursor_pos(textarea: &TextArea, textarea_area: Rect) -> Option<(
         .unwrap_or("");
     let cursor_display_col = display_width_before(cursor_line, cursor_col);
     let scroll_col = cursor_display_col.saturating_sub(visible_width.saturating_sub(1));
-    let visible_col = cursor_display_col.saturating_sub(scroll_col);
+    // Clamp to visible area: cursor must not be placed outside the inner rect.
+    // Otherwise terminal emulators may ignore the cursor move, leaving a "ghost"
+    // at the previous position — seen as residual cursor after deletion.
+    let visible_col = cursor_display_col
+        .saturating_sub(scroll_col)
+        .min(visible_width.saturating_sub(1));
 
     // 使用 saturating_add 防御 u16 溢出（实际终端尺寸远小于 u16 上限，
     // 但作为坐标计算 API 加 saturating 保护更稳健）
@@ -120,31 +136,38 @@ mod tests {
         for _ in 0..30 {
             ta.insert_str("line\n");
         }
-        // Cursor at line 30 with 24-row viewport: scroll to show cursor
-        // scroll_row = 30 - (24 - 1) = 7, visible_row = 30 - 7 = 23
+        // cursor_row=30, visible_height=24: scroll_row=30-23=7, visible_row=30-7=23
         let pos = textarea_cursor_pos(&ta, Rect::new(3, 5, 80, 24));
         assert_eq!(pos, Some((3, 5 + 23)));
     }
 
     #[test]
     fn test_cursor_pos_horizontal_scroll() {
-        // 长行超过视口宽度，光标在行尾
+        // 长行超过视口宽度。由于 textarea 未渲染，viewport top_col 初始为 0，
+        // cursor_display_col=50, top_col=0, visible_col=min(50, 10-1)=9
         let mut ta = TextArea::default();
         ta.insert_str("a".repeat(50).as_str());
-        // 光标在 (0, 50)，视口宽度 10
-        // cursor_display_col = 50, scroll_col = 50 - 9 = 41, visible_col = 9
         let pos = textarea_cursor_pos(&ta, Rect::new(0, 0, 10, 1));
         assert_eq!(pos, Some((9, 0)));
     }
 
     #[test]
+    fn test_cursor_pos_horizontal_scroll_with_offset() {
+        // 验证当 tui-textarea 渲染后有真实 top_col 时的行为
+        // 未渲染时 top_col=0，visible_col=min(100, 80-1)=79
+        let mut ta = TextArea::default();
+        ta.insert_str("a".repeat(100).as_str());
+        let pos = textarea_cursor_pos(&ta, Rect::new(0, 0, 80, 1));
+        assert_eq!(pos, Some((79, 0)));
+    }
+
+    #[test]
     fn test_cursor_pos_single_line_viewport() {
-        // height=1：visible_height - 1 = 0，scroll_row = cursor_row，visible_row = 0
+        // height=1：visible_height-1=0，scroll_row=cursor_row，visible_row=0
         let mut ta = TextArea::default();
         for _ in 0..5 {
             ta.insert_str("line\n");
         }
-        // 光标在 (5, 0)，height=1
         let pos = textarea_cursor_pos(&ta, Rect::new(0, 0, 80, 1));
         assert_eq!(pos, Some((0, 0)));
     }
@@ -173,9 +196,7 @@ mod tests {
         for _ in 0..40 {
             ta.insert_str("x\n");
         }
-        // 光标在 (40, 0)，textarea 起点 (10, 20)，height=5
-        // scroll_row = 40 - 4 = 36, visible_row = 40 - 36 = 4
-        // pos = (10 + 0, 20 + 4) = (10, 24)
+        // cursor_row=40, visible_height=5: scroll_row=40-4=36, visible_row=40-36=4
         let pos = textarea_cursor_pos(&ta, Rect::new(10, 20, 80, 5));
         assert_eq!(pos, Some((10, 24)));
     }
