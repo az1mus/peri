@@ -1,225 +1,234 @@
-use std::path::Path;
+use std::ffi::OsString;
+use std::path::{Path, PathBuf};
 
 use fuzzy_matcher::{skim::SkimMatcherV2, FuzzyMatcher};
-use walkdir::WalkDir;
 
-/// 文件搜索候选结果
-#[derive(Clone)]
-pub struct FileCandidate {
-    pub path: String,
-    /// 用于显示的相对路径
-    pub display: String,
+/// 文件系统条目
+#[derive(Clone, Debug)]
+pub struct Entry {
+    pub name: OsString,
     pub is_dir: bool,
-    pub score: i64,
+    pub is_symlink: bool,
 }
 
-const MAX_CANDIDATES: usize = 15;
-
-/// 目录过滤列表——与 GlobFilesTool (peri-middlewares/src/tools/filesystem/glob.rs) 对齐
-const SKIP_DIRS: &[&str] = &[
-    "node_modules",
-    ".git",
-    "dist",
-    "build",
-    ".next",
-    ".turbo",
-    "coverage",
-    ".nyc_output",
-    "temp",
-    ".cache",
-    "vendor",
-    "venv",
-    "__pycache__",
-    "target",
-    "out",
-    ".output",
-];
-
-fn should_skip_dir(name: &str) -> bool {
-    SKIP_DIRS.contains(&name)
-}
-
-/// 根据 cwd 和查询字符串搜索文件候选。
-/// 使用 walkdir 遍历（与 GlobFilesTool 对齐），一次性遍历全量文件，再 fuzzy 匹配。
-pub fn search_files(cwd: &str, query: &str) -> Vec<FileCandidate> {
-    if query.is_empty() {
-        return Vec::new();
-    }
-
-    let base = Path::new(cwd);
-    let matcher = SkimMatcherV2::default();
-
-    // 解析目录部分和文件名部分
-    let (dir_part, file_part): (String, &str) = if let Some(slash_pos) = query.rfind('/') {
-        (query[..=slash_pos].to_string(), &query[slash_pos + 1..])
-    } else {
-        (String::new(), query)
+/// 查询当前目录下的条目（跳过隐藏文件，目录优先排序）
+pub fn read_dir_entries(dir: &Path) -> Vec<Entry> {
+    let rd = match std::fs::read_dir(dir) {
+        Ok(rd) => rd,
+        Err(_) => return Vec::new(),
     };
 
-    let walker = WalkDir::new(base)
-        .follow_links(true)
-        .into_iter()
-        .filter_entry(|e| {
-            if e.file_type().is_dir() {
-                let name = e.file_name().to_string_lossy();
-                !should_skip_dir(&name)
-            } else {
-                true
-            }
-        });
-
-    let mut raw: Vec<(String, bool, i64)> = Vec::new();
-
-    for entry in walker {
-        let Ok(entry) = entry else { continue };
-        let Ok(rel) = entry.path().strip_prefix(base) else {
-            continue;
-        };
-        let rel_str = rel.to_string_lossy().replace('\\', "/");
-
-        if rel_str.is_empty() {
-            continue;
-        }
-
-        // 目录前缀过滤
-        if !dir_part.is_empty() && !rel_str.starts_with(&dir_part) {
-            continue;
-        }
-
-        let is_dir = entry.file_type().is_dir();
-        let file_name = rel
-            .file_name()
-            .map(|n| n.to_string_lossy().to_string())
-            .unwrap_or_default();
-
-        let name_score = if file_part.is_empty() {
-            50
-        } else {
-            matcher.fuzzy_match(&file_name, file_part).unwrap_or(0)
-        };
-
-        if name_score <= 0 && !file_part.is_empty() {
-            continue;
-        }
-
-        let path_score = matcher.fuzzy_match(&rel_str, query).unwrap_or(0);
-        let score = name_score * 2 + path_score;
-
-        if score > 0 || file_part.is_empty() {
-            raw.push((rel_str, is_dir, score));
-        }
-    }
-
-    raw.sort_by(|a, b| b.2.cmp(&a.2).then_with(|| a.0.len().cmp(&b.0.len())));
-    raw.truncate(MAX_CANDIDATES);
-
-    raw.into_iter()
-        .map(|(path, is_dir, score)| FileCandidate {
-            display: path.clone(),
-            path,
-            is_dir,
-            score,
+    let mut entries: Vec<Entry> = rd
+        .flatten()
+        .filter(|e| {
+            let name = e.file_name();
+            let name_str = name.to_string_lossy();
+            !name_str.starts_with('.')
         })
-        .collect()
+        .filter_map(|e| {
+            let ft = e.file_type().ok()?;
+            Some(Entry {
+                name: e.file_name(),
+                is_dir: ft.is_dir(),
+                is_symlink: ft.is_symlink(),
+            })
+        })
+        .collect();
+
+    // 目录优先，其次按名字排序
+    entries.sort_by(|a, b| b.is_dir.cmp(&a.is_dir).then_with(|| a.name.cmp(&b.name)));
+
+    entries
 }
 
-/// 从已有候选列表中过滤匹配 query 的结果（纯内存操作，无 IO）
-pub fn filter_candidates(candidates: &[FileCandidate], query: &str) -> Vec<FileCandidate> {
+/// 对条目列表做模糊匹配，返回匹配到的条目引用（保持排序）
+pub fn fuzzy_match_entries<'a>(entries: &'a [Entry], query: &str) -> Vec<&'a Entry> {
+    if query.is_empty() {
+        return entries.iter().collect();
+    }
+
     let matcher = SkimMatcherV2::default();
-    let (dir_part, file_part): (String, &str) = if let Some(slash_pos) = query.rfind('/') {
-        (query[..=slash_pos].to_string(), &query[slash_pos + 1..])
-    } else {
-        (String::new(), query)
-    };
-
-    let mut results: Vec<FileCandidate> = candidates
+    let mut scored: Vec<(&Entry, i64)> = entries
         .iter()
-        .filter_map(|c| {
-            if !dir_part.is_empty() && !c.path.starts_with(&dir_part) {
-                return None;
-            }
-
-            if file_part.is_empty() {
-                return Some(FileCandidate {
-                    score: c.score,
-                    ..c.clone()
-                });
-            }
-
-            let file_name = c.path.rsplit('/').next().unwrap_or(&c.path).to_string();
-            let name_score = matcher.fuzzy_match(&file_name, file_part).unwrap_or(0);
-            let path_score = matcher.fuzzy_match(&c.path, query).unwrap_or(0);
-            let score = name_score * 2 + path_score;
-
+        .filter_map(|e| {
+            let name_str = e.name.to_string_lossy();
+            let score = matcher.fuzzy_match(&name_str, query).unwrap_or(0);
             if score > 0 {
-                Some(FileCandidate { score, ..c.clone() })
+                Some((e, score))
             } else {
                 None
             }
         })
         .collect();
 
-    results.sort_by(|a, b| {
-        b.score
-            .cmp(&a.score)
-            .then_with(|| a.path.len().cmp(&b.path.len()))
+    // score 降序 → 目录优先 → name 长度升序
+    scored.sort_by(|(a, sa), (b, sb)| {
+        sb.cmp(sa)
+            .then_with(|| b.is_dir.cmp(&a.is_dir))
+            .then_with(|| a.name.len().cmp(&b.name.len()))
     });
-    results.truncate(MAX_CANDIDATES);
-    results
+
+    scored.into_iter().map(|(e, _)| e).collect()
+}
+
+/// 解析 @ 后的 query，拆分为目录部分和搜索部分
+/// 返回 (dir_part, query_part)。不处理回退逻辑。
+pub fn parse_at_query(query: &str) -> Option<(String, String)> {
+    if query.is_empty() {
+        return None;
+    }
+    if let Some(slash_pos) = query.rfind('/') {
+        let dir_part = query[..=slash_pos].to_string();
+        let query_part = query[slash_pos + 1..].to_string();
+        Some((dir_part, query_part))
+    } else {
+        Some((String::new(), query.to_string()))
+    }
+}
+
+/// 解析目录路径，不存在时向上回退到最近存在的目录
+/// 返回 (resolved_dir, fallback_query)。
+/// fallback_query 是回退掉的不存在部分，需与 query_part 合并做 fuzzy。
+pub fn resolve_dir(cwd: &Path, dir_part: &str) -> (PathBuf, String) {
+    let mut curr = cwd.join(dir_part);
+    let mut fallback = String::new();
+
+    while !curr.is_dir() {
+        if let Some(name) = curr.file_name() {
+            let name_str = name.to_string_lossy();
+            if fallback.is_empty() {
+                fallback = name_str.to_string();
+            } else {
+                fallback = format!("{}/{}", name_str, fallback);
+            }
+        }
+        if let Some(parent) = curr.parent() {
+            curr = parent.to_path_buf();
+        } else {
+            let cwd_owned = cwd.to_path_buf();
+            if !cwd_owned.is_dir() {
+                return (cwd_owned, fallback);
+            }
+            curr = cwd_owned;
+            break;
+        }
+    }
+
+    (curr, fallback)
 }
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use std::fs;
-
     use tempfile::tempdir;
 
-    use super::*;
-
     #[test]
-    fn test_search_by_name() {
+    fn test_read_dir_entries_basic() {
         let dir = tempdir().unwrap();
         let base = dir.path();
         fs::write(base.join("main.rs"), "").unwrap();
         fs::write(base.join("lib.rs"), "").unwrap();
-        fs::create_dir_all(base.join("src")).unwrap();
-        fs::write(base.join("src/main.rs"), "").unwrap();
+        fs::create_dir(base.join("src")).unwrap();
 
-        let results = search_files(&base.to_string_lossy(), "main");
-        assert!(!results.is_empty(), "应搜索到 main 相关文件");
-        let paths: Vec<&str> = results.iter().map(|r| r.path.as_str()).collect();
-        assert!(paths.iter().any(|p| p.contains("main.rs")));
+        let entries = read_dir_entries(base);
+        let names: Vec<&str> = entries.iter().map(|e| e.name.to_str().unwrap()).collect();
+        assert!(names.contains(&"src"));
+        assert!(names.contains(&"main.rs"));
+        assert!(names.contains(&"lib.rs"));
+        // src 应在 main.rs 前面（is_dir 优先）
+        let src_pos = entries.iter().position(|e| e.name == "src").unwrap();
+        let main_pos = entries.iter().position(|e| e.name == "main.rs").unwrap();
+        assert!(src_pos < main_pos, "目录应排在文件前面");
     }
 
     #[test]
-    fn test_search_empty_query() {
-        let results = search_files("/tmp", "");
-        assert!(results.is_empty(), "空查询应返回空结果");
+    fn test_read_dir_skips_hidden() {
+        let dir = tempdir().unwrap();
+        fs::write(dir.path().join(".gitignore"), "").unwrap();
+        fs::write(dir.path().join("visible.rs"), "").unwrap();
+
+        let entries = read_dir_entries(dir.path());
+        let names: Vec<&str> = entries.iter().map(|e| e.name.to_str().unwrap()).collect();
+        assert!(!names.iter().any(|n| n.starts_with('.')), "应跳过隐藏文件");
+        assert!(names.contains(&"visible.rs"));
     }
 
     #[test]
-    fn test_search_ignores_target() {
+    fn test_fuzzy_match_entries_with_query() {
+        let dir = tempdir().unwrap();
+        fs::write(dir.path().join("main_logic.rs"), "").unwrap();
+        fs::write(dir.path().join("util_test.rs"), "").unwrap();
+        fs::write(dir.path().join("Cargo.toml"), "").unwrap();
+        let entries = read_dir_entries(dir.path());
+
+        let results = fuzzy_match_entries(&entries, "main");
+        assert!(!results.is_empty(), "应匹配到 main_logic.rs");
+        assert!(results.iter().any(|e| e.name == "main_logic.rs"));
+    }
+
+    #[test]
+    fn test_fuzzy_match_entries_empty_query() {
+        let dir = tempdir().unwrap();
+        fs::create_dir(dir.path().join("src")).unwrap();
+        fs::write(dir.path().join("readme.md"), "").unwrap();
+        let entries = read_dir_entries(dir.path());
+
+        let results = fuzzy_match_entries(&entries, "");
+        assert_eq!(results.len(), 2);
+        assert!(results[0].is_dir, "第一个条目应为目录");
+    }
+
+    #[test]
+    fn test_resolve_dir_exact_match() {
         let dir = tempdir().unwrap();
         let base = dir.path();
-        fs::create_dir_all(base.join("target")).unwrap();
-        fs::write(base.join("target/secret.rs"), "").unwrap();
-        fs::write(base.join("visible.rs"), "").unwrap();
+        fs::create_dir_all(base.join("side-projects/git-stats/src")).unwrap();
 
-        let results = search_files(&base.to_string_lossy(), "visible");
-        assert!(results.iter().all(|r| !r.path.contains("target")));
+        let (resolved, fallback) = resolve_dir(base, "side-projects/git-stats/");
+        assert!(resolved.ends_with("side-projects/git-stats"));
+        assert_eq!(fallback, "");
     }
 
     #[test]
-    fn test_search_finds_directory() {
+    fn test_resolve_dir_fallback() {
         let dir = tempdir().unwrap();
         let base = dir.path();
-        fs::create_dir_all(base.join("src")).unwrap();
-        fs::write(base.join("src/main.rs"), "").unwrap();
+        fs::create_dir_all(base.join("side-projects")).unwrap();
 
-        let results = search_files(&base.to_string_lossy(), "src");
-        assert!(
-            results.iter().any(|r| r.path == "src" && r.is_dir),
-            "应搜索到 src 目录"
-        );
+        let (resolved, fallback) = resolve_dir(base, "side-projects/nonex/sr");
+        assert!(resolved.ends_with("side-projects"));
+        assert_eq!(fallback, "nonex/sr");
+    }
+
+    #[test]
+    fn test_resolve_dir_all_nonexistent() {
+        let dir = tempdir().unwrap();
+        let base = dir.path();
+
+        let (resolved, fallback) = resolve_dir(base, "nonex/sub");
+        assert_eq!(resolved, base);
+        assert_eq!(fallback, "nonex/sub");
+    }
+
+    #[test]
+    fn test_parse_at_query_simple() {
+        let (dir_part, query_part) = parse_at_query("side-projects/git-stats/sr").unwrap();
+        assert_eq!(dir_part, "side-projects/git-stats/");
+        assert_eq!(query_part, "sr");
+    }
+
+    #[test]
+    fn test_parse_at_query_no_slash() {
+        let (dir_part, query_part) = parse_at_query("sr").unwrap();
+        assert_eq!(dir_part, "");
+        assert_eq!(query_part, "sr");
+    }
+
+    #[test]
+    fn test_parse_at_query_trailing_slash() {
+        let (dir_part, query_part) = parse_at_query("side-projects/").unwrap();
+        assert_eq!(dir_part, "side-projects/");
+        assert_eq!(query_part, "");
     }
 }
