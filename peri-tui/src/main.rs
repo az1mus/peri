@@ -830,7 +830,6 @@ async fn run_app(
         // 轮询 agent 结果
         let mut agent_updated = false;
         agent_updated |= app.poll_agent();
-        agent_updated |= app.poll_at_mention();
         // 轮询后台事件（MCP OAuth 等）
         let bg_updated = app.poll_background_events();
         // 轮询 panic hook 通知

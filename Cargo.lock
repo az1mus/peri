@@ -3352,7 +3352,6 @@ dependencies = [
  "unicode-segmentation",
  "unicode-width",
  "uuid",
- "walkdir",
 ]
 
 [[package]]

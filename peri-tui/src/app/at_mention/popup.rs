@@ -16,7 +16,30 @@ pub const MAX_VIEWPORT: usize = 10;
 
 /// 渲染 @ 提及文件候选弹窗
 pub fn render_at_mention_popup(f: &mut Frame, state: &AtMentionState, input_area: Rect) {
-    if !state.active || state.candidates.is_empty() {
+    if !state.active {
+        return;
+    }
+
+    // 空目录 / 无匹配时显示占位消息
+    if state.candidates.is_empty() {
+        if let Some(ref msg) = state.empty_message {
+            let popup_height = 3u16; // 内容 1 行 + 边框上下
+            let y = input_area.y.saturating_sub(popup_height);
+            let popup_area = Rect {
+                x: input_area.x,
+                y,
+                width: input_area.width.min(30), // 占位消息窄即可
+                height: popup_height,
+            };
+            let inner = BorderedPanel::new(Span::styled("", Style::default()))
+                .border_style(Style::default().fg(theme::BORDER))
+                .render(f, popup_area);
+            let text = Span::styled(
+                msg.as_str(),
+                Style::default().fg(theme::TEXT).add_modifier(Modifier::DIM),
+            );
+            f.render_widget(Paragraph::new(text), inner);
+        }
         return;
     }
 
