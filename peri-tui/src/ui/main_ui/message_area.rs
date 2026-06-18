@@ -3,7 +3,7 @@ use ratatui::{
     layout::Rect,
     style::{Modifier, Style},
     text::{Line, Span, Text},
-    widgets::{Paragraph, ScrollbarState, Wrap},
+    widgets::{Paragraph, Wrap},
     Frame,
 };
 
@@ -163,11 +163,21 @@ pub(crate) fn render_messages(
 
     // 滚动条
     if max_scroll > 0 {
-        let mut scrollbar_state =
-            ScrollbarState::new(max_scroll as usize).position(offset as usize);
-        let scrollbar =
-            peri_widgets::unified_vertical_scrollbar().style(Style::default().fg(theme::MUTED));
-        f.render_stateful_widget(scrollbar, inner, &mut scrollbar_state);
+        let bar_area = Rect {
+            x: inner.right().saturating_sub(1),
+            y: inner.y,
+            width: 1,
+            height: inner.height,
+        };
+        peri_widgets::render_vertical_scrollbar(
+            f,
+            bar_area,
+            offset,
+            max_scroll,
+            Style::default().fg(theme::MUTED),
+            None,  // max_thumb_len
+            false, // show_arrows: 箭头由下面手动渲染
+        );
 
         // 滚动到底按钮（当用户滚离底部时显示）
         if offset < max_scroll {

@@ -16,6 +16,7 @@ use ratatui::{
 
 #[cfg(target_os = "windows")]
 use crate::app::textarea_cursor_pos;
+
 use crate::{app::App, ui::theme};
 
 pub fn render(f: &mut Frame, app: &mut App) {
@@ -270,10 +271,30 @@ fn render_session_column(f: &mut Frame, app: &mut App, area: Rect) {
         .map(|b| b.inner(chunks[5]))
         .unwrap_or(chunks[5]);
 
+    // macOS/Linux：cursor_at_end 残影修复——扫描 textarea 渲染区域内
+    // 所有 REVERSED 空格，用 bg=TEXT（白色背景）替换 REVERSED 以达到
+    // 相同视觉效果（光标块），同时避免 REVERSED 跨帧残留。
+    // 原始 REVERSED 空格 = 白色背景块；设 bg=TEXT 完全等效且高度自然。
+    // 详见 spec/issues/2026-06-17-main-textarea-cursor-invisible-long-line.md。
+    #[cfg(not(target_os = "windows"))]
+    if app.focused {
+        let buf = f.buffer_mut();
+        for y in inner.y..inner.bottom() {
+            for x in inner.x..inner.right() {
+                if let Some(cell) = buf.cell_mut((x, y)) {
+                    if cell.symbol() == " " && cell.modifier.contains(Modifier::REVERSED) {
+                        cell.modifier.remove(Modifier::REVERSED);
+                        cell.bg = theme::TEXT;
+                    }
+                }
+            }
+        }
+    }
+
     // Windows：将终端光标定位到输入框光标处，使 IME 合成窗口跟随输入位置
     // 仅在聚焦时设置（失焦时终端光标由 ratatui 自动隐藏）
     // macOS/Linux 不启用——保留 tui-textarea 默认 REVERSED buffer 光标，
-    // 避免 textarea_cursor_pos 推断公式与 sticky scroll 不一致导致长行行尾光标不可见。
+    // cursor_at_end 残影由渲染后处理修复。
     #[cfg(target_os = "windows")]
     if app.focused {
         if let Some((cx, cy)) = textarea_cursor_pos(&app.session_mgr.current().ui.textarea, inner) {
