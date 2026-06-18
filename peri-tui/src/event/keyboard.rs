@@ -159,24 +159,21 @@ pub fn handle_key_event(
     normal_keys::handle_normal_keys(app, input)
 }
 
-/// 检测 textarea 中 @ 提及模式，更新状态并触发异步搜索
-/// 缓存命中时立即更新，否则 spawn 后台任务避免阻塞 UI 线程
+/// 检测 textarea 中 @ 提及模式，更新状态并同步刷新候选
 pub(super) fn update_at_mention_detection(app: &mut App) {
     let textarea = &app.session_mgr.current_mut().ui.textarea;
     let text = textarea.lines().join("\n");
     let (row, col) = textarea.cursor();
-    // 将 (row, col) 转为字节偏移
     let mut pos = 0usize;
     for (i, line) in textarea.lines().iter().enumerate() {
         if i == row {
             pos += line.chars().take(col).map(|c| c.len_utf8()).sum::<usize>();
             break;
         }
-        pos += line.len() + 1; // +1 for \n
+        pos += line.len() + 1;
     }
 
     let at = &mut app.session_mgr.current_mut().ui.at_mention;
-
     at.ensure_cwd(app.services.cwd.clone());
 
     if let Some((query, start)) = crate::app::AtMentionState::detect(&text, pos) {
@@ -184,20 +181,8 @@ pub(super) fn update_at_mention_detection(app: &mut App) {
             return; // 未变化
         }
         at.activate(query.clone(), start);
-
-        // 尝试从缓存获取结果（零 IO，立即更新）
-        if let Some(cached) = at.try_filter_from_cache(&query) {
-            at.update_candidates(cached);
-            return;
-        }
-
-        // 节流：距离上次搜索不到 200ms 时，保留旧结果不搜索
-        if !at.should_search_now() && !at.candidates.is_empty() {
-            return;
-        }
-
-        // 搜索线程处理，不阻塞 UI
-        at.start_search(query);
+        // 同步刷新候选列表
+        at.refresh_candidates();
     } else if at.active {
         at.close();
     }
@@ -245,24 +230,24 @@ pub(super) fn update_slash_hint_detection(app: &mut App) {
 /// 将选中的 @ 提及路径注入 textarea
 pub(super) fn inject_at_mention_path(app: &mut App) {
     let at = &app.session_mgr.current_mut().ui.at_mention;
-    let candidate = match at.selected_candidate() {
-        Some(c) => c.clone(),
+    let path = match at.selected_path() {
+        Some(p) => p,
         None => return,
     };
+    let is_dir = at.selected_candidate().is_some_and(|e| e.is_dir);
     let query_start = at.query_start;
     let query_len = at.query.len();
 
     let textarea = &app.session_mgr.current_mut().ui.textarea;
     let full_text: String = textarea.lines().join("\n");
 
-    let needs_quotes = candidate.path.contains(' ');
+    let needs_quotes = path.contains(' ');
     let replacement = if needs_quotes {
-        format!("@\"{}\"", candidate.path)
+        format!("@\"{}\"", path)
     } else {
-        format!("@{}", candidate.path)
+        format!("@{}", path)
     };
 
-    // 替换从 query_start 到 query_start + 1(@) + query_len
     let mut new_text = String::with_capacity(full_text.len() + replacement.len());
     new_text.push_str(&full_text[..query_start]);
     new_text.push_str(&replacement);
@@ -270,8 +255,6 @@ pub(super) fn inject_at_mention_path(app: &mut App) {
     if after_end < full_text.len() {
         new_text.push_str(&full_text[after_end..]);
     }
-
-    let is_dir = candidate.is_dir;
 
     let mut new_ta = crate::app::build_textarea(false);
     new_ta.insert_str(&new_text);

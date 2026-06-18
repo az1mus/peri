@@ -50,7 +50,7 @@ pub fn render_at_mention_popup(f: &mut Frame, state: &AtMentionState, input_area
             let is_selected = global_idx == state.selected;
             let icon = if cand.is_dir { "/" } else { " " };
 
-            let display = truncate_middle(&cand.display, path_max_width);
+            let display = truncate_middle(&cand.name.to_string_lossy(), path_max_width);
 
             let prefix = if is_selected { "❯ " } else { "  " };
             let style = if is_selected {
