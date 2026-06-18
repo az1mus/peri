@@ -8,6 +8,7 @@ mod sticky_header;
 
 pub(crate) use message_area::highlight_line_spans;
 use ratatui::{
+    buffer::CellDiffOption,
     layout::{Constraint, Direction, Layout, Rect},
     style::{Modifier, Style},
     widgets::{Padding, Paragraph},
@@ -276,6 +277,13 @@ fn render_session_column(f: &mut Frame, app: &mut App, area: Rect) {
     // 相同视觉效果（光标块），同时避免 REVERSED 跨帧残留。
     // 原始 REVERSED 空格 = 白色背景块；设 bg=TEXT 完全等效且高度自然。
     // 详见 spec/issues/2026-06-17-main-textarea-cursor-invisible-long-line.md。
+    //
+    // [TRAP] CJK 删除残影：删除 CJK wide char 时，wide char 的 trailing cell
+    // 在 ratatui buffer 中保持 EMPTY（None），Paragraph 不覆盖；两帧之间该 cell
+    // 状态相同（None, fg=TEXT, bg=Reset），ratatui diff 检测无变化不输出更新，
+    // 但 VSCode xterm.js 等终端保留 wide char trailing 视觉状态（前一帧像素
+    // 或 bg 颜色残留）→ 用户看到"白色块"残影。修复：对 inner 区域所有 cell
+    // 设置 AlwaysUpdate，每帧强制重发整个 textarea 区域，确保终端状态严格同步。
     #[cfg(not(target_os = "windows"))]
     if app.focused {
         let buf = f.buffer_mut();
@@ -286,6 +294,7 @@ fn render_session_column(f: &mut Frame, app: &mut App, area: Rect) {
                         cell.modifier.remove(Modifier::REVERSED);
                         cell.bg = theme::TEXT;
                     }
+                    cell.set_diff_option(CellDiffOption::AlwaysUpdate);
                 }
             }
         }
