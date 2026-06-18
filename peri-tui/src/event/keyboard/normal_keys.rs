@@ -73,24 +73,25 @@ pub(super) fn handle_normal_keys(app: &mut App, input: Input) -> anyhow::Result<
         Input { key: Key::Down, .. } => handle_down(app),
 
         // Ctrl+V: try pasting clipboard image first, fallback to text paste
+        // Loading 时同样允许——粘贴的文本/图片会进入 textarea / pending_attachments，
+        // 后续 Enter 把消息 push 到 pending_messages 队列。
         Input {
             key: Key::Char('v'),
             ctrl: true,
             ..
-        } if !app.session_mgr.current_mut().ui.loading => handle_ctrl_v(app),
+        } => handle_ctrl_v(app),
 
         // Tab: @ 提及补全 > hint overlay candidate navigation and completion
         Input {
             key: Key::Tab,
             shift: false,
             ..
-        } if !app.session_mgr.current_mut().ui.loading => handle_tab(app),
+        } => handle_tab(app),
 
         // Enter with @ mention active and candidates: inject selected path
         Input {
             key: Key::Enter, ..
-        } if !app.session_mgr.current_mut().ui.loading
-            && app.session_mgr.current_mut().ui.at_mention.active
+        } if app.session_mgr.current_mut().ui.at_mention.active
             && !app
                 .session_mgr
                 .current_mut()
@@ -105,7 +106,7 @@ pub(super) fn handle_normal_keys(app: &mut App, input: Input) -> anyhow::Result<
         // Enter with hints available: confirm selection (defaults to first if none selected)
         Input {
             key: Key::Enter, ..
-        } if !app.session_mgr.current_mut().ui.loading && app.hint_candidates_count() > 0 => {
+        } if app.hint_candidates_count() > 0 => {
             if app.session_mgr.current_mut().ui.hint_cursor.is_none() {
                 app.session_mgr.current_mut().ui.hint_cursor = Some(0);
             }
@@ -272,11 +273,10 @@ pub(super) fn handle_normal_keys(app: &mut App, input: Input) -> anyhow::Result<
             // 任意输入清除 prediction
             app.session_mgr.current_mut().ui.prediction = None;
             // When input changes: reset cursor (don't pre-select; wait for user to press Tab/Up/Down)
-            if !app.session_mgr.current_mut().ui.loading {
-                app.session_mgr.current_mut().ui.hint_cursor = None;
-                update_at_mention_detection(app);
-                update_slash_hint_detection(app);
-            }
+            // Loading 时也需更新——用户在 queue 下一条消息时同样期望 slash hint / @mention 弹窗。
+            app.session_mgr.current_mut().ui.hint_cursor = None;
+            update_at_mention_detection(app);
+            update_slash_hint_detection(app);
         }
         _ => {
             // Any other key cancels quit-pending state (Ctrl+C double-tap)
@@ -333,11 +333,9 @@ fn handle_ctrl_c(app: &mut App) -> Option<Action> {
 
 fn handle_up(app: &mut App) {
     let hint_count = app.hint_candidates_count();
-    if app.session_mgr.current_mut().ui.at_mention.active
-        && !app.session_mgr.current_mut().ui.loading
-    {
+    if app.session_mgr.current_mut().ui.at_mention.active {
         app.session_mgr.current_mut().ui.at_mention.move_up();
-    } else if hint_count > 0 && !app.session_mgr.current_mut().ui.loading {
+    } else if hint_count > 0 {
         let cur = app.session_mgr.current_mut().ui.hint_cursor.unwrap_or(0);
         app.session_mgr.current_mut().ui.hint_cursor = if cur == 0 {
             Some(hint_count - 1)
@@ -361,11 +359,9 @@ fn handle_up(app: &mut App) {
 
 fn handle_down(app: &mut App) {
     let hint_count = app.hint_candidates_count();
-    if app.session_mgr.current_mut().ui.at_mention.active
-        && !app.session_mgr.current_mut().ui.loading
-    {
+    if app.session_mgr.current_mut().ui.at_mention.active {
         app.session_mgr.current_mut().ui.at_mention.move_down();
-    } else if hint_count > 0 && !app.session_mgr.current_mut().ui.loading {
+    } else if hint_count > 0 {
         let cur = app
             .session_mgr
             .current_mut()
