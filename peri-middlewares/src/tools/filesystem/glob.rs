@@ -154,6 +154,13 @@ impl BaseTool for GlobFilesTool {
             .as_str()
             .ok_or("The 'pattern' parameter is required for the Glob tool.")?;
 
+        // Pattern syntax pre-validation: makes B3 suggester reliable.
+        // Without this, glob::Pattern::new silently returns false inside glob_match,
+        // and the LLM gets "No files found." instead of a syntax error.
+        if let Err(e) = glob::Pattern::new(pattern) {
+            return Err(format!("Error: Pattern syntax error in {pattern:?}: {e}").into());
+        }
+
         // Pattern soft-warn — record the hint; we still execute so the LLM can see the output size and self-correct.
         let pattern_warn = soft_warn_pattern(pattern);
 

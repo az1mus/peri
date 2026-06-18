@@ -17,6 +17,7 @@ use crate::{
         state::State,
     },
     error::{AgentError, AgentResult},
+    error_suggest::{ErrorSuggestRegistry, ToolRegistrySnapshot},
     messages::{message::MessageId, BaseMessage},
     middleware::{chain::MiddlewareChain, r#trait::Middleware},
     tools::BaseTool,
@@ -48,6 +49,10 @@ where
     pub(crate) shared_tools: Option<Arc<parking_lot::RwLock<HashMap<String, Arc<dyn BaseTool>>>>>,
     /// micro_compact 配置（None = 不在循环内自动压缩）
     pub(crate) compact_config: Option<crate::agent::compact::CompactConfig>,
+    /// 错误感知建议注册表（None = 不启用错误建议注入）
+    pub(crate) error_suggest_registry: Option<Arc<ErrorSuggestRegistry>>,
+    /// 工具注册表快照（工具名 + subagent 类型），供 suggester 查询
+    pub(crate) tool_registry_snapshot: Arc<ToolRegistrySnapshot>,
 }
 
 impl<L: ReactLLM, S: State> ReActAgent<L, S> {
@@ -64,6 +69,8 @@ impl<L: ReactLLM, S: State> ReActAgent<L, S> {
             tool_filter: None,
             shared_tools: None,
             compact_config: None,
+            error_suggest_registry: None,
+            tool_registry_snapshot: Arc::new(ToolRegistrySnapshot::default()),
         }
     }
 
@@ -146,6 +153,18 @@ impl<L: ReactLLM, S: State> ReActAgent<L, S> {
     /// 超过 warning 阈值时自动执行 micro_compact（压缩旧工具结果）。
     pub fn with_compact_config(mut self, config: crate::agent::compact::CompactConfig) -> Self {
         self.compact_config = Some(config);
+        self
+    }
+
+    /// 设置错误感知建议注册表
+    pub fn with_error_suggest_registry(mut self, registry: Arc<ErrorSuggestRegistry>) -> Self {
+        self.error_suggest_registry = Some(registry);
+        self
+    }
+
+    /// 设置工具注册表快照
+    pub fn with_tool_registry_snapshot(mut self, snapshot: ToolRegistrySnapshot) -> Self {
+        self.tool_registry_snapshot = Arc::new(snapshot);
         self
     }
 

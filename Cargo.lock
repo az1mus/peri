@@ -3236,6 +3236,7 @@ dependencies = [
  "chrono",
  "dirs-next",
  "futures",
+ "fuzzy-matcher",
  "libc",
  "parking_lot",
  "rand 0.10.1",

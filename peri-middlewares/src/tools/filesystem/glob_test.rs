@@ -259,3 +259,20 @@
             "不应扫到 worktree 副本里的 extra.rs: {result}"
         );
     }
+
+    #[tokio::test]
+    async fn test_glob_invalid_pattern_returns_error() {
+        let tool = GlobFilesTool::new(".");
+        // 不合法的 glob pattern：[ 不闭合
+        let input = serde_json::json!({
+            "pattern": "[unclosed",
+            "path": ".",
+        });
+        let result = tool.invoke(input).await;
+        assert!(result.is_err(), "语法错误应该返回 Err");
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("Pattern syntax error"),
+            "错误应该提到 Pattern syntax error，实际: {err}"
+        );
+    }

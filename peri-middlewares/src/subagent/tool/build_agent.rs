@@ -139,9 +139,28 @@ impl super::SubAgentTool {
         }
 
         // 9. Register tools
+        // 先收集工具名（filtered_tools 会被 register_tool 消费）
+        let all_tool_names: Vec<String> = filtered_tools
+            .iter()
+            .map(|t| t.name().to_string())
+            .collect();
         for tool in filtered_tools {
             agent_builder = agent_builder.register_tool(tool);
         }
+
+        // 9.5 Error suggestion wiring
+        let agents_dir = std::path::Path::new(cwd).join(".claude").join("agents");
+        let agents_dir_opt = if agents_dir.exists() {
+            Some(agents_dir.as_path())
+        } else {
+            None
+        };
+        let snapshot =
+            crate::error_suggest::build_tool_registry_snapshot(all_tool_names, agents_dir_opt);
+        let registry = crate::error_suggest::build_default_registry();
+        agent_builder = agent_builder
+            .with_tool_registry_snapshot(snapshot)
+            .with_error_suggest_registry(registry);
 
         // 10. Event handler
         if setup_event_handler {

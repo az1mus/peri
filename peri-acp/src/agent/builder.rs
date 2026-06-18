@@ -552,6 +552,23 @@ pub fn build_agent(
         .with_event_handler(Arc::clone(&event_handler))
         .register_tool(Box::new(ask_user_tool));
 
+    // 错误感知建议：从 shared_tools 构造 snapshot（所有工具都已注册）
+    let all_tool_names: Vec<String> = shared_tools.read().keys().cloned().collect();
+    let agents_dir = std::path::Path::new(&cwd).join(".claude").join("agents");
+    let agents_dir_opt = if agents_dir.exists() {
+        Some(agents_dir.as_path())
+    } else {
+        None
+    };
+    let snapshot = peri_middlewares::error_suggest::build_tool_registry_snapshot(
+        all_tool_names,
+        agents_dir_opt,
+    );
+    let registry = peri_middlewares::error_suggest::build_default_registry();
+    let executor = executor
+        .with_tool_registry_snapshot(snapshot)
+        .with_error_suggest_registry(registry);
+
     // LSP 中间件（条件注册，当有 LSP 服务器配置时）
     let executor = if !lsp_servers.is_empty() {
         let lsp_config = peri_lsp::config::LspConfigFile {

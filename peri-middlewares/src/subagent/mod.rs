@@ -7,7 +7,9 @@ pub mod spawner;
 mod tool;
 pub use agent_result::AgentResultTool;
 pub use background::{BackgroundTask, BackgroundTaskRegistry, BackgroundTaskStatus};
-pub use built_in_agents::{get_built_in_agent, list_built_in_agents, BuiltInAgent};
+pub use built_in_agents::{
+    built_in_agent_types, get_built_in_agent, list_built_in_agents, BuiltInAgent,
+};
 pub use fork::build_prediction_directive;
 use parking_lot::RwLock;
 pub use skill_preload::SkillPreloadMiddleware;
