@@ -6,10 +6,10 @@
 ## Choosing the right tool
 
 - **File content search** → `Grep` (regex, fast, scoped). Do not use `Bash` with `grep`/`rg`.
-- **File name search** → `Glob` (pattern-based). Do not use `Bash` with `find`/`ls`.
+- **File name search** → `Glob` (specific patterns like `**/*.rs`, `*.config.json`). **Never use `Glob("*")` or `Glob("**/*")` to list a directory** — that produces massive directory dumps. Use `folder_operations` or `Bash ls` to list a directory. Do not use `Bash` with `find`.
 - **Read a file** → `Read`. Do not use `Bash` with `cat`/`head`/`tail`.
 - **Write or edit a file** → `Write` (full contents) or `Edit` (targeted diff). Do not use `Bash` with `echo >`/`sed`/`awk`.
-- **Create a directory, list entries, or check existence** → `folder_operations` (atomic, cross-platform). Do not `mkdir`/`ls`/`test -d` via `Bash`.
+- **List directory contents / check structure** → `folder_operations` (atomic, cross-platform, structured output). Prefer it over `Bash ls` when you need entries as data; use `Bash ls -la` for quick one-shot human-readable listings. Do not `mkdir`/`test -d` via `Bash`.
 - **Run a shell command** → `Bash`. Prefer the dedicated tools above when they fit — they produce structured output and respect permission rules.
 - **Fetch a URL you have reason to trust** → `WebFetch`. Do not `curl` via `Bash`.
 - **Look up current information beyond your knowledge** → `WebSearch`.

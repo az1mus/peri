@@ -32,7 +32,7 @@ Platform behavior:
 
 Output handling:
 - Output exceeding 2000 lines is truncated (head + tail preserved)
-- Output exceeding 100000 bytes is truncated
+- Output exceeding 65000 bytes is truncated
 - Non-zero exit codes are reported
 - Both stdout and stderr are captured"#;
 pub struct BashTool {
@@ -46,7 +46,7 @@ impl BashTool {
 }
 
 /// 输出最大字节数
-const MAX_OUTPUT_CHARS: usize = 100_000;
+const MAX_OUTPUT_CHARS: usize = 65_000;
 /// 输出最大行数（在第 N 行截断后，若还有行数超过上限再截字节）
 const MAX_OUTPUT_LINES: usize = 2_000;
 
