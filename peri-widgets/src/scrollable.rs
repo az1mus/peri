@@ -1,24 +1,118 @@
 use ratatui::{
+    buffer::Buffer,
     layout::Rect,
     style::{Modifier, Style},
     text::{Span, Text},
-    widgets::{Paragraph, Scrollbar, ScrollbarOrientation, ScrollbarState, Wrap},
+    widgets::{Paragraph, Wrap},
     Frame,
 };
 
-/// 全项目统一的垂直滚动条构造器。
+/// 自定义垂直滚动条渲染：用 bg 颜色空格替代 ratatui Scrollbar widget 的
+/// █ 字符。█ 在部分终端有行间缝隙；空格 + bg 颜色形成连续色块。
 ///
-/// 使用 `█` (FULL BLOCK) 作为 thumb、不渲染 track/begin/end，
-/// 避免 `║` 等 box-drawing 字符在部分终端中出现竖排空隙（分段）
-/// 以及 begin/end 三角符号在不同终端中高度不一致的问题。
-pub fn unified_vertical_scrollbar() -> Scrollbar<'static> {
-    Scrollbar::new(ScrollbarOrientation::VerticalRight)
-        .begin_symbol(None)
-        .end_symbol(None)
-        .track_symbol(None)
-}
+/// 返回 (up_btn_area, down_btn_area) 供鼠标交互。
+pub fn render_vertical_scrollbar(
+    f: &mut Frame,
+    bar_area: Rect,
+    offset: u16,
+    max_scroll: u16,
+    style: Style,
+    max_thumb_len: Option<u16>,
+    show_arrows: bool,
+) -> (Option<Rect>, Option<Rect>) {
+    let has_up = show_arrows && offset > 0;
+    let has_down = show_arrows && offset < max_scroll && bar_area.height > 1;
+    let arrow_slots: u16 = (has_up as u16) + (has_down as u16);
 
-/// 滚动条几何信息，供事件循环进行鼠标交互
+    let track_start = if has_up { bar_area.y + 1 } else { bar_area.y };
+    let track_height = bar_area.height.saturating_sub(arrow_slots);
+    let visible_height = track_height; // track 即 thumb 的活动范围
+
+    // Thumb 尺寸（比例 = visible / content）
+    let thumb_raw = if track_height > 0 && max_scroll > 0 {
+        let content_height = max_scroll + visible_height;
+        let raw = (track_height as u64 * visible_height as u64) / content_height as u64;
+        (raw as u16).max(1)
+    } else if track_height > 0 {
+        track_height // 内容未溢出，thumb 占满
+    } else {
+        0
+    };
+    let thumb_size = if let Some(max_thumb) = max_thumb_len {
+        thumb_raw.min(max_thumb).max(1)
+    } else {
+        thumb_raw
+    };
+    let thumb_start_offset = if max_scroll > 0 && track_height > thumb_size {
+        let pos =
+            (track_height.saturating_sub(thumb_size) as u64 * offset as u64) / max_scroll as u64;
+        pos as u16
+    } else {
+        0
+    };
+
+    let thumb_bg = style
+        .fg
+        .unwrap_or(ratatui::style::Color::Rgb(153, 153, 153));
+    let buf: &mut Buffer = f.buffer_mut();
+
+    // 渲染 track：空格无 bg（透明）
+    for row in 0..track_height {
+        let y = track_start + row;
+        if let Some(cell) = buf.cell_mut((bar_area.x, y)) {
+            cell.set_symbol(" ");
+        }
+    }
+
+    // 渲染 thumb：空格 + bg 颜色
+    for row in 0..thumb_size {
+        let y = track_start + thumb_start_offset + row;
+        if y < bar_area.bottom() {
+            if let Some(cell) = buf.cell_mut((bar_area.x, y)) {
+                cell.set_symbol(" ");
+                cell.bg = thumb_bg;
+            }
+        }
+    }
+
+    // ▲ 按钮
+    let up_btn_area = if has_up {
+        let btn = Rect {
+            x: bar_area.x,
+            y: bar_area.y,
+            width: 1,
+            height: 1,
+        };
+        let arrow = Paragraph::new(Text::from(Span::styled(
+            "▲",
+            style.add_modifier(Modifier::BOLD),
+        )));
+        f.render_widget(arrow, btn);
+        Some(btn)
+    } else {
+        None
+    };
+
+    // ▼ 按钮
+    let down_btn_area = if has_down {
+        let btn = Rect {
+            x: bar_area.x,
+            y: bar_area.bottom().saturating_sub(1),
+            width: 1,
+            height: 1,
+        };
+        let arrow = Paragraph::new(Text::from(Span::styled(
+            "▼",
+            style.add_modifier(Modifier::BOLD),
+        )));
+        f.render_widget(arrow, btn);
+        Some(btn)
+    } else {
+        None
+    };
+
+    (up_btn_area, down_btn_area)
+}
 #[derive(Debug, Clone, Copy)]
 pub struct ScrollbarMetrics {
     /// 滚动条列区域（宽 1，面板全高）
@@ -158,52 +252,15 @@ impl<'a> ScrollableArea<'a> {
                 height: area.height,
             };
 
-            let viewport = if let Some(max_thumb) = self.max_thumb_length {
-                visible_height.min(max_thumb)
-            } else {
-                0
-            };
-            let mut scrollbar_state = ScrollbarState::new(max_scroll as usize)
-                .viewport_content_length(viewport as usize)
-                .position(state.offset as usize);
-            let scrollbar = unified_vertical_scrollbar().style(self.scrollbar_style);
-            f.render_stateful_widget(scrollbar, area, &mut scrollbar_state);
-
-            // ▲ 按钮（offset > 0 时显示）
-            let up_btn_area = if state.offset > 0 {
-                let btn = Rect {
-                    x: bar_area.x,
-                    y: bar_area.y,
-                    width: 1,
-                    height: 1,
-                };
-                let arrow = Paragraph::new(Text::from(Span::styled(
-                    "▲",
-                    self.scrollbar_style.add_modifier(Modifier::BOLD),
-                )));
-                f.render_widget(arrow, btn);
-                Some(btn)
-            } else {
-                None
-            };
-
-            // ▼ 按钮（offset < max_scroll 时显示）
-            let down_btn_area = if state.offset < max_scroll && bar_area.height > 1 {
-                let btn = Rect {
-                    x: bar_area.x,
-                    y: bar_area.bottom().saturating_sub(1),
-                    width: 1,
-                    height: 1,
-                };
-                let arrow = Paragraph::new(Text::from(Span::styled(
-                    "▼",
-                    self.scrollbar_style.add_modifier(Modifier::BOLD),
-                )));
-                f.render_widget(arrow, btn);
-                Some(btn)
-            } else {
-                None
-            };
+            let (up_btn_area, down_btn_area) = render_vertical_scrollbar(
+                f,
+                bar_area,
+                state.offset,
+                max_scroll,
+                self.scrollbar_style,
+                self.max_thumb_length,
+                true, // show_arrows
+            );
 
             Some(ScrollbarMetrics {
                 bar_area,

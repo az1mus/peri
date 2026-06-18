@@ -1,6 +1,7 @@
 //! Welcome Card — 空消息时显示品牌 Logo + 功能提示
 
 use ratatui::{
+    buffer::Buffer,
     layout::Rect,
     style::{Modifier, Style},
     text::{Line, Span, Text},
@@ -202,4 +203,23 @@ pub(crate) fn render_welcome(f: &mut Frame, app: &App, area: Rect) {
     let paragraph = Paragraph::new(Text::from(padded_lines));
 
     f.render_widget(paragraph, area);
+
+    // 后处理：将 ASCII Art Logo 中的 █ 字符替换为 bg=ACCENT 的空格，
+    // 消除 █ 在部分终端字体中的行间缝隙，形成连续色块。
+    // 与滚动条的 bg 方案同理：空格 + bg 颜色 = 连续块，无 █ 字符的间隙。
+    if !narrow {
+        let buf: &mut Buffer = f.buffer_mut();
+        let accent = theme::ACCENT;
+        for y in area.top()..area.bottom() {
+            for x in area.left()..area.right() {
+                if let Some(cell) = buf.cell_mut((x, y)) {
+                    if cell.symbol() == "█" {
+                        cell.set_symbol(" ");
+                        cell.bg = accent;
+                        cell.modifier.remove(Modifier::BOLD);
+                    }
+                }
+            }
+        }
+    }
 }

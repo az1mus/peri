@@ -26,7 +26,7 @@ pub use form::{FormField, FormState};
 pub use input_field::InputState;
 #[cfg(feature = "markdown")]
 pub use markdown::{DefaultMarkdownTheme, MarkdownTheme, ThemeMarkdownAdapter};
-pub use scrollable::{unified_vertical_scrollbar, ScrollState, ScrollableArea, ScrollbarMetrics};
+pub use scrollable::{render_vertical_scrollbar, ScrollState, ScrollableArea, ScrollbarMetrics};
 pub use spinner::{SpinnerMode, SpinnerState, SpinnerWidget};
 pub use tab_bar::{TabBar, TabState, TabStyle};
 pub use theme::{DarkTheme, Theme};
