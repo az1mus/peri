@@ -7,8 +7,9 @@ mod status_bar;
 mod sticky_header;
 
 pub(crate) use message_area::highlight_line_spans;
+#[cfg(not(target_os = "windows"))]
+use ratatui::buffer::CellDiffOption;
 use ratatui::{
-    buffer::CellDiffOption,
     layout::{Constraint, Direction, Layout, Rect},
     style::{Modifier, Style},
     widgets::{Padding, Paragraph},
