@@ -245,18 +245,20 @@
             .invoke(serde_json::json!({"pattern": "**/*.rs"}))
             .await
             .unwrap();
+        // Windows 绝对路径使用 \ 分隔符，统一规范化为 / 再断言
+        let normalized = result.replace('\\', "/");
         assert!(
-            result.contains("src/main.rs"),
-            "应找到主项目源码: {result}"
+            normalized.contains("src/main.rs"),
+            "应找到主项目源码: {normalized}"
         );
         // 不应扫到 worktree 副本里的文件
         assert!(
-            !result.contains("worktrees"),
-            "不应扫到 worktree 副本路径: {result}"
+            !normalized.contains("worktrees"),
+            "不应扫到 worktree 副本路径: {normalized}"
         );
         assert!(
-            !result.contains("extra.rs"),
-            "不应扫到 worktree 副本里的 extra.rs: {result}"
+            !normalized.contains("extra.rs"),
+            "不应扫到 worktree 副本里的 extra.rs: {normalized}"
         );
     }
 
