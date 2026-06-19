@@ -234,7 +234,7 @@ impl Default for AppConfig {
             providers: Vec::new(),
             skills_dir: None,
             thinking: None,
-            env: Some(HashMap::new()),
+            env: None,
             compact: None,
             language: None,
             persona: None,
