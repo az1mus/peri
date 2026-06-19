@@ -10,9 +10,9 @@ use ratatui::{
 use crate::{
     app::{
         config_panel::{
-            ConfigPanel, ROW_AUTOCOMPACT, ROW_COUNT, ROW_DIFF, ROW_GENERAL_HEADER, ROW_LANGUAGE,
-            ROW_OVERRIDES_HEADER, ROW_PERSONA, ROW_PROACTIVENESS, ROW_SEPARATOR, ROW_STREAMING,
-            ROW_THRESHOLD, ROW_TONE,
+            ConfigPanel, ROW_AUTOCOMPACT, ROW_CACHE_WARNING, ROW_COUNT, ROW_DIFF,
+            ROW_GENERAL_HEADER, ROW_LANGUAGE, ROW_OVERRIDES_HEADER, ROW_PERSONA, ROW_PROACTIVENESS,
+            ROW_SEPARATOR, ROW_STREAMING, ROW_THRESHOLD, ROW_TONE,
         },
         App,
     },
@@ -24,6 +24,7 @@ use unicode_width::UnicodeWidthStr;
 fn field_label_key(row: usize) -> &'static str {
     match row {
         ROW_AUTOCOMPACT => "config-field-autocompact",
+        ROW_CACHE_WARNING => "config-field-cache-warning",
         ROW_THRESHOLD => "config-field-compact-threshold",
         ROW_LANGUAGE => "config-field-language",
         ROW_DIFF => "config-field-diff",
@@ -142,6 +143,45 @@ pub(crate) fn render_config_panel(
                 ]));
                 lines.push(Line::from(Span::styled(
                     format!("      {}", lc.tr("config-desc-autocompact")),
+                    desc_style,
+                )));
+            }
+            ROW_CACHE_WARNING => {
+                let is_active = panel.cursor == row;
+                let label_style = active_or_text(is_active);
+                let active_style = Style::default()
+                    .fg(theme::THINKING)
+                    .add_modifier(Modifier::BOLD);
+                let inactive_style = Style::default().fg(theme::MUTED);
+                let desc_style = Style::default().fg(theme::MUTED);
+
+                let on_span = if panel.buf_show_cache_warning {
+                    Span::styled(format!("[{}]", lc.tr("config-value-on")), active_style)
+                } else {
+                    Span::styled(lc.tr("config-value-on"), inactive_style)
+                };
+                let off_span = if panel.buf_show_cache_warning {
+                    Span::styled(lc.tr("config-value-off"), inactive_style)
+                } else {
+                    Span::styled(format!("[{}]", lc.tr("config-value-off")), active_style)
+                };
+
+                lines.push(Line::from(vec![
+                    Span::styled("  ", Style::default()),
+                    Span::styled(
+                        format!(
+                            "{:<width$}",
+                            lc.tr(field_label_key(row)),
+                            width = label_column_width
+                        ),
+                        label_style,
+                    ),
+                    on_span,
+                    Span::styled("  ", Style::default()),
+                    off_span,
+                ]));
+                lines.push(Line::from(Span::styled(
+                    format!("      {}", lc.tr("config-desc-cache-warning")),
                     desc_style,
                 )));
             }

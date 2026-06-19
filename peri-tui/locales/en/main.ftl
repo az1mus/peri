@@ -203,6 +203,7 @@ config-field-language = Language
 config-field-persona = Persona
 config-field-tone = Tone
 config-field-proactiveness = Proactiveness
+config-field-cache-warning = Cache Warning
 config-field-diff = Inline Diff
 config-value-on = ON
 config-value-off = OFF
@@ -219,6 +220,7 @@ config-desc-language = en, zh-CN, or leave empty for auto
 config-desc-persona = Override system prompt persona (empty = default)
 config-desc-tone = Override system prompt tone (empty = default)
 config-desc-proactiveness = low / medium / high — agent initiative level
+config-desc-cache-warning = (ON/OFF — show low cache hit rate warning in chat)
 config-desc-diff = (ON/OFF — show inline diff for Write/Edit tools)
 config-field-streaming = Streaming Mode
 config-desc-streaming = streaming / block / none — render granularity for LLM output

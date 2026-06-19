@@ -202,6 +202,7 @@ config-field-language = 语言
 config-field-persona = Persona
 config-field-tone = Tone
 config-field-proactiveness = Proactiveness
+config-field-cache-warning = 缓存警告
 config-field-diff = 内联 Diff
 config-value-on = 开
 config-value-off = 关
@@ -218,6 +219,7 @@ config-desc-language = en, zh-CN，或留空为自动
 config-desc-persona = 覆盖系统提示词 persona（留空=默认）
 config-desc-tone = 覆盖系统提示词 tone（留空=默认）
 config-desc-proactiveness = low / medium / high — agent 主动性级别
+config-desc-cache-warning = （开/关 — 在对话中显示缓存命中率过低警告）
 config-desc-diff = （开/关 — 显示 Write/Edit 工具的内联 diff）
 config-field-streaming = 渲染模式
 config-desc-streaming = streaming / block / none — LLM 输出渲染粒度
