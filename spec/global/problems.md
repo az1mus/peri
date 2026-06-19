@@ -1847,7 +1847,24 @@
 ### THREAD_META_COLUMNS
 - [ThreadBrowser 全量 SQLite 查询导致高内存占用](domains/storage.md#issue_2026-06-01-thread-browser-full-table-scan-high-memory) — storage
 
+### buffer 光标
+- [主输入框长行行尾终端光标消失](domains/tui.md#issue_2026-06-17-main-textarea-cursor-invisible-long-line) — tui
+
+### terminal 光标
+- [主输入框长行行尾终端光标消失](domains/tui.md#issue_2026-06-17-main-textarea-cursor-invisible-long-line) — tui
+
+### REVERSED 残影
+- [主输入框长行行尾终端光标消失](domains/tui.md#issue_2026-06-17-main-textarea-cursor-invisible-long-line) — tui
+
+### tui-textarea 光标
+- [主输入框长行行尾终端光标消失](domains/tui.md#issue_2026-06-17-main-textarea-cursor-invisible-long-line) — tui
+
+### IME 候选窗
+- [主输入框长行行尾终端光标消失](domains/tui.md#issue_2026-06-17-main-textarea-cursor-invisible-long-line) — tui
+
 ## 更新记录
+
+- 2026-06-19: 归档 1 个 issue（tui 1），新增 5 个关键词索引
 
 - 2026-06-16: 归档 4 个 issue（tui 3 + storage 1），新增 12 个关键词索引
 - 2026-06-14: 归档 27 个 Fixed/Done issue（本轮第二次大批量归档）

@@ -65,6 +65,7 @@ pub(crate) async fn handle_final_answer<L: ReactLLM, S: State>(
     all_tool_calls: Vec<(ToolCall, ToolResult)>,
     snapshot_anchor: &mut MessageId,
     step: usize,
+    turn_start: std::time::Instant,
 ) -> AgentResult<AgentOutput> {
     let answer = reasoning
         .final_answer
@@ -141,25 +142,28 @@ pub(crate) async fn handle_final_answer<L: ReactLLM, S: State>(
 
         // threshold.memory：每个阈值每轮只报一次
         if let Some(rss) = rss_mb {
-            let reported_100 = state.get_context("mem_reported_100").is_some();
-            let reported_200 = state.get_context("mem_reported_200").is_some();
-            if rss >= 100 && !reported_100 {
+            let rate = crate::metrics::total_system_memory_mb()
+                .map(|total| rss as f64 / total as f64)
+                .unwrap_or(0.0);
+            let reported_150 = state.get_context("mem_reported_150").is_some();
+            let reported_250 = state.get_context("mem_reported_250").is_some();
+            if rss >= 150 && !reported_150 {
                 crate::metrics::emit(
                     "threshold.memory",
-                    serde_json::json!({"rss_mb": rss, "level": 100}),
+                    serde_json::json!({"rss_mb": rss, "level": 100, "rate": rate}),
                     sid.as_deref(),
                     rid.as_deref(),
                 );
-                state.set_context("mem_reported_100", "1");
+                state.set_context("mem_reported_150", "1");
             }
-            if rss >= 200 && !reported_200 {
+            if rss >= 250 && !reported_250 {
                 crate::metrics::emit(
                     "threshold.memory",
-                    serde_json::json!({"rss_mb": rss, "level": 200}),
+                    serde_json::json!({"rss_mb": rss, "level": 200, "rate": rate}),
                     sid.as_deref(),
                     rid.as_deref(),
                 );
-                state.set_context("mem_reported_200", "1");
+                state.set_context("mem_reported_250", "1");
             }
         }
 
@@ -171,7 +175,7 @@ pub(crate) async fn handle_final_answer<L: ReactLLM, S: State>(
                 "iterations": state.current_step(),
                 "total_input_tokens": state.token_tracker().total_input_tokens,
                 "total_output_tokens": state.token_tracker().total_output_tokens,
-                "duration_secs": 0u64,
+                "duration_secs": turn_start.elapsed().as_secs(),
             }),
             sid.as_deref(),
             rid.as_deref(),

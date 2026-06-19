@@ -106,7 +106,7 @@ impl ThinkingConfig {
 pub struct BetasConfig {}
 
 /// 应用配置
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppConfig {
     /// 当前激活的模型别名（"opus" | "sonnet" | "haiku"）
     #[serde(default = "default_alias")]
@@ -152,12 +152,19 @@ pub struct AppConfig {
     /// 流式渲染模式：streaming / block / none
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub streaming_mode: Option<String>,
+    /// 是否在消息流中显示缓存命中率过低警告
+    #[serde(default = "default_show_cache_warning")]
+    pub show_cache_warning: bool,
     /// Beta 功能开关
     #[serde(default)]
     pub betas: BetasConfig,
     /// 保留未知字段
     #[serde(flatten)]
     pub extra: Map<String, Value>,
+}
+
+fn default_show_cache_warning() -> bool {
+    true
 }
 
 impl AppConfig {
@@ -212,8 +219,35 @@ impl AppConfig {
         if workspace.streaming_mode.is_some() {
             self.streaming_mode = workspace.streaming_mode;
         }
+        // show_cache_warning: bool 直接覆盖
+        self.show_cache_warning = workspace.show_cache_warning;
         // 保留未知字段
         self.extra.extend(workspace.extra);
+    }
+}
+
+impl Default for AppConfig {
+    fn default() -> Self {
+        Self {
+            active_alias: String::new(),
+            active_provider_id: String::new(),
+            providers: Vec::new(),
+            skills_dir: None,
+            thinking: None,
+            env: None,
+            compact: None,
+            language: None,
+            persona: None,
+            tone: None,
+            proactiveness: None,
+            context_1m: None,
+            claude_md_excludes: None,
+            diff_enabled: false,
+            streaming_mode: None,
+            show_cache_warning: true,
+            betas: BetasConfig::default(),
+            extra: serde_json::Map::new(),
+        }
     }
 }
 

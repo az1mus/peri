@@ -304,6 +304,7 @@ session/new → frozen_date → frozen_claude_md + frozen_claude_local_md
 - **字符串截断必须用字符级操作**：`s.chars().take(N).collect()` 或 `s.char_indices().nth(N)`，`&s[..N]` 对 CJK 会 panic
 - 终端列宽用 `unicode-width` crate（CJK 占 2 列）
 - **终端 UI 鼠标坐标转换**：鼠标事件坐标是显示列（unicode-width），光标位置是字符索引，需逐字符累加转换。（详见 spec/global/domains/tui.md#issue_2026-05-12-textarea-mouse-click-cursor-misposition-cjk）
+- **终端光标 vs Buffer 光标 [TRAP]**：禁用 tui-textarea 默认 REVERSED buffer 级光标改用终端光标（`set_cursor_position`）时，必须有准确的 textarea 水平滚动偏移读数。tui-textarea-2 的 `Viewport::scroll_top()` 是 `pub(crate)`，外部无法读取真实 `top_col`。推断公式在 sticky scroll 场景下（光标在视口中部移动、top_col 不变）算错，导致光标被钉在视口最右列，终端模拟器在最右列裁剪光标→完全消失。buffer 后处理方案（扫描 REVERSED 空格，移除 REVERSED + 设 bg=TEXT）可在不修改上游的情况下等效还原光标。未来恢复 IME 终端光标支持时，必须用方案 A（UI state 跨帧 sticky last_scroll_col + next_scroll_top 逻辑），禁止复刻 PR #34 的简单推断公式。（详见 spec/global/domains/tui.md#issue_2026-06-17-main-textarea-cursor-invisible-long-line）
 - **快捷键设计**：禁止 `Shift+字母`（编辑态等同大写输入）。全局用 `Ctrl+字母`，面板用方向键/Space/Enter/Esc。
 - **快捷键跨平台兼容 [TRAP]**：`Alt+Enter`/`Alt+M` 在 Windows 终端被截获，新增快捷键必须优先用 `Ctrl+字母`，避免 `Alt` 修饰键。
 - **面板系统**：`PanelManager` + `PanelComponent` trait，新增面板只需定义变体 + 实现 trait。面板内禁止渲染提示行，由 `status_bar_hints()` 统一描述。

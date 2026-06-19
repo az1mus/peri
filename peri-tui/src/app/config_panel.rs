@@ -15,20 +15,22 @@ use crate::config::PeriConfig;
 
 pub const ROW_GENERAL_HEADER: usize = 0;
 pub const ROW_AUTOCOMPACT: usize = 1;
-pub const ROW_THRESHOLD: usize = 2;
-pub const ROW_LANGUAGE: usize = 3;
-pub const ROW_DIFF: usize = 4;
-pub const ROW_STREAMING: usize = 5;
-pub const ROW_PROACTIVENESS: usize = 6;
-pub const ROW_SEPARATOR: usize = 7;
-pub const ROW_OVERRIDES_HEADER: usize = 8;
-pub const ROW_PERSONA: usize = 9;
-pub const ROW_TONE: usize = 10;
-pub const ROW_COUNT: usize = 11;
+pub const ROW_CACHE_WARNING: usize = 2;
+pub const ROW_THRESHOLD: usize = 3;
+pub const ROW_LANGUAGE: usize = 4;
+pub const ROW_DIFF: usize = 5;
+pub const ROW_STREAMING: usize = 6;
+pub const ROW_PROACTIVENESS: usize = 7;
+pub const ROW_SEPARATOR: usize = 8;
+pub const ROW_OVERRIDES_HEADER: usize = 9;
+pub const ROW_PERSONA: usize = 10;
+pub const ROW_TONE: usize = 11;
+pub const ROW_COUNT: usize = 12;
 
 fn next_editable_row(current: usize, reverse: bool) -> usize {
     let editable: &[usize] = &[
         ROW_AUTOCOMPACT,
+        ROW_CACHE_WARNING,
         ROW_THRESHOLD,
         ROW_LANGUAGE,
         ROW_DIFF,
@@ -63,22 +65,24 @@ const SCREEN_LAYOUT: &[usize] = &[
     ROW_GENERAL_HEADER,   // screen 0
     ROW_AUTOCOMPACT,      // screen 1: value
     ROW_AUTOCOMPACT,      // screen 2: desc
-    ROW_THRESHOLD,        // screen 3: value
-    ROW_THRESHOLD,        // screen 4: desc
-    ROW_LANGUAGE,         // screen 5: value
-    ROW_LANGUAGE,         // screen 6: desc
-    ROW_DIFF,             // screen 7: value
-    ROW_DIFF,             // screen 8: desc
-    ROW_STREAMING,        // screen 9: value
-    ROW_STREAMING,        // screen 10: desc
-    ROW_PROACTIVENESS,    // screen 11: value
-    ROW_PROACTIVENESS,    // screen 12: desc
-    ROW_SEPARATOR,        // screen 13
-    ROW_OVERRIDES_HEADER, // screen 14
-    ROW_PERSONA,          // screen 15: value
-    ROW_PERSONA,          // screen 16: desc
-    ROW_TONE,             // screen 17: value
-    ROW_TONE,             // screen 18: desc
+    ROW_CACHE_WARNING,    // screen 3: value
+    ROW_CACHE_WARNING,    // screen 4: desc
+    ROW_THRESHOLD,        // screen 5: value
+    ROW_THRESHOLD,        // screen 6: desc
+    ROW_LANGUAGE,         // screen 7: value
+    ROW_LANGUAGE,         // screen 8: desc
+    ROW_DIFF,             // screen 9: value
+    ROW_DIFF,             // screen 10: desc
+    ROW_STREAMING,        // screen 11: value
+    ROW_STREAMING,        // screen 12: desc
+    ROW_PROACTIVENESS,    // screen 13: value
+    ROW_PROACTIVENESS,    // screen 14: desc
+    ROW_SEPARATOR,        // screen 15
+    ROW_OVERRIDES_HEADER, // screen 16
+    ROW_PERSONA,          // screen 17: value
+    ROW_PERSONA,          // screen 18: desc
+    ROW_TONE,             // screen 19: value
+    ROW_TONE,             // screen 20: desc
 ];
 
 fn screen_to_logical_row(screen_line: usize) -> Option<usize> {
@@ -103,6 +107,7 @@ pub struct ConfigPanel {
     pub cursor: usize,
     // 编辑缓冲区
     pub buf_autocompact: bool,
+    pub buf_show_cache_warning: bool,
     pub field_threshold: FieldTextarea,
     pub buf_language: String, // "" = auto, "en", "zh-CN"
     pub field_persona: FieldTextarea,
@@ -128,6 +133,8 @@ impl ConfigPanel {
             .unwrap_or_else(|| "medium".to_string());
         let diff_enabled = cfg.config.diff_enabled;
 
+        let show_cache_warning = cfg.config.show_cache_warning;
+
         let mut field_threshold = FieldTextarea::single_line();
         field_threshold.set_value(&threshold);
 
@@ -140,6 +147,7 @@ impl ConfigPanel {
         Self {
             cursor: ROW_AUTOCOMPACT,
             buf_autocompact: autocompact,
+            buf_show_cache_warning: show_cache_warning,
             field_threshold,
             buf_language: cfg.config.language.clone().unwrap_or_default(),
             field_persona,
@@ -164,6 +172,10 @@ impl ConfigPanel {
 
     pub fn cycle_autocompact(&mut self) {
         self.buf_autocompact = !self.buf_autocompact;
+    }
+
+    pub fn cycle_cache_warning(&mut self) {
+        self.buf_show_cache_warning = !self.buf_show_cache_warning;
     }
 
     pub fn cycle_proactiveness(&mut self) {
@@ -296,6 +308,9 @@ impl ConfigPanel {
             Some(self.buf_streaming.clone())
         };
 
+        // cache warning
+        cfg.config.show_cache_warning = self.buf_show_cache_warning;
+
         Ok(())
     }
 
@@ -354,10 +369,11 @@ impl PanelComponent for ConfigPanel {
                 ..
             } => {
                 match self.cursor {
-                    ROW_AUTOCOMPACT | ROW_LANGUAGE | ROW_PROACTIVENESS | ROW_DIFF
-                    | ROW_STREAMING => {
+                    ROW_AUTOCOMPACT | ROW_CACHE_WARNING | ROW_LANGUAGE | ROW_PROACTIVENESS
+                    | ROW_DIFF | ROW_STREAMING => {
                         match self.cursor {
                             ROW_AUTOCOMPACT => self.cycle_autocompact(),
+                            ROW_CACHE_WARNING => self.cycle_cache_warning(),
                             ROW_LANGUAGE => self.cycle_language(false),
                             ROW_PROACTIVENESS => self.cycle_proactiveness(),
                             ROW_DIFF => self.cycle_diff(),
@@ -376,10 +392,11 @@ impl PanelComponent for ConfigPanel {
                 ..
             } => {
                 match self.cursor {
-                    ROW_AUTOCOMPACT | ROW_LANGUAGE | ROW_PROACTIVENESS | ROW_DIFF
-                    | ROW_STREAMING => {
+                    ROW_AUTOCOMPACT | ROW_CACHE_WARNING | ROW_LANGUAGE | ROW_PROACTIVENESS
+                    | ROW_DIFF | ROW_STREAMING => {
                         match self.cursor {
                             ROW_AUTOCOMPACT => self.cycle_autocompact(),
+                            ROW_CACHE_WARNING => self.cycle_cache_warning(),
                             ROW_LANGUAGE => self.cycle_language(true),
                             ROW_PROACTIVENESS => self.cycle_proactiveness(),
                             ROW_DIFF => self.cycle_diff(),
@@ -400,10 +417,11 @@ impl PanelComponent for ConfigPanel {
                 ..
             } => {
                 match self.cursor {
-                    ROW_AUTOCOMPACT | ROW_LANGUAGE | ROW_PROACTIVENESS | ROW_DIFF
-                    | ROW_STREAMING => {
+                    ROW_AUTOCOMPACT | ROW_CACHE_WARNING | ROW_LANGUAGE | ROW_PROACTIVENESS
+                    | ROW_DIFF | ROW_STREAMING => {
                         match self.cursor {
                             ROW_AUTOCOMPACT => self.cycle_autocompact(),
+                            ROW_CACHE_WARNING => self.cycle_cache_warning(),
                             ROW_LANGUAGE => self.cycle_language(false),
                             ROW_PROACTIVENESS => self.cycle_proactiveness(),
                             ROW_DIFF => self.cycle_diff(),
@@ -451,6 +469,7 @@ impl PanelComponent for ConfigPanel {
                     if matches!(
                         clicked,
                         ROW_AUTOCOMPACT
+                            | ROW_CACHE_WARNING
                             | ROW_THRESHOLD
                             | ROW_LANGUAGE
                             | ROW_DIFF

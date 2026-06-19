@@ -86,7 +86,7 @@ impl Metrics {
 |-------|----------|---------|---------|
 | `threshold.llm_calls_exceeded` | `count, limit` | 单轮 LLM 调用次数达到上限 | ReAct 循环上限检查 |
 | `threshold.token_spike` | `input_tokens, output_tokens, model` | 单次 output_tokens > 4000 | LLM 调用返回后 |
-| `threshold.memory` | `rss_mb, level(100/200)` | agent loop 结束时 RSS 超过阈值（每个阈值每轮只报一次） | ReAct 循环 `after_agent` |
+| `threshold.memory` | `rss_mb, level(100/200), rate` | agent loop 结束时 RSS 超过阈值（每个阈值每轮只报一次） | ReAct 循环 `after_agent` |
 
 ### 4. 周期采样（1 个）
 
@@ -106,9 +106,40 @@ impl Metrics {
 {"ts":"2026-06-06T12:00:28.000Z","sid":"sess_abc","rid":"turn_004","event":"trap.cache_anomaly","data":{"rate":0.65,"threshold":0.80,"request_id":"req_xyz789","total_input_tokens":12000,"total_cache_read_tokens":7800}}
 {"ts":"2026-06-06T12:00:30.901Z","sid":"sess_abc","rid":"turn_005","event":"threshold.llm_calls_exceeded","data":{"count":500,"limit":500}}
 {"ts":"2026-06-06T12:00:35.234Z","sid":"sess_abc","rid":"turn_005","event":"threshold.token_spike","data":{"input_tokens":1200,"output_tokens":5200,"model":"claude-sonnet"}}
-{"ts":"2026-06-06T12:00:36.000Z","sid":"sess_abc","rid":"turn_005","event":"threshold.memory","data":{"rss_mb":130,"level":100}}
+{"ts":"2026-06-06T12:00:36.000Z","sid":"sess_abc","rid":"turn_005","event":"threshold.memory","data":{"rss_mb":130,"level":100,"rate":0.016}}
 {"ts":"2026-06-06T12:00:36.100Z","sid":"sess_abc","rid":"turn_005","event":"sample.agent_turn_end","data":{"rss_mb":135,"iterations":23,"total_input_tokens":45000,"total_output_tokens":8000,"duration_secs":42}}
 ```
+
+### JSONL 结构与字段查询规范
+
+每行 JSON 的顶层结构：
+
+```json
+{"ts":"...","sid":"sess_xxx","rid":"turn_xxx","event":"...","data":{...}}
+```
+
+**顶层字段**（不在 `data` 内，直接位于 JSON 根对象）：
+- `ts`：ISO 8601 时间戳（含毫秒精度）
+- `sid`：**session_id**——会话标识。注意字段名是 `sid`，**不是** `session_id`！
+- `rid`：**run_id**——当前 ReAct 循环标识
+- `event`：事件名（点分层级，如 `sample.agent_turn_end`）
+- `data`：事件附属数据对象
+
+**事后分析脚本查询规范**——字段名以设计规范中的 `data 字段` 为准：
+
+| 事件 | data 内字段名 | 类型 | 说明 |
+|------|-------------|------|------|
+| `sample.agent_turn_end` | `duration_secs` | number | 本轮耗时（秒） |
+| `sample.agent_turn_end` | `total_input_tokens` | number | **累计** input tokens |
+| `threshold.memory` | `rate` | number | RSS / 系统总物理内存（0.0~1.0） |
+| `threshold.token_spike` | `input_tokens` | number | **单次调用**的 input tokens（注意：不是 `total_input_tokens`！） |
+| `threshold.token_spike` | `output_tokens` | number | 单次调用的 output tokens |
+| `trap.compact_trigger` | `trigger` | string | `"micro"` / `"full"`（注意：不是 `type`！） |
+
+**常见误用**（分析脚本曾出现的错误字段名）：
+- ❌ `data.session_id` → ✅ 顶层 `sid`
+- ❌ `data.total_input_tokens`（在 `threshold.token_spike` 事件） → ✅ `data.input_tokens`
+- ❌ `data.type`（在 `trap.compact_trigger` 事件） → ✅ `data.trigger`
 
 ## 数据流
 

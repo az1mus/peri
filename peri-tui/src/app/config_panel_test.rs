@@ -10,6 +10,7 @@ fn test_config_panel_from_config_defaults() {
     let panel = ConfigPanel::from_config(&cfg);
     assert_eq!(panel.cursor, ROW_AUTOCOMPACT);
     assert!(panel.buf_autocompact);
+    assert!(panel.buf_show_cache_warning);
     assert_eq!(panel.field_threshold.value(), "85");
     assert!(panel.buf_language.is_empty());
     assert_eq!(panel.buf_proactiveness, "medium");
@@ -20,6 +21,8 @@ fn test_config_panel_cursor_navigation() {
     let mut panel = ConfigPanel::from_config(&PeriConfig::default());
     assert_eq!(panel.cursor, ROW_AUTOCOMPACT);
 
+    panel.cursor_down();
+    assert_eq!(panel.cursor, ROW_CACHE_WARNING);
     panel.cursor_down();
     assert_eq!(panel.cursor, ROW_THRESHOLD);
     panel.cursor_down();
@@ -52,6 +55,8 @@ fn test_config_panel_cursor_navigation() {
     assert_eq!(panel.cursor, ROW_LANGUAGE);
     panel.cursor_up();
     assert_eq!(panel.cursor, ROW_THRESHOLD);
+    panel.cursor_up();
+    assert_eq!(panel.cursor, ROW_CACHE_WARNING);
     panel.cursor_up();
     assert_eq!(panel.cursor, ROW_AUTOCOMPACT);
 }
@@ -88,6 +93,16 @@ fn test_config_panel_cycle_autocompact() {
     assert!(!panel.buf_autocompact);
     panel.cycle_autocompact();
     assert!(panel.buf_autocompact);
+}
+
+#[test]
+fn test_config_panel_cycle_cache_warning() {
+    let mut panel = ConfigPanel::from_config(&PeriConfig::default());
+    assert!(panel.buf_show_cache_warning);
+    panel.cycle_cache_warning();
+    assert!(!panel.buf_show_cache_warning);
+    panel.cycle_cache_warning();
+    assert!(panel.buf_show_cache_warning);
 }
 
 #[test]
@@ -207,4 +222,14 @@ fn test_config_panel_apply_edit_diff_enabled() {
     panel.buf_diff = true;
     panel.apply_edit(&mut cfg, &lc).unwrap();
     assert!(cfg.config.diff_enabled);
+}
+
+#[test]
+fn test_config_panel_apply_edit_show_cache_warning() {
+    let lc = make_lc();
+    let mut cfg = PeriConfig::default();
+    let mut panel = ConfigPanel::from_config(&cfg);
+    panel.buf_show_cache_warning = false;
+    panel.apply_edit(&mut cfg, &lc).unwrap();
+    assert!(!cfg.config.show_cache_warning);
 }

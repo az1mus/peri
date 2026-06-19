@@ -334,6 +334,7 @@ impl<L: ReactLLM, S: State> ReActAgent<L, S> {
         let mut loop_error: Option<AgentError> = None;
 
         for step in 0..self.max_iterations {
+            let turn_start = std::time::Instant::now();
             state.set_current_step(step);
 
             // 钩子: before_model — LLM 调用前（compact 检查点）
@@ -386,6 +387,7 @@ impl<L: ReactLLM, S: State> ReActAgent<L, S> {
                         all_tool_calls.clone(),
                         &mut snapshot_anchor,
                         step,
+                        turn_start,
                     )
                     .await,
                     loop_error
