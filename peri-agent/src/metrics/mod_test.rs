@@ -60,8 +60,8 @@ fn test_current_rss_mb_returns_positive_on_unix() {
     assert!(rss.unwrap() > 0, "RSS should be positive");
 }
 
+#[cfg(unix)]
 #[test]
-#[cfg_attr(not(unix), ignore = "RSS measurement only supported on Unix")]
 fn test_current_rss_mb_is_realtime_not_monotonic_max() {
     // 验证返回的是当前 RSS（可下降），而非 ru_maxrss（单调递增）
     let baseline = current_rss_mb().expect("should get baseline RSS");
