@@ -73,7 +73,7 @@ pub(crate) async fn run(params: PromptExecParams) {
         incoming_recalls: vec![],
         session_start_source,
         bg_results: vec![], // stdio 无后台任务
-        plugin_skill_dirs: ctx.plugin_skill_dirs.clone(),
+        plugin_skill_roots: ctx.plugin_skill_roots.clone(),
         plugin_agent_dirs: ctx.plugin_agent_dirs.clone(),
         hook_groups: ctx.hook_groups.clone(),
         cron_scheduler: Some(ctx.cron_scheduler.clone()),

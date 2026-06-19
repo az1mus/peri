@@ -8,13 +8,13 @@ use agent_client_protocol::{
 /// 扫描 skill 目录并发送 AvailableCommandsUpdate 通知。
 pub(super) fn send_available_commands(
     cwd: &str,
-    plugin_skill_dirs: &[std::path::PathBuf],
+    plugin_skill_roots: &[peri_middlewares::skills::SkillRoot],
     session_id: &SessionId,
     cx: &ConnectionTo<Client>,
 ) {
-    let skill_dirs =
-        peri_middlewares::SkillsMiddleware::resolve_dirs_static(cwd, plugin_skill_dirs);
-    let skills = peri_middlewares::skills::list_skills(&skill_dirs);
+    let skill_roots =
+        peri_middlewares::SkillsMiddleware::resolve_roots_static(cwd, plugin_skill_roots.to_vec());
+    let skills = peri_middlewares::skills::scan_skill_roots(&skill_roots);
     let cmds = peri_acp::dispatch::build_available_commands(&skills);
     let notif = SessionNotification::new(
         session_id.clone(),

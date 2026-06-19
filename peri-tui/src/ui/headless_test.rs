@@ -1496,6 +1496,7 @@ async fn test_unified_hint_shows_commands_and_skills() {
             name: "commit".into(),
             description: "commit changes".into(),
             path: "/tmp/commit.md".into(),
+            ..Default::default()
         });
     app.session_mgr
         .current_mut()
@@ -1505,6 +1506,7 @@ async fn test_unified_hint_shows_commands_and_skills() {
             name: "review".into(),
             description: "review code".into(),
             path: "/tmp/review.md".into(),
+            ..Default::default()
         });
 
     // 候选列表应包含命令和 Skills
@@ -1559,6 +1561,7 @@ async fn test_unified_hint_filters_by_prefix() {
             name: "commit".into(),
             description: "commit changes".into(),
             path: "/tmp/commit.md".into(),
+            ..Default::default()
         });
 
     handle
@@ -1602,6 +1605,7 @@ async fn test_unified_hint_no_result_for_hash() {
             name: "skill".into(),
             description: "a skill".into(),
             path: "/tmp/skill.md".into(),
+            ..Default::default()
         });
 
     handle
@@ -1640,6 +1644,7 @@ async fn test_enter_skill_name_submits_message() {
             name: "review".into(),
             description: "code review".into(),
             path: "/tmp/review.md".into(),
+            ..Default::default()
         });
 
     // 模拟 Enter 事件处理
@@ -1719,6 +1724,7 @@ async fn test_enter_known_command_no_skill_fallback() {
             name: "help".into(),
             description: "help skill".into(),
             path: "/tmp/help.md".into(),
+            ..Default::default()
         });
 
     // /help 应被命令 dispatch 拦截，不走 Skill fallback

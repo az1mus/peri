@@ -1,5 +1,3 @@
-use std::path::PathBuf;
-
 use async_trait::async_trait;
 use peri_agent::{
     agent::state::State,
@@ -8,7 +6,7 @@ use peri_agent::{
     middleware::r#trait::Middleware,
 };
 
-use crate::skills::{list_skills, loader::resolve_skill_dirs};
+use crate::skills::{loader::resolve_skill_roots, scan_skill_roots, SkillRoot};
 
 /// 从文本中提取 `/skill-name` 模式的 skill 名称
 ///
@@ -61,7 +59,7 @@ pub fn extract_skill_names_from_text(text: &str) -> Vec<String> {
 pub struct SkillPreloadMiddleware {
     skill_names: Vec<String>,
     cwd: String,
-    extra_dirs: Vec<PathBuf>,
+    plugin_roots: Vec<SkillRoot>,
 }
 
 impl SkillPreloadMiddleware {
@@ -69,13 +67,13 @@ impl SkillPreloadMiddleware {
         Self {
             skill_names,
             cwd: cwd.to_string(),
-            extra_dirs: Vec::new(),
+            plugin_roots: Vec::new(),
         }
     }
 
-    /// 追加额外 skills 搜索目录（用于插件 skills 路径注入）
-    pub fn with_extra_dirs(mut self, dirs: Vec<PathBuf>) -> Self {
-        self.extra_dirs = dirs;
+    /// 追加插件 skills 搜索根（每个 root 携带 source 与 plugin_name）
+    pub fn with_plugin_roots(mut self, roots: Vec<SkillRoot>) -> Self {
+        self.plugin_roots = roots;
         self
     }
 }
@@ -108,12 +106,12 @@ impl<S: State> Middleware<S> for SkillPreloadMiddleware {
             return Ok(());
         }
 
-        let dirs = resolve_skill_dirs(&self.cwd, &self.extra_dirs);
+        let roots = resolve_skill_roots(&self.cwd, self.plugin_roots.clone());
         let names_lower: Vec<String> = skill_names.iter().map(|s| s.to_lowercase()).collect();
 
         // 在 blocking 线程中扫描目录 + 读取文件内容
         let skill_contents = tokio::task::spawn_blocking(move || {
-            let all_skills = list_skills(&dirs);
+            let all_skills = scan_skill_roots(&roots);
             all_skills
                 .into_iter()
                 .filter(|s| {
@@ -122,7 +120,7 @@ impl<S: State> Middleware<S> for SkillPreloadMiddleware {
                         // 精确匹配（/plan）
                         skill_name_lower == *name
                         // 或去掉命名空间前缀后匹配（/ecc:plan → plan）
-                        || name.rsplit_once(':').map(|(_, n)| n.to_lowercase()) == Some(skill_name_lower.clone())
+                        || name.rsplit_once(':').map(|(_, n)| n.to_lowercase()).as_deref() == Some(&skill_name_lower)
                     })
                 })
                 .filter_map(|s| {

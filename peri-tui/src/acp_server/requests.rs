@@ -80,7 +80,7 @@ pub(crate) async fn handle_request(
             cfg.session_manager.ensure_session(&session_id, &cwd);
             let frozen_data = cfg.session_manager.build_frozen_data(
                 &cwd,
-                &cfg.plugin_skill_dirs,
+                &cfg.plugin_skill_roots,
                 &cfg.plugin_agent_dirs,
             );
 
@@ -97,11 +97,11 @@ pub(crate) async fn handle_request(
                 .modes(modes)
                 .config_options(config_options);
             // Scan skills for AvailableCommands
-            let skill_dirs = peri_middlewares::SkillsMiddleware::resolve_dirs_static(
+            let skill_roots = peri_middlewares::SkillsMiddleware::resolve_roots_static(
                 &cwd,
-                &cfg.plugin_skill_dirs,
+                cfg.plugin_skill_roots.clone(),
             );
-            let skills = peri_middlewares::skills::list_skills(&skill_dirs);
+            let skills = peri_middlewares::skills::scan_skill_roots(&skill_roots);
             send_available_commands_update(transport, &session_id, &skills).await;
             serde_json::to_value(resp)
                 .map_err(|e| AcpError::new(-32603, format!("Serialize failed: {e}")))
@@ -219,7 +219,7 @@ pub(crate) async fn handle_request(
             cfg.session_manager.ensure_session(req_session_id, cwd);
             let frozen_data = cfg.session_manager.build_frozen_data(
                 cwd,
-                &cfg.plugin_skill_dirs,
+                &cfg.plugin_skill_roots,
                 &cfg.plugin_agent_dirs,
             );
             if let Some(s) = sessions.get_mut(req_session_id) {
@@ -236,11 +236,11 @@ pub(crate) async fn handle_request(
                 .modes(modes)
                 .config_options(config_options);
             // Scan skills for AvailableCommands (same as session/new)
-            let skill_dirs = peri_middlewares::SkillsMiddleware::resolve_dirs_static(
+            let skill_roots = peri_middlewares::SkillsMiddleware::resolve_roots_static(
                 cwd,
-                &cfg.plugin_skill_dirs,
+                cfg.plugin_skill_roots.clone(),
             );
-            let skills = peri_middlewares::skills::list_skills(&skill_dirs);
+            let skills = peri_middlewares::skills::scan_skill_roots(&skill_roots);
             send_available_commands_update(transport, req_session_id, &skills).await;
             serde_json::to_value(resp)
                 .map_err(|e| AcpError::new(-32603, format!("Serialize failed: {e}")))
@@ -328,7 +328,7 @@ pub(crate) async fn handle_request(
             cfg.session_manager.ensure_session(req_session_id, cwd);
             let frozen_data = cfg.session_manager.build_frozen_data(
                 cwd,
-                &cfg.plugin_skill_dirs,
+                &cfg.plugin_skill_roots,
                 &cfg.plugin_agent_dirs,
             );
             if let Some(s) = sessions.get_mut(req_session_id) {
@@ -378,7 +378,7 @@ pub(crate) async fn handle_request(
             cfg.session_manager.ensure_session(&new_session_id, cwd);
             let frozen_data = cfg.session_manager.build_frozen_data(
                 cwd,
-                &cfg.plugin_skill_dirs,
+                &cfg.plugin_skill_roots,
                 &cfg.plugin_agent_dirs,
             );
             if let Some(s) = sessions.get_mut(&new_session_id) {

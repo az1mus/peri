@@ -41,6 +41,7 @@ use peri_agent::{
 use peri_middlewares::{
     compact_middleware::CompactMiddleware,
     prelude::*,
+    skills::SkillRoot,
     tools::{AskUserTool, TodoItem},
 };
 
@@ -115,7 +116,7 @@ pub struct AcpAgentConfig {
     pub preload_skills: Vec<String>,
     pub session_id: Option<String>,
     pub broker: Arc<dyn UserInteractionBroker>,
-    pub plugin_skill_dirs: Vec<std::path::PathBuf>,
+    pub plugin_skill_roots: Vec<SkillRoot>,
     pub plugin_agent_dirs: Vec<std::path::PathBuf>,
     pub hook_groups: Vec<Vec<RegisteredHook>>,
     pub session_start_source: Option<String>,
@@ -178,7 +179,7 @@ pub fn build_agent(
         preload_skills,
         session_id,
         broker: permission_broker,
-        plugin_skill_dirs,
+        plugin_skill_roots,
         plugin_agent_dirs,
         hook_groups,
         session_start_source,
@@ -461,7 +462,7 @@ pub fn build_agent(
         }))
         .add_middleware(Box::new(AgentDefineMiddleware::new()))
         .add_middleware(Box::new({
-            let mut mw = SkillsMiddleware::new().with_extra_dirs(plugin_skill_dirs.clone());
+            let mut mw = SkillsMiddleware::new().with_plugin_roots(plugin_skill_roots.clone());
             if let Some(summary) = frozen_skill_summary {
                 mw = mw.with_frozen_summary(summary);
             }
@@ -469,7 +470,7 @@ pub fn build_agent(
         }))
         .add_middleware(Box::new(
             SkillPreloadMiddleware::new(preload_skills, &cwd)
-                .with_extra_dirs(plugin_skill_dirs.clone()),
+                .with_plugin_roots(plugin_skill_roots.clone()),
         ))
         .add_middleware(Box::new(peri_middlewares::AtMentionMiddleware::new(
             cwd.clone().into(),

@@ -6,6 +6,8 @@
 
 use std::path::PathBuf;
 
+use peri_middlewares::skills::SkillRoot;
+
 use crate::session::executor::FrozenSessionData;
 
 /// Build frozen session data from the given parameters.
@@ -15,14 +17,14 @@ use crate::session::executor::FrozenSessionData;
 pub fn build_frozen_session_data(
     cwd: &str,
     language: Option<&str>,
-    plugin_skill_dirs: &[PathBuf],
+    plugin_skill_roots: &[SkillRoot],
     plugin_agent_dirs: &[PathBuf],
     frozen_date: &str,
 ) -> FrozenSessionData {
     FrozenSessionData::build(
         cwd,
         language,
-        plugin_skill_dirs,
+        plugin_skill_roots,
         plugin_agent_dirs,
         frozen_date,
     )

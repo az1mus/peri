@@ -108,7 +108,18 @@
         let mw = SkillsMiddleware::new()
             .with_user_dir(dir.path().to_path_buf())
             .with_project_dir(dir.path().to_path_buf())
-            .with_extra_dirs(vec![extra1.clone(), extra2.clone()]);
+            .with_plugin_roots(vec![
+                SkillRoot {
+                    path: extra1.clone(),
+                    source: SkillSource::Plugin,
+                    plugin_name: None,
+                },
+                SkillRoot {
+                    path: extra2.clone(),
+                    source: SkillSource::Plugin,
+                    plugin_name: None,
+                },
+            ]);
 
         let mut state = AgentState::new(dir.path().to_str().unwrap());
         mw.before_agent(&mut state).await.unwrap();
@@ -130,7 +141,11 @@
         let mw = SkillsMiddleware::new()
             .with_user_dir(dir.path().to_path_buf())
             .with_project_dir(dir.path().to_path_buf())
-            .with_extra_dirs(vec![dir.path().join("nonexistent")]);
+            .with_plugin_roots(vec![SkillRoot {
+                path: dir.path().join("nonexistent"),
+                source: SkillSource::Plugin,
+                plugin_name: None,
+            }]);
 
         let mut state = AgentState::new(dir.path().to_str().unwrap());
         let result = mw.before_agent(&mut state).await;
@@ -153,7 +168,11 @@
         let mw = SkillsMiddleware::new()
             .with_user_dir(dir.path().to_path_buf())
             .with_project_dir(project_skills)
-            .with_extra_dirs(vec![extra_dir]);
+            .with_plugin_roots(vec![SkillRoot {
+                path: extra_dir,
+                source: SkillSource::Plugin,
+                plugin_name: None,
+            }]);
 
         let mut state = AgentState::new("/nonexistent");
         mw.before_agent(&mut state).await.unwrap();

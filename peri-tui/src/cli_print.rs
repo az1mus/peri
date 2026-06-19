@@ -144,7 +144,7 @@ pub async fn run_print(
     };
 
     // 插件（bare 时跳过）
-    let (plugin_skill_dirs, plugin_agent_dirs, hook_groups, plugin_lsp_servers) = if bare {
+    let (plugin_skill_roots, plugin_agent_dirs, hook_groups, plugin_lsp_servers) = if bare {
         (vec![], vec![], vec![], vec![])
     } else {
         let claude_dir = dirs_next::home_dir()
@@ -164,7 +164,7 @@ pub async fn run_print(
             hg.push(local_hooks);
         }
         (
-            plugin_data.all_skill_dirs,
+            plugin_data.all_skill_roots,
             plugin_data.all_agent_dirs,
             hg,
             plugin_data.all_lsp_servers,
@@ -209,7 +209,7 @@ pub async fn run_print(
             incoming_recalls: vec![],
             session_start_source: Some("startup".to_string()),
             bg_results: vec![], // print 模式无后台任务
-            plugin_skill_dirs,
+            plugin_skill_roots,
             plugin_agent_dirs,
             hook_groups,
             cron_scheduler: Some(cron_scheduler),

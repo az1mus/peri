@@ -7,7 +7,7 @@
 ```
 1.  AgentsMdMiddleware       ← CLAUDE.md/AGENTS.md 注入
 2.  AgentDefineMiddleware    ← agent 定义，model/maxTurns 覆盖
-3.  SkillsMiddleware         ← Skills 摘要注入（含插件 extra_dirs）
+3.  SkillsMiddleware         ← Skills 摘要注入（含插件 plugin_roots）
 4.  SkillPreloadMiddleware   ← #skill-name 全文注入
 5.  AtMentionMiddleware      ← @path 解析，注入 Read 工具调用
 6.  FilesystemMiddleware     ← 6 个文件系统工具
@@ -26,7 +26,7 @@
 [ReActAgent.with_system_prompt()] ← prepend
 ```
 
-插件通过 `plugin_skill_dirs` → `SkillsMiddleware.with_extra_dirs()`、`plugin_hooks` → `HookMiddleware` 注入，无独立 PluginMiddleware。
+插件通过 `plugin_skill_roots: Vec<SkillRoot>` → `SkillsMiddleware.with_plugin_roots()`、`plugin_hooks` → `HookMiddleware` 注入，无独立 PluginMiddleware。
 
 ## MCP 中间件
 
@@ -44,9 +44,9 @@
 
 **Frontmatter 解析**：skill 和插件命令用 `gray_matter` crate（YAML engine），必须复用 `Matter::<YAML>::new()` 模式。
 
-**Skills**：搜索顺序 `~/.claude/skills/` → `skillsDir` → `./.claude/skills/` → 插件 skills。`SkillsMiddleware.with_extra_dirs()` 是插件扩展点。
+**Skills**：搜索顺序 `~/.claude/skills/` → `skillsDir` → `./.claude/skills/` → 插件 skills。统一收口到 `scan_skill_roots(roots: &[SkillRoot])`：递归扫描（深度上限 6，目录数上限 1000/root），symlink 跟随 + canonicalize 防环，叶子语义（含 SKILL.md 则停止下钻），跨根去重按 roots 顺序先到先得。`SkillsMiddleware.with_plugin_roots()` 是插件扩展点。
 
-**[TRAP]** Manifest `skills` 字段语义：`skills` 数组条目是相对于插件根目录的路径（如 `"./skills/"`、`"skills/tdd"`），不是 skill 名称。`extract_skills_paths` 用 `base_dir.join(entry)` 解析路径。如果路径本身含 `SKILL.md` 则直接作为 skill 目录；否则视为容器目录，扫描其子目录找含 `SKILL.md` 的。绝不能把条目当名称拼接到 `base_dir/skills/` 下——会生成 `base_dir/skills/./skills/` 这样的无效路径。
+**[TRAP]** Manifest `skills` 字段语义：`skills` 数组条目是相对于插件根目录的路径（如 `"./skills/"`、`"skills/tdd"`），不是 skill 名称。`extract_skills_paths` 用 `base_dir.join(entry)` 解析路径并返回 `Vec<SkillRoot>`（携带 `source=Plugin` + `plugin_name`）。容器根的递归下钻与叶子检测统一由 `scan_skill_roots` 处理，extract_skills_paths 不再扫描子目录验证 SKILL.md 存在性。绝不能把条目当名称拼接到 `base_dir/skills/` 下——会生成 `base_dir/skills/./skills/` 这样的无效路径。
 
 **[TRAP]** Manifest `commands` 字段类型：Claude Code 插件 manifest 的 `commands` 支持混合数组（字符串路径 + 对象），如 `["./commands/", {"path":"x.md","name":"x"}]`。`PluginManifest.commands` 类型是 `Option<Vec<PluginCommandEntry>>`（`PluginCommandEntry` 枚举：`Path(String)` | `Full(PluginCommand)`）。`extract_commands` 必须用 match 分支处理两种变体。禁止假设所有条目都是 `PluginCommand` 对象——字符串路径是 Claude Code 插件的常见格式（如 ECC 的 `"commands": ["./commands/"]`）。
 

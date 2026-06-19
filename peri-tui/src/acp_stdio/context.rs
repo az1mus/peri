@@ -47,7 +47,7 @@ pub(super) struct StdioContext {
     pub(super) cron_scheduler: Arc<Mutex<CronScheduler>>,
     pub(super) mcp_pool: Option<Arc<McpClientPool>>,
     pub(super) channel_state: Option<Arc<peri_agent::interaction::ChannelState>>,
-    pub(super) plugin_skill_dirs: Vec<PathBuf>,
+    pub(super) plugin_skill_roots: Vec<peri_middlewares::skills::SkillRoot>,
     pub(super) plugin_agent_dirs: Vec<PathBuf>,
     pub(super) hook_groups: Vec<Vec<RegisteredHook>>,
     pub(super) plugin_lsp_servers: Vec<LspServerConfig>,

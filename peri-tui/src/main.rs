@@ -661,13 +661,13 @@ async fn run_app(
             .map(|pd| pd.all_commands.clone())
             .unwrap_or_default();
         // 将插件 skills 追加到所有 session 的 skill 列表
-        let plugin_skill_dirs = app
+        let plugin_skill_roots = app
             .services
             .plugin_data
             .as_ref()
-            .map(|pd| pd.all_skill_dirs.clone())
+            .map(|pd| pd.all_skill_roots.clone())
             .unwrap_or_default();
-        let plugin_skills = peri_middlewares::skills::list_skills(&plugin_skill_dirs);
+        let plugin_skills = peri_middlewares::skills::scan_skill_roots(&plugin_skill_roots);
         app.session_mgr
             .current_mut()
             .commands
@@ -697,11 +697,11 @@ async fn run_app(
 
         if let Some(provider) = provider {
             // Gather plugin configs
-            let plugin_skill_dirs = app
+            let plugin_skill_roots = app
                 .services
                 .plugin_data
                 .as_ref()
-                .map(|pd| pd.all_skill_dirs.clone())
+                .map(|pd| pd.all_skill_roots.clone())
                 .unwrap_or_default();
             let plugin_agent_dirs = app
                 .services
@@ -776,7 +776,7 @@ async fn run_app(
                 cron_scheduler: Some(app.services.cron.scheduler.clone()),
                 mcp_pool: app.services.mcp_pool.clone(),
                 channel_state: app.services.channel_state.clone(),
-                plugin_skill_dirs,
+                plugin_skill_roots,
                 plugin_agent_dirs,
                 plugin_hooks: flat_hooks,
                 hook_groups,

@@ -335,7 +335,11 @@
             vec!["plugin-skill".to_string()],
             "/nonexistent/cwd", // cwd 下没有 skill
         )
-        .with_extra_dirs(vec![extra_dir]);
+        .with_plugin_roots(vec![crate::skills::SkillRoot {
+            path: extra_dir,
+            source: crate::skills::SkillSource::Plugin,
+            plugin_name: None,
+        }]);
         let mut state = AgentState::new("/nonexistent/cwd");
 
         // Act

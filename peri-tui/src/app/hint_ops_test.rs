@@ -75,6 +75,7 @@
             name: name.to_string(),
             description: format!("{} skill", name),
             path: std::path::PathBuf::from(format!("/tmp/{}.md", name)),
+            ..Default::default()
         }
     }
 
