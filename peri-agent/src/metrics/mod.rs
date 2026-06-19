@@ -52,20 +52,15 @@ pub fn emit(event: &str, data: serde_json::Value, sid: Option<&str>, rid: Option
     }
 }
 
-/// 获取当前进程 RSS（MB），Unix only
+/// 获取当前进程 RSS（MB），通过 sysinfo 获取实时值。
 pub fn current_rss_mb() -> Option<u64> {
     #[cfg(unix)]
     {
-        let mut usage: libc::rusage = unsafe { std::mem::zeroed() };
-        let ret = unsafe { libc::getrusage(libc::RUSAGE_SELF, &mut usage) };
-        if ret == 0 {
-            #[cfg(target_os = "macos")]
-            let rss_kb = (usage.ru_maxrss / 1024) as u64;
-            #[cfg(not(target_os = "macos"))]
-            let rss_kb = usage.ru_maxrss as u64;
-            return Some(rss_kb / 1024);
-        }
-        None
+        use sysinfo::{ProcessesToUpdate, System};
+        let mut sys = System::new();
+        let pid = sysinfo::get_current_pid().ok()?;
+        sys.refresh_processes(ProcessesToUpdate::Some(&[pid]), true);
+        sys.process(pid).map(|p| p.memory() / 1024) // sysinfo 返回 KB → MB
     }
     #[cfg(not(unix))]
     {

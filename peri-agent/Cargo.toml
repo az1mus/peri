@@ -22,10 +22,10 @@ tracing-subscriber.workspace = true
 tokio-util.workspace = true
 sqlx = { workspace = true }
 parking_lot.workspace = true
-libc = "0.2"
 sysinfo.workspace = true
 rand = "0.10"
 fuzzy-matcher = "0.3"
 
 [dev-dependencies]
+libc = "0.2"
 tempfile.workspace = true
