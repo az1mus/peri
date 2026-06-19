@@ -86,17 +86,7 @@ fn render_first_row(f: &mut Frame, app: &App, area: Rect) {
         let mut monitor = app.services.resource_monitor.lock();
         monitor.refresh_if_needed();
         let mem = monitor.memory_mb();
-        let cpu = monitor.cpu_percent();
         drop(monitor); // 释放锁后再渲染
-
-        // CPU 着色：< 30% 绿，30-70% 黄，> 70% 红
-        let cpu_color = if cpu > 70.0 {
-            theme::ERROR
-        } else if cpu > 30.0 {
-            theme::WARNING
-        } else {
-            theme::SAGE
-        };
 
         let mem_color = if mem > 1024 {
             theme::ERROR
@@ -106,11 +96,6 @@ fn render_first_row(f: &mut Frame, app: &App, area: Rect) {
             theme::SAGE
         };
 
-        spans.push(Span::styled(" · ", Style::default().fg(theme::MUTED)));
-        spans.push(Span::styled(
-            format!("CPU {:.0}%", cpu),
-            Style::default().fg(cpu_color),
-        ));
         spans.push(Span::styled(" · ", Style::default().fg(theme::MUTED)));
         spans.push(Span::styled(
             format!("MEM {}MB", mem),
