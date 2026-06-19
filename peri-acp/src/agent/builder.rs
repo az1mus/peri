@@ -41,6 +41,7 @@ use peri_agent::{
 use peri_middlewares::{
     compact_middleware::CompactMiddleware,
     prelude::*,
+    skills::SkillRoot,
     tools::{AskUserTool, TodoItem},
 };
 
@@ -115,7 +116,7 @@ pub struct AcpAgentConfig {
     pub preload_skills: Vec<String>,
     pub session_id: Option<String>,
     pub broker: Arc<dyn UserInteractionBroker>,
-    pub plugin_skill_dirs: Vec<std::path::PathBuf>,
+    pub plugin_skill_roots: Vec<SkillRoot>,
     pub plugin_agent_dirs: Vec<std::path::PathBuf>,
     pub hook_groups: Vec<Vec<RegisteredHook>>,
     pub session_start_source: Option<String>,
@@ -178,7 +179,7 @@ pub fn build_agent(
         preload_skills,
         session_id,
         broker: permission_broker,
-        plugin_skill_dirs,
+        plugin_skill_roots,
         plugin_agent_dirs,
         hook_groups,
         session_start_source,
@@ -461,7 +462,7 @@ pub fn build_agent(
         }))
         .add_middleware(Box::new(AgentDefineMiddleware::new()))
         .add_middleware(Box::new({
-            let mut mw = SkillsMiddleware::new().with_extra_dirs(plugin_skill_dirs.clone());
+            let mut mw = SkillsMiddleware::new().with_plugin_roots(plugin_skill_roots.clone());
             if let Some(summary) = frozen_skill_summary {
                 mw = mw.with_frozen_summary(summary);
             }
@@ -469,7 +470,7 @@ pub fn build_agent(
         }))
         .add_middleware(Box::new(
             SkillPreloadMiddleware::new(preload_skills, &cwd)
-                .with_extra_dirs(plugin_skill_dirs.clone()),
+                .with_plugin_roots(plugin_skill_roots.clone()),
         ))
         .add_middleware(Box::new(peri_middlewares::AtMentionMiddleware::new(
             cwd.clone().into(),
@@ -551,6 +552,23 @@ pub fn build_agent(
     let executor = executor
         .with_event_handler(Arc::clone(&event_handler))
         .register_tool(Box::new(ask_user_tool));
+
+    // 错误感知建议：从 shared_tools 构造 snapshot（所有工具都已注册）
+    let all_tool_names: Vec<String> = shared_tools.read().keys().cloned().collect();
+    let agents_dir = std::path::Path::new(&cwd).join(".claude").join("agents");
+    let agents_dir_opt = if agents_dir.exists() {
+        Some(agents_dir.as_path())
+    } else {
+        None
+    };
+    let snapshot = peri_middlewares::error_suggest::build_tool_registry_snapshot(
+        all_tool_names,
+        agents_dir_opt,
+    );
+    let registry = peri_middlewares::error_suggest::build_default_registry();
+    let executor = executor
+        .with_tool_registry_snapshot(snapshot)
+        .with_error_suggest_registry(registry);
 
     // LSP 中间件（条件注册，当有 LSP 服务器配置时）
     let executor = if !lsp_servers.is_empty() {

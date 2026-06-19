@@ -127,6 +127,28 @@ scripts/start-tui.sh                 # 启动 TUI（RELAY_PORT=3001）
 
 详见 `peri-middlewares/CLAUDE.md`。18 个中间件按固定顺序组成链，末尾 `[ReActAgent.with_system_prompt()]` prepend。
 
+## 错误感知建议层（Error Suggestion Layer）
+
+工具错误返回前，通过 `ErrorSuggestRegistry` 自动注入结构化建议文本（路径候选、参数修正、命令纠错等），让 LLM 直接消费，省去额外的探索工具调用。
+
+**集成点**：`peri-agent/src/agent/executor/tool_dispatch.rs::collect_tool_results`，run_after_tool 之后、写入 state 之前。**不是中间件**——因为 `after_tool` 的 `result: &ToolResult` 是不可变引用，且 [TRAP] 约束中间件不写 state。
+
+**[TRAP]** 错误建议注入路径必须遵守：
+- 只修改 `result.output` 文本，**不调** `state.add_message`（保持 collect_tool_results 延迟写入语义）
+- 不修改 `result.is_error` 标志（保持 PostToolUseFailure 事件触发，hook 链兼容）
+- 不修改 `result.tool_call_id` / `result.tool_name`（保持消息关联）
+- 性能：V1 path/bash suggester 用同步 `std::fs::read_dir`（毫秒级，executor 在 tokio runtime 内）。**未实施** `spawn_blocking + tokio::time::timeout` 保护——网络挂载目录等极端场景可能阻塞。后续 V2 async 化时统一加 timeout 预算（建议 100ms）
+
+**[TRAP]** `ToolEnd` 事件 emit 时机：`collect_tool_results` 中 `ToolEnd`（line 423-430）在 error_suggest 注入（line 441-456）**之前** emit，TUI 通过 `ToolEnd` 看到的是**原始错误**（不含建议），LLM 通过 state 中的 tool_result 看到的是**增强后文本**。这是 V1 设计意图（"纯 LLM 消费，不触碰 TUI/HITL"）。新增向 TUI 透传建议的路径时必须同步修改 emit 顺序，并验证 `EventSink` 下游不会重复渲染。
+
+**架构**：基础设施（trait/registry/context/matcher/format）在 `peri-agent/src/error_suggest/`，具体 suggester 在 `peri-middlewares/src/error_suggest/suggesters/`。`ErrorSuggestRegistry` 和 `ToolRegistrySnapshot` 作为 `ReActAgent` 字段，构造期注入（main agent 在 `peri-acp/src/agent/builder.rs`，subagent 在 `peri-middlewares/src/subagent/tool/build_agent.rs`）。
+
+**新增建议器流程**：
+1. 在 `peri-middlewares/src/error_suggest/suggesters/` 新建 `<name>_suggester.rs` + 测试
+2. 实现 `ErrorSuggester` trait（tool 白名单 + 关键词识别 + 候选生成）
+3. 在 `default_registry.rs::build_default_registry()` 注册（vec! 顺序决定短路优先级）
+4. 更新本文档章节
+
 ## ACP/TUI 分层架构
 
 **概述**：`peri-acp` 是独立的 ACP 服务层 crate。`peri-tui` 为纯 ACP client 前端，通过 `MpscTransport` 与 `peri-acp` 通信。详见 `peri-tui/CLAUDE.md`。

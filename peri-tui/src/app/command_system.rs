@@ -61,6 +61,7 @@ mod tests {
             name: name.to_string(),
             description: desc.to_string(),
             path: PathBuf::from(format!("/fake/{name}/SKILL.md")),
+            ..Default::default()
         }
     }
 

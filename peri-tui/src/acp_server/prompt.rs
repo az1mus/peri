@@ -29,7 +29,7 @@ pub(crate) async fn execute_prompt(
     peri_config: &Arc<RwLock<PeriConfig>>,
     permission_mode: &Arc<SharedPermissionMode>,
     cron_scheduler: Option<Arc<parking_lot::Mutex<CronScheduler>>>,
-    plugin_skill_dirs: &[std::path::PathBuf],
+    plugin_skill_roots: &[peri_middlewares::skills::SkillRoot],
     plugin_agent_dirs: &[std::path::PathBuf],
     hook_groups: &[Vec<peri_middlewares::hooks::RegisteredHook>],
     mcp_pool: Option<Arc<peri_middlewares::mcp::McpClientPool>>,
@@ -123,7 +123,7 @@ pub(crate) async fn execute_prompt(
             None
         },
         bg_results,
-        plugin_skill_dirs: plugin_skill_dirs.to_vec(),
+        plugin_skill_roots: plugin_skill_roots.to_vec(),
         plugin_agent_dirs: plugin_agent_dirs.to_vec(),
         hook_groups: hook_groups.to_vec(),
         cron_scheduler,

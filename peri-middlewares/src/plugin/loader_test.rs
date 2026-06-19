@@ -185,9 +185,11 @@ fn test_extract_skills_paths() {
     let mut manifest = make_manifest_with_commands(vec![]);
     manifest.skills = Some(vec!["skills/code-review".into()]);
 
-    let paths = extract_skills_paths(&manifest, dir.path());
+    let paths = extract_skills_paths(&manifest, dir.path(), "test-plugin");
     assert_eq!(paths.len(), 1);
-    assert!(paths[0].ends_with("code-review"));
+    assert!(paths[0].path.ends_with("code-review"));
+    assert_eq!(paths[0].source, SkillSource::Plugin);
+    assert_eq!(paths[0].plugin_name.as_deref(), Some("test-plugin"));
 }
 
 #[test]
@@ -195,7 +197,7 @@ fn test_extract_skills_paths_missing_dir() {
     let mut manifest = make_manifest_with_commands(vec![]);
     manifest.skills = Some(vec!["nonexistent".into()]);
 
-    let paths = extract_skills_paths(&manifest, Path::new("/tmp"));
+    let paths = extract_skills_paths(&manifest, Path::new("/tmp"), "test-plugin");
     assert!(paths.is_empty());
 }
 
@@ -204,34 +206,42 @@ fn test_extract_skills_paths_none() {
     let dir = tempdir().unwrap();
     let manifest = make_manifest_with_commands(vec![]);
     // no skills dir at all → fallback finds nothing
-    let paths = extract_skills_paths(&manifest, dir.path());
+    let paths = extract_skills_paths(&manifest, dir.path(), "test-plugin");
     assert!(paths.is_empty());
 }
 
 #[test]
-fn test_extract_skills_paths_fallback_disk_scan() {
+fn test_extract_skills_paths_fallback_returns_container_root() {
     let dir = tempdir().unwrap();
     let skill_dir = dir.path().join("skills").join("my-skill");
     std::fs::create_dir_all(&skill_dir).unwrap();
     std::fs::write(skill_dir.join("SKILL.md"), "---\nname: my-skill\n---\nbody").unwrap();
 
-    // manifest has no skills field → fallback to disk scan
+    // manifest has no skills field → fallback returns base_dir/skills/ as a single root;
+    // scan_skill_roots will recursively find my-skill inside.
     let manifest = make_manifest_with_commands(vec![]);
-    let paths = extract_skills_paths(&manifest, dir.path());
+    let paths = extract_skills_paths(&manifest, dir.path(), "test-plugin");
     assert_eq!(paths.len(), 1);
-    assert!(paths[0].ends_with("my-skill"));
+    assert!(paths[0].path.ends_with("skills"));
+    assert_eq!(paths[0].source, SkillSource::Plugin);
 }
 
 #[test]
-fn test_extract_skills_paths_fallback_ignores_no_skill_md() {
+fn test_extract_skills_paths_fallback_returns_root_even_without_skill_md() {
     let dir = tempdir().unwrap();
     let skill_dir = dir.path().join("skills").join("incomplete");
     std::fs::create_dir_all(&skill_dir).unwrap();
-    // no SKILL.md → should be skipped
+    // no SKILL.md inside, but fallback still returns the container root;
+    // scan_skill_roots will simply find no skills inside.
 
     let manifest = make_manifest_with_commands(vec![]);
-    let paths = extract_skills_paths(&manifest, dir.path());
-    assert!(paths.is_empty());
+    let paths = extract_skills_paths(&manifest, dir.path(), "test-plugin");
+    assert_eq!(
+        paths.len(),
+        1,
+        "fallback 仍返回容器根，由 scan_skill_roots 决定是否含 skill"
+    );
+    assert!(paths[0].path.ends_with("skills"));
 }
 
 #[test]
@@ -465,7 +475,7 @@ fn test_merge_plugin_mcp_servers() {
         install_path: PathBuf::new(),
         manifest: make_manifest_with_commands(vec![]),
         commands: vec![],
-        skills_dirs: vec![],
+        skills_roots: vec![],
         agents_dirs: vec![],
         mcp_servers: HashMap::new(),
         data_path: PathBuf::new(),
@@ -492,7 +502,7 @@ fn test_merge_plugin_mcp_servers() {
         install_path: PathBuf::new(),
         manifest: make_manifest_with_commands(vec![]),
         commands: vec![],
-        skills_dirs: vec![],
+        skills_roots: vec![],
         agents_dirs: vec![],
         mcp_servers: HashMap::new(),
         data_path: PathBuf::new(),
@@ -723,7 +733,7 @@ fn test_plugin_command_provider_multiple() {
                     source: CommandSource::Builtin,
                 },
             ],
-            skills_dirs: vec![],
+            skills_roots: vec![],
             agents_dirs: vec![],
             mcp_servers: HashMap::new(),
             data_path: PathBuf::new(),
@@ -747,7 +757,7 @@ fn test_plugin_command_provider_multiple() {
                     source: CommandSource::Builtin,
                 },
             ],
-            skills_dirs: vec![],
+            skills_roots: vec![],
             agents_dirs: vec![],
             mcp_servers: HashMap::new(),
             data_path: PathBuf::new(),
@@ -764,7 +774,7 @@ fn test_plugin_command_provider_multiple() {
 fn test_load_no_plugins_aggregated() {
     let result = load_enabled_plugins_aggregated(Path::new("/nonexistent/path"));
     assert!(result.plugins.is_empty());
-    assert!(result.all_skill_dirs.is_empty());
+    assert!(result.all_skill_roots.is_empty());
     assert!(result.all_mcp_servers.is_empty());
     assert!(result.all_agent_dirs.is_empty());
     assert!(result.all_commands.is_empty());
@@ -851,8 +861,8 @@ fn test_load_plugin_skill_dirs_aggregated() {
     std::fs::write(dir.path().join("settings.json"), settings).unwrap();
 
     let result = load_enabled_plugins_aggregated(dir.path());
-    assert_eq!(result.all_skill_dirs.len(), 1);
-    assert!(result.all_skill_dirs[0].ends_with("my-skill"));
+    assert_eq!(result.all_skill_roots.len(), 1);
+    assert!(result.all_skill_roots[0].path.ends_with("my-skill"));
 }
 
 #[test]

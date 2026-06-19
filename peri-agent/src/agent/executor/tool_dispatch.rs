@@ -376,7 +376,7 @@ async fn collect_tool_results<L: ReactLLM, S: State>(
     let mut exec_results: Vec<(ToolCall, ToolResult)> = Vec::with_capacity(ready_calls.len());
 
     for (modified_call, tool_result) in ready_calls.into_iter().zip(tool_results) {
-        let result = match tool_result {
+        let mut result = match tool_result {
             Ok(output) => ToolResult::success(&modified_call.id, &modified_call.name, output),
             Err(AgentError::ToolNotFound(ref name)) => {
                 tracing::warn!(tool.name = %name, "工具未找到，作为错误结果返回");
@@ -436,6 +436,23 @@ async fn collect_tool_results<L: ReactLLM, S: State>(
         {
             let _ = agent.chain.run_on_error(state, &e).await;
             deferred_error = deferred_error.or(Some(e.to_string()));
+        }
+
+        // 错误感知建议注入：保持 is_error=true，仅追加建议文本到 output
+        if result.is_error {
+            if let Some(registry) = &agent.error_suggest_registry {
+                let ctx = crate::error_suggest::ErrorContext::new(
+                    &modified_call.name,
+                    &modified_call.input,
+                    &result.output,
+                    std::path::Path::new(state.cwd()),
+                    &agent.tool_registry_snapshot,
+                );
+                if let Some(sug) = registry.suggest(&ctx) {
+                    result.output =
+                        crate::error_suggest::format::format_suggestion(&result.output, &sug);
+                }
+            }
         }
 
         exec_results.push((modified_call, result));

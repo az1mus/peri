@@ -5,7 +5,7 @@
             install_path: PathBuf::new(),
             manifest: make_manifest_with_commands(vec![]),
             commands: vec![],
-            skills_dirs: vec![],
+            skills_roots: vec![],
             agents_dirs: vec![],
             mcp_servers: HashMap::new(),
             data_path: PathBuf::new(),

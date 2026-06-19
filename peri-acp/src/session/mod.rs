@@ -248,7 +248,7 @@ impl SessionManager {
     pub fn build_frozen_data(
         &self,
         cwd: &str,
-        plugin_skill_dirs: &[std::path::PathBuf],
+        plugin_skill_roots: &[peri_middlewares::skills::SkillRoot],
         plugin_agent_dirs: &[std::path::PathBuf],
     ) -> crate::session::executor::FrozenSessionData {
         let frozen_date = chrono::Local::now().format("%Y-%m-%d").to_string();
@@ -256,7 +256,7 @@ impl SessionManager {
         crate::session::frozen::build_frozen_session_data(
             cwd,
             frozen_language.as_deref(),
-            plugin_skill_dirs,
+            plugin_skill_roots,
             plugin_agent_dirs,
             &frozen_date,
         )

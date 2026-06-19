@@ -24,6 +24,7 @@ sqlx = { workspace = true }
 parking_lot.workspace = true
 libc = "0.2"
 rand = "0.10"
+fuzzy-matcher = "0.3"
 
 [dev-dependencies]
 tempfile.workspace = true

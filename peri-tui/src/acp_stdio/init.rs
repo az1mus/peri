@@ -77,7 +77,7 @@ pub(super) async fn init_stdio_context(cwd: String) -> anyhow::Result<Arc<StdioC
         .join(".claude");
     let plugin_data = peri_middlewares::plugin::load_enabled_plugins_aggregated(&claude_dir);
 
-    let plugin_skill_dirs = plugin_data.all_skill_dirs.clone();
+    let plugin_skill_roots = plugin_data.all_skill_roots.clone();
     let plugin_agent_dirs = plugin_data.all_agent_dirs.clone();
     let plugin_lsp_servers = plugin_data.all_lsp_servers.clone();
     let plugin_hooks = plugin_data.all_hooks.clone();
@@ -148,7 +148,7 @@ pub(super) async fn init_stdio_context(cwd: String) -> anyhow::Result<Arc<StdioC
         cron_scheduler,
         mcp_pool,
         channel_state: None,
-        plugin_skill_dirs,
+        plugin_skill_roots,
         plugin_agent_dirs,
         hook_groups,
         plugin_lsp_servers,

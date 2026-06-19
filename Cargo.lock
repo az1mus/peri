@@ -3236,6 +3236,7 @@ dependencies = [
  "chrono",
  "dirs-next",
  "futures",
+ "fuzzy-matcher",
  "libc",
  "parking_lot",
  "rand 0.10.1",
@@ -3352,7 +3353,6 @@ dependencies = [
  "unicode-segmentation",
  "unicode-width",
  "uuid",
- "walkdir",
 ]
 
 [[package]]

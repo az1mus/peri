@@ -100,15 +100,17 @@ impl FrozenSessionData {
     pub fn build(
         cwd: &str,
         language: Option<&str>,
-        plugin_skill_dirs: &[std::path::PathBuf],
+        plugin_skill_roots: &[peri_middlewares::skills::SkillRoot],
         plugin_agent_dirs: &[std::path::PathBuf],
         frozen_date: &str,
     ) -> Self {
         let (claude_md, claude_local_md) =
             peri_middlewares::AgentsMdMiddleware::read_frozen_content(cwd);
 
-        let skill_summary =
-            peri_middlewares::SkillsMiddleware::build_frozen_summary(cwd, plugin_skill_dirs);
+        let skill_summary = peri_middlewares::SkillsMiddleware::build_frozen_summary(
+            cwd,
+            plugin_skill_roots.to_vec(),
+        );
 
         let features = crate::prompt::PromptFeatures::detect();
         let system_prompt = crate::prompt::build_system_prompt(
@@ -181,7 +183,7 @@ impl FrozenSessionData {
 ///   / `session_id` / `cancel` / `event_sink` / `broker` / `permission_mode`
 /// - **Per-turn content**：`content` / `frozen` / `history` / `incoming_recalls`
 ///   / `session_start_source` / `bg_results`
-/// - **Middleware chain resources**：`plugin_skill_dirs` / `plugin_agent_dirs`
+/// - **Middleware chain resources**：`plugin_skill_roots` / `plugin_agent_dirs`
 ///   / `hook_groups` / `cron_scheduler` / `mcp_pool` / `channel_state`
 ///   / `tool_search_index` / `shared_tools` / `lsp_servers` / `langfuse_session`
 /// - **Session-scoped caches & persistence**：`pool` / `thread_store` / `thread_id`
@@ -221,8 +223,8 @@ pub struct PromptExecutionContext {
     pub bg_results: Vec<peri_agent::agent::events::BackgroundTaskResult>,
 
     // ── Middleware chain resources ────────────────────────────────────────────
-    /// 插件 skill 目录列表。
-    pub plugin_skill_dirs: Vec<std::path::PathBuf>,
+    /// 插件 skill 根列表（携带 source/plugin_name）。
+    pub plugin_skill_roots: Vec<peri_middlewares::skills::SkillRoot>,
     /// 插件 agent 目录列表。
     pub plugin_agent_dirs: Vec<std::path::PathBuf>,
     /// Hook 组（按全局/项目/本地分层）。
@@ -310,7 +312,7 @@ pub async fn execute_prompt(ctx: PromptExecutionContext) -> PromptResult {
         incoming_recalls,
         session_start_source,
         bg_results,
-        plugin_skill_dirs,
+        plugin_skill_roots,
         plugin_agent_dirs,
         hook_groups,
         cron_scheduler,
@@ -474,7 +476,7 @@ pub async fn execute_prompt(ctx: PromptExecutionContext) -> PromptResult {
         turn: &turn,
         agent_input,
         history,
-        plugin_skill_dirs,
+        plugin_skill_roots,
         plugin_agent_dirs,
         hook_groups,
         cron_scheduler,
@@ -776,7 +778,7 @@ struct BuildAgentRequest<'a> {
     agent_input: peri_agent::agent::react::AgentInput,
     history: Vec<BaseMessage>,
     // ── 会 move 的中间件资源 ────────────────────────────────────────────────
-    plugin_skill_dirs: Vec<std::path::PathBuf>,
+    plugin_skill_roots: Vec<peri_middlewares::skills::SkillRoot>,
     plugin_agent_dirs: Vec<std::path::PathBuf>,
     hook_groups: Vec<Vec<peri_middlewares::hooks::RegisteredHook>>,
     cron_scheduler: Option<Arc<parking_lot::Mutex<peri_middlewares::cron::CronScheduler>>>,
@@ -821,7 +823,7 @@ async fn build_and_execute_agent(req: BuildAgentRequest<'_>) -> ExecOutcome {
         turn,
         agent_input,
         history,
-        plugin_skill_dirs,
+        plugin_skill_roots,
         plugin_agent_dirs,
         hook_groups,
         cron_scheduler,
@@ -941,7 +943,7 @@ async fn build_and_execute_agent(req: BuildAgentRequest<'_>) -> ExecOutcome {
             preload_skills: Vec::new(),
             session_id: Some(session_id.to_string()),
             broker: turn.broker.clone(),
-            plugin_skill_dirs,
+            plugin_skill_roots,
             plugin_agent_dirs,
             hook_groups,
             session_start_source: turn.session_start_source.clone(),

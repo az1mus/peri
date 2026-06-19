@@ -14,5 +14,5 @@ pub(super) fn build(
     cwd: &str,
 ) -> peri_acp::session::executor::FrozenSessionData {
     ctx.session_manager
-        .build_frozen_data(cwd, &ctx.plugin_skill_dirs, &ctx.plugin_agent_dirs)
+        .build_frozen_data(cwd, &ctx.plugin_skill_roots, &ctx.plugin_agent_dirs)
 }

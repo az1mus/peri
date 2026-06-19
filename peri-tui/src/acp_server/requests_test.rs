@@ -77,7 +77,7 @@ fn make_server_config(
         cron_scheduler: None,
         mcp_pool: None,
         channel_state: None,
-        plugin_skill_dirs: Vec::new(),
+        plugin_skill_roots: Vec::new(),
         plugin_agent_dirs: Vec::new(),
         plugin_hooks: Vec::new(),
         hook_groups: Vec::new(),

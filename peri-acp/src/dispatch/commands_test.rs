@@ -24,11 +24,13 @@ fn test_build_available_commands_includes_skills() {
             name: "my-skill".into(),
             description: "My custom skill".into(),
             path: PathBuf::from("/fake/my-skill/SKILL.md"),
+            ..Default::default()
         },
         SkillMetadata {
             name: "other".into(),
             description: "Other skill".into(),
             path: PathBuf::from("/fake/other/SKILL.md"),
+            ..Default::default()
         },
     ];
     let cmds = build_available_commands(&skills);

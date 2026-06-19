@@ -2,18 +2,9 @@ pub mod file_search;
 pub mod popup;
 
 use std::collections::HashMap;
-use std::sync::mpsc;
-use std::thread;
-use std::time::{Duration, Instant};
+use std::path::{Path, PathBuf};
 
-use file_search::FileCandidate;
-
-/// 搜索节流间隔（毫秒）
-const SEARCH_DEBOUNCE_MS: u64 = 200;
-/// 缓存上限：超过后清空重建
-const CACHE_MAX_ENTRIES: usize = 64;
-/// 搜索线程闲置超时
-const IDLE_TIMEOUT: Duration = Duration::from_secs(1);
+use file_search::Entry;
 
 /// @ 提及状态：管理文件搜索候选、选择和弹窗
 pub struct AtMentionState {
@@ -21,23 +12,17 @@ pub struct AtMentionState {
     pub query: String,
     /// @ 符号在文本中的字符位置
     pub query_start: usize,
-    pub candidates: Vec<FileCandidate>,
+    pub candidates: Vec<Entry>,
     pub selected: usize,
     pub scroll_offset: usize,
-    /// 搜索线程的 query 发送端
-    query_tx: Option<mpsc::Sender<String>>,
-    /// 搜索线程 handle
-    search_thread: Option<thread::JoinHandle<()>>,
-    /// 搜索线程的结果接收端
-    result_rx: Option<mpsc::Receiver<(String, Vec<FileCandidate>)>>,
-    /// 缓存：query → 搜索结果
-    search_cache: HashMap<String, Vec<FileCandidate>>,
-    /// 上次搜索的 query 前缀
-    last_search_query: String,
-    /// 上次触发搜索的时间戳
-    last_search_time: Option<Instant>,
+    /// 当前解析出的目录部分（已 resolve 的相对路径，含尾 /）
+    dir_part: String,
     /// 工作目录
-    cwd: String,
+    cwd: PathBuf,
+    /// 目录条目缓存：PathBuf → Vec<Entry>
+    dir_cache: HashMap<PathBuf, Vec<Entry>>,
+    /// 空列表占位消息："(empty directory)" / "(no matches)" / None
+    pub empty_message: Option<String>,
 }
 
 impl Default for AtMentionState {
@@ -55,31 +40,30 @@ impl AtMentionState {
             candidates: Vec::new(),
             selected: 0,
             scroll_offset: 0,
-            query_tx: None,
-            search_thread: None,
-            result_rx: None,
-            search_cache: HashMap::new(),
-            last_search_query: String::new(),
-            last_search_time: None,
-            cwd: String::new(),
+            dir_part: String::new(),
+            cwd: PathBuf::new(),
+            dir_cache: HashMap::new(),
+            empty_message: None,
+        }
+    }
+
+    /// 惰性设置 cwd（仅在变更时重新设置）
+    pub fn set_cwd(&mut self, cwd: String) {
+        let new_path = PathBuf::from(&cwd);
+        if self.cwd != new_path {
+            self.dir_cache.clear();
+            self.cwd = new_path;
         }
     }
 
     /// 确保 cwd 已设置（惰性初始化，仅设置一次）
     pub fn ensure_cwd(&mut self, cwd: String) {
-        if self.cwd.is_empty() {
+        if self.cwd.as_os_str().is_empty() {
             self.set_cwd(cwd);
         }
     }
 
-    /// 设置工作目录
-    pub fn set_cwd(&mut self, cwd: String) {
-        if self.cwd != cwd {
-            self.kill_thread();
-            self.cwd = cwd;
-        }
-    }
-
+    /// detect 保持不变：从文本和光标位置检测 @ 提及
     pub fn detect(text: &str, cursor_pos: usize) -> Option<(String, usize)> {
         if cursor_pos == 0 || cursor_pos > text.len() {
             return None;
@@ -105,6 +89,7 @@ impl AtMentionState {
         self.query_start = query_start;
         self.selected = 0;
         self.scroll_offset = 0;
+        self.empty_message = None;
     }
 
     pub fn close(&mut self) {
@@ -113,127 +98,80 @@ impl AtMentionState {
         self.candidates.clear();
         self.selected = 0;
         self.scroll_offset = 0;
+        self.dir_part.clear();
+        self.empty_message = None;
     }
 
-    pub fn update_candidates(&mut self, candidates: Vec<FileCandidate>) {
-        let len = candidates.len();
-        self.candidates = candidates;
-        if self.selected >= len && len > 0 {
-            self.selected = len - 1;
+    /// 同步刷新候选列表：解析 query → resolve_dir → read_dir (cached) → fuzzy_match
+    pub fn refresh_candidates(&mut self) {
+        self.empty_message = None;
+
+        if self.query.is_empty() {
+            return;
         }
-    }
 
-    pub fn try_filter_from_cache(&self, query: &str) -> Option<Vec<FileCandidate>> {
-        if let Some(cached) = self.search_cache.get(query) {
-            return Some(cached.clone());
-        }
-        if query.starts_with(&self.last_search_query) && !self.last_search_query.is_empty() {
-            if let Some(base_results) = self.search_cache.get(&self.last_search_query) {
-                let filtered = file_search::filter_candidates(base_results, query);
-                return Some(filtered);
-            }
-        }
-        None
-    }
-
-    pub fn cache_result(&mut self, query: &str, candidates: Vec<FileCandidate>) {
-        if self.search_cache.len() >= CACHE_MAX_ENTRIES {
-            self.search_cache.clear();
-        }
-        self.search_cache.insert(query.to_string(), candidates);
-        self.last_search_time = Some(Instant::now());
-    }
-
-    pub fn set_last_search_query(&mut self, query: &str) {
-        self.last_search_query = query.to_string();
-    }
-
-    pub fn should_search_now(&self) -> bool {
-        match self.last_search_time {
-            Some(t) => t.elapsed().as_millis() as u64 >= SEARCH_DEBOUNCE_MS,
-            None => true,
-        }
-    }
-
-    /// 启动搜索：确保搜索线程存活，发送 query
-    pub fn start_search(&mut self, query: String) {
-        self.ensure_thread_alive();
-        if let Some(tx) = &self.query_tx {
-            let _ = tx.send(query);
-        }
-    }
-
-    /// 检查搜索结果，返回 true 表示有新结果需要更新 UI
-    pub fn poll_search_result(&mut self) -> bool {
-        // take + put-back 模式避免借用冲突
-        let rx = match self.result_rx.take() {
-            Some(rx) => rx,
-            None => return false,
+        let (dir_part, query_part) = match file_search::parse_at_query(&self.query) {
+            Some(v) => v,
+            None => return,
         };
 
-        let mut updated = false;
-        let mut disconnected = false;
-        loop {
-            match rx.try_recv() {
-                Ok((query, candidates)) => {
-                    if self.active && self.query == query {
-                        self.cache_result(&query, candidates.clone());
-                        self.set_last_search_query(&query);
-                        self.update_candidates(candidates);
-                        updated = true;
-                    } else if !self.active || !query.starts_with(&self.query) {
-                        self.cache_result(&query, candidates);
-                        self.set_last_search_query(&query);
-                    }
-                }
-                Err(std::sync::mpsc::TryRecvError::Empty) => break,
-                Err(_) => {
-                    disconnected = true;
-                    break;
-                }
-            }
-        }
+        // 解析目录，不存在时回退
+        let (resolved_dir, fallback) = file_search::resolve_dir(&self.cwd, &dir_part);
 
-        // 非 disconnected 时放回 rx
-        if !disconnected {
-            self.result_rx = Some(rx);
+        // 存储解析后的相对目录路径（resolved → relative to cwd）
+        let rel_resolved = resolved_dir
+            .strip_prefix(&self.cwd)
+            .unwrap_or(&resolved_dir);
+        let mut resolved_prefix = rel_resolved.to_string_lossy().to_string();
+        if !resolved_prefix.is_empty() && !resolved_prefix.ends_with('/') {
+            resolved_prefix.push('/');
         }
-        updated
+        self.dir_part = resolved_prefix;
+
+        // 合并 fallback 和 query_part 作为 fuzzy query
+        let effective_query = if fallback.is_empty() {
+            query_part.as_str()
+        } else if query_part.is_empty() {
+            fallback.as_str()
+        } else {
+            return self.refresh_candidates_with_query(
+                &resolved_dir,
+                &format!("{}/{}", fallback, query_part),
+            );
+        };
+
+        self.refresh_candidates_with_query(&resolved_dir, effective_query);
     }
 
-    fn ensure_thread_alive(&mut self) {
-        let thread_dead = self.search_thread.as_ref().is_none_or(|h| h.is_finished());
-        if thread_dead {
-            self.spawn_search_thread();
+    fn refresh_candidates_with_query(&mut self, dir: &Path, query: &str) {
+        let entries = self.get_or_read_dir(dir);
+
+        if entries.is_empty() {
+            self.candidates.clear();
+            self.empty_message = Some("(empty directory)".to_string());
+            return;
+        }
+
+        let matched = file_search::fuzzy_match_entries(entries, query);
+
+        if matched.is_empty() && !query.is_empty() {
+            self.candidates.clear();
+            self.empty_message = Some("(no matches)".to_string());
+            return;
+        }
+
+        self.candidates = matched.into_iter().cloned().collect();
+        if self.selected >= self.candidates.len() && !self.candidates.is_empty() {
+            self.selected = self.candidates.len() - 1;
         }
     }
 
-    fn spawn_search_thread(&mut self) {
-        self.kill_thread();
-
-        let (query_tx, query_rx) = mpsc::channel::<String>();
-        let (result_tx, result_rx) = mpsc::channel::<(String, Vec<FileCandidate>)>();
-        let cwd = self.cwd.clone();
-
-        let handle = thread::Builder::new()
-            .name("at-mention-search".into())
-            .stack_size(2 * 1024 * 1024)
-            .spawn(move || {
-                search_thread_main(cwd, query_rx, result_tx);
-            })
-            .expect("搜索线程启动失败");
-
-        self.query_tx = Some(query_tx);
-        self.result_rx = Some(result_rx);
-        self.search_thread = Some(handle);
-    }
-
-    fn kill_thread(&mut self) {
-        self.query_tx = None;
-        if let Some(handle) = self.search_thread.take() {
-            let _ = handle.join();
+    fn get_or_read_dir(&mut self, dir: &Path) -> &Vec<Entry> {
+        if !self.dir_cache.contains_key(dir) {
+            let entries = file_search::read_dir_entries(dir);
+            self.dir_cache.insert(dir.to_path_buf(), entries);
         }
-        self.result_rx = None;
+        self.dir_cache.get(dir).unwrap()
     }
 
     pub fn move_up(&mut self) {
@@ -273,48 +211,29 @@ impl AtMentionState {
         }
     }
 
-    pub fn selected_candidate(&self) -> Option<&FileCandidate> {
+    pub fn selected_candidate(&self) -> Option<&Entry> {
         self.candidates.get(self.selected)
     }
-}
 
-impl Drop for AtMentionState {
-    fn drop(&mut self) {
-        self.kill_thread();
-    }
-}
-
-/// 搜索线程主循环：recv_timeout 实现闲置退出，排空队列只处理最新 query
-fn search_thread_main(
-    cwd: String,
-    query_rx: mpsc::Receiver<String>,
-    result_tx: mpsc::Sender<(String, Vec<FileCandidate>)>,
-) {
-    loop {
-        let query = match query_rx.recv_timeout(IDLE_TIMEOUT) {
-            Ok(q) => q,
-            Err(_) => return,
-        };
-
-        // 排空队列，只处理最新 query
-        let mut latest = query;
-        while let Ok(q) = query_rx.try_recv() {
-            latest = q;
-        }
-
-        let candidates = file_search::search_files(&cwd, &latest);
-
-        if result_tx.send((latest, candidates)).is_err() {
-            return;
+    /// 获取当前选中的完整路径字符串（用于注入）
+    pub fn selected_path(&self) -> Option<String> {
+        let entry = self.selected_candidate()?;
+        let name = entry.name.to_string_lossy();
+        if self.dir_part.is_empty() {
+            Some(name.to_string())
+        } else {
+            Some(format!("{}{}", self.dir_part, name))
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use std::time::Duration;
+    use std::fs;
 
     use super::*;
+
+    // ===== 保留的原有测试 =====
 
     #[test]
     fn test_detect_at_sign_with_text() {
@@ -358,23 +277,20 @@ mod tests {
         let mut state = AtMentionState::new();
         state.active = true;
         state.candidates = vec![
-            FileCandidate {
-                path: "a.rs".into(),
-                display: "a.rs".into(),
+            Entry {
+                name: "a.rs".into(),
                 is_dir: false,
-                score: 10,
+                is_symlink: false,
             },
-            FileCandidate {
-                path: "b.rs".into(),
-                display: "b.rs".into(),
+            Entry {
+                name: "b.rs".into(),
                 is_dir: false,
-                score: 5,
+                is_symlink: false,
             },
-            FileCandidate {
-                path: "c.rs".into(),
-                display: "c.rs".into(),
+            Entry {
+                name: "c.rs".into(),
                 is_dir: false,
-                score: 1,
+                is_symlink: false,
             },
         ];
         assert_eq!(state.selected, 0);
@@ -389,50 +305,79 @@ mod tests {
     }
 
     #[test]
-    fn test_cache_hit() {
-        let mut state = AtMentionState::new();
-        let candidates = vec![FileCandidate {
-            path: "main.rs".into(),
-            display: "main.rs".into(),
-            is_dir: false,
-            score: 10,
-        }];
-        state.cache_result("main", candidates.clone());
-        let cached = state.try_filter_from_cache("main");
-        assert!(cached.is_some());
-        assert_eq!(cached.unwrap().len(), 1);
-    }
-
-    #[test]
-    fn test_should_search_now_first_time() {
-        let state = AtMentionState::new();
-        assert!(state.should_search_now(), "首次应允许搜索");
-    }
-
-    #[test]
     fn test_ensure_cwd_sets_once() {
         let mut state = AtMentionState::new();
-        assert!(state.cwd.is_empty());
+        assert!(state.cwd.as_os_str().is_empty());
         state.ensure_cwd("/tmp".to_string());
-        assert_eq!(state.cwd, "/tmp");
+        assert_eq!(state.cwd, PathBuf::from("/tmp"));
         state.ensure_cwd("/other".to_string());
-        assert_eq!(state.cwd, "/tmp", "ensure_cwd 只设置一次");
+        assert_eq!(state.cwd, PathBuf::from("/tmp"), "ensure_cwd 只设置一次");
+    }
+
+    // ===== 新增 dir_cache 测试 =====
+
+    #[test]
+    fn test_dir_cache_hit() {
+        let mut state = AtMentionState::new();
+        let dir = tempfile::tempdir().unwrap();
+        let base = dir.path();
+        fs::write(base.join("test.rs"), "").unwrap();
+        state.set_cwd(base.to_string_lossy().to_string());
+        state.activate("test".to_string(), 0);
+
+        // 首次刷新：应该 load
+        state.refresh_candidates();
+        assert!(!state.candidates.is_empty());
+        assert!(state.dir_cache.contains_key(base));
+
+        let first_count = state.candidates.len();
+
+        // 新增文件后再次刷新：缓存命中，不应该看到新文件
+        fs::write(base.join("new_file.rs"), "").unwrap();
+        state.refresh_candidates();
+        assert_eq!(
+            state.candidates.len(),
+            first_count,
+            "缓存命中，不应看到新文件"
+        );
     }
 
     #[test]
-    fn test_search_thread_idle_exit() {
+    fn test_dir_cache_cwd_invalidated() {
+        let mut state = AtMentionState::new();
+        let dir = tempfile::tempdir().unwrap();
+        let base = dir.path();
+        fs::write(base.join("a.rs"), "").unwrap();
+        state.set_cwd(base.to_string_lossy().to_string());
+        state.activate("a".to_string(), 0);
+        state.refresh_candidates();
+        assert!(state.dir_cache.contains_key(base));
+
+        let dir2 = tempfile::tempdir().unwrap();
+        state.set_cwd(dir2.path().to_string_lossy().to_string());
+        assert!(state.dir_cache.is_empty(), "cwd 变更后缓存应清空");
+    }
+
+    #[test]
+    fn test_refresh_empty_dir() {
         let mut state = AtMentionState::new();
         let dir = tempfile::tempdir().unwrap();
         state.set_cwd(dir.path().to_string_lossy().to_string());
-        std::fs::write(dir.path().join("test.rs"), "").unwrap();
+        state.activate("x".to_string(), 0);
+        state.refresh_candidates();
+        assert!(state.candidates.is_empty());
+        assert_eq!(state.empty_message, Some("(empty directory)".to_string()));
+    }
 
-        state.start_search("test".to_string());
-        assert!(!state.search_thread.as_ref().unwrap().is_finished());
-
-        std::thread::sleep(Duration::from_millis(1200));
-        assert!(
-            state.search_thread.as_ref().unwrap().is_finished(),
-            "线程应在 1s idle 后退出"
-        );
+    #[test]
+    fn test_refresh_no_match() {
+        let mut state = AtMentionState::new();
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("readme.md"), "").unwrap();
+        state.set_cwd(dir.path().to_string_lossy().to_string());
+        state.activate("nonexistent".to_string(), 0);
+        state.refresh_candidates();
+        assert!(state.candidates.is_empty());
+        assert_eq!(state.empty_message, Some("(no matches)".to_string()));
     }
 }

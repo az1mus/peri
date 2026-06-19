@@ -55,7 +55,7 @@ pub struct AcpServerConfig {
     pub cron_scheduler: Option<Arc<parking_lot::Mutex<CronScheduler>>>,
     pub mcp_pool: Option<Arc<peri_middlewares::mcp::McpClientPool>>,
     pub channel_state: Option<Arc<ChannelState>>,
-    pub plugin_skill_dirs: Vec<std::path::PathBuf>,
+    pub plugin_skill_roots: Vec<peri_middlewares::skills::SkillRoot>,
     pub plugin_agent_dirs: Vec<std::path::PathBuf>,
     pub plugin_hooks: Vec<peri_middlewares::hooks::RegisteredHook>,
     pub hook_groups: Vec<Vec<peri_middlewares::hooks::RegisteredHook>>,
@@ -104,7 +104,7 @@ pub async fn run_acp_server(
                     let peri_config = cfg.peri_config.clone();
                     let permission_mode = cfg.permission_mode.clone();
                     let cron_scheduler = cfg.cron_scheduler.clone();
-                    let plugin_skill_dirs = cfg.plugin_skill_dirs.clone();
+                    let plugin_skill_roots = cfg.plugin_skill_roots.clone();
                     let plugin_agent_dirs = cfg.plugin_agent_dirs.clone();
                     let hook_groups = cfg.hook_groups.clone();
                     let mcp_pool = cfg.mcp_pool.clone();
@@ -152,7 +152,7 @@ pub async fn run_acp_server(
                             &peri_config,
                             &permission_mode,
                             cron_scheduler,
-                            &plugin_skill_dirs,
+                            &plugin_skill_roots,
                             &plugin_agent_dirs,
                             &hook_groups,
                             mcp_pool,

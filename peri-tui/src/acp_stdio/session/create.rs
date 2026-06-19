@@ -71,7 +71,7 @@ pub(crate) async fn handle_new(
     // Push AvailableCommandsUpdate notification
     commands::send_available_commands(
         &cwd_for_skills,
-        &ctx.plugin_skill_dirs,
+        &ctx.plugin_skill_roots,
         &SessionId::new(&*sid),
         &cx,
     );
@@ -134,7 +134,7 @@ pub(crate) async fn handle_load(
     // Scan skills for AvailableCommands notification
     commands::send_available_commands(
         &cwd_for_skills,
-        &ctx.plugin_skill_dirs,
+        &ctx.plugin_skill_roots,
         &SessionId::new(&*sid),
         &cx,
     );

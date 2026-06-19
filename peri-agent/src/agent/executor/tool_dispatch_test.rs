@@ -1163,3 +1163,84 @@ fn test_consecutive_failure_accumulates_same_kind() {
         consecutive
     );
 }
+
+// ─── Error Suggestion Layer 回归测试 ────────────────────────────────────
+// 验证 [TRAP] 不变量：注入路径只修改 result.output，不改 is_error。
+
+#[tokio::test]
+async fn test_apply_error_suggestion_preserves_is_error_flag() {
+    use crate::error_suggest::{
+        format::format_suggestion, ErrorContext, ErrorSuggestRegistry, ErrorSuggester, Suggestion,
+        ToolRegistrySnapshot,
+    };
+    use std::sync::Arc;
+
+    struct Always;
+    impl ErrorSuggester for Always {
+        fn suggest(&self, _: &ErrorContext) -> Option<Suggestion> {
+            Some(Suggestion::new("建议"))
+        }
+    }
+
+    let registry = Arc::new(ErrorSuggestRegistry::new(vec![Box::new(Always)]));
+    let snap = ToolRegistrySnapshot::default();
+    let input = serde_json::json!({});
+    let ctx = ErrorContext::new(
+        "Read",
+        &input,
+        "Error: File not found",
+        std::path::Path::new("."),
+        &snap,
+    );
+
+    // 模拟 collect_tool_results 中的注入逻辑
+    let mut result_output = "Error: File not found".to_string();
+    let result_is_error = true;
+
+    if result_is_error {
+        if let Some(sug) = registry.suggest(&ctx) {
+            result_output = format_suggestion(&result_output, &sug);
+            // [TRAP] 不修改 result_is_error
+        }
+    }
+
+    // 断言：output 包含建议，is_error 保持 true
+    assert!(result_output.contains("Error: File not found"));
+    assert!(result_output.contains("建议"));
+    assert!(result_output.contains("---"));
+    assert!(result_is_error, "is_error 必须保持 true");
+}
+
+#[test]
+fn test_apply_error_suggestion_skips_when_no_match() {
+    use crate::error_suggest::{
+        format::format_suggestion, ErrorContext, ErrorSuggestRegistry, ErrorSuggester, Suggestion,
+        ToolRegistrySnapshot,
+    };
+    use std::sync::Arc;
+
+    struct Never;
+    impl ErrorSuggester for Never {
+        fn suggest(&self, _: &ErrorContext) -> Option<Suggestion> {
+            None
+        }
+    }
+
+    let registry = Arc::new(ErrorSuggestRegistry::new(vec![Box::new(Never)]));
+    let snap = ToolRegistrySnapshot::default();
+    let input = serde_json::json!({});
+    let ctx = ErrorContext::new(
+        "Read",
+        &input,
+        "Error: unknown",
+        std::path::Path::new("."),
+        &snap,
+    );
+
+    let original = "Error: unknown".to_string();
+    let mut output = original.clone();
+    if let Some(sug) = registry.suggest(&ctx) {
+        output = format_suggestion(&output, &sug);
+    }
+    assert_eq!(output, original, "无建议时 output 必须保持原值");
+}

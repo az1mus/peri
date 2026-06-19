@@ -309,29 +309,19 @@ impl App {
             token.cancel();
         }
         let mut command_registry = crate::command::default_registry();
-        let mut skills = {
-            let mut dirs = Vec::new();
-            if let Some(home) = dirs_next::home_dir() {
-                dirs.push(home.join(".claude").join("skills"));
-            }
-            if let Some(global_dir) = peri_middlewares::skills::load_global_skills_dir() {
-                dirs.push(global_dir);
-            }
-            if let Ok(cwd) = std::env::current_dir() {
-                dirs.push(cwd.join(".claude").join("skills"));
-            }
-            peri_middlewares::skills::list_skills(&dirs)
-        };
-        // 追加插件 skills（去重）
+        // 复用 loader::resolve_skill_roots 作为 single source of truth，
+        // 避免与 SkillsMiddleware 的根顺序逻辑漂移
+        let plugin_skill_roots = self
+            .services
+            .plugin_data
+            .as_ref()
+            .map(|pd| pd.all_skill_roots.clone())
+            .unwrap_or_default();
+        let skill_roots =
+            peri_middlewares::skills::resolve_skill_roots(&self.services.cwd, plugin_skill_roots);
+        let skills = peri_middlewares::skills::scan_skill_roots(&skill_roots);
+        // 追加插件 commands
         if let Some(pd) = &self.services.plugin_data {
-            let plugin_skills = peri_middlewares::skills::list_skills(&pd.all_skill_dirs);
-            let existing_names: std::collections::HashSet<String> =
-                skills.iter().map(|s| s.name.clone()).collect();
-            for skill in plugin_skills {
-                if !existing_names.contains(&skill.name) {
-                    skills.push(skill);
-                }
-            }
             command_registry.register_plugin_commands(pd.all_commands.clone());
         }
         let diff_visible = self.session_mgr.current_mut().ui.diff_visible;

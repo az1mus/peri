@@ -21,6 +21,7 @@ use crate::{
         marketplace::read_manifest_from_path,
         types::{InstalledPlugins, McpServerEntry, PluginCommandEntry, PluginManifest},
     },
+    skills::{SkillRoot, SkillSource},
 };
 
 #[derive(Debug, Error)]
@@ -83,7 +84,7 @@ pub struct LoadedPlugin {
     pub install_path: PathBuf,
     pub manifest: PluginManifest,
     pub commands: Vec<CommandEntry>,
-    pub skills_dirs: Vec<PathBuf>,
+    pub skills_roots: Vec<SkillRoot>,
     pub agents_dirs: Vec<PathBuf>,
     pub mcp_servers: HashMap<String, McpServerConfig>,
     /// 插件数据目录（install_path/.claude-plugin/data），供 ${CLAUDE_PLUGIN_DATA} 展开
@@ -257,16 +258,20 @@ fn process_command_file(
     });
 }
 
-/// Extract skill directories from plugin manifest.
+/// Extract skill roots from plugin manifest.
 ///
 /// Manifest `skills` entries are treated as paths relative to the plugin root
 /// (matching Claude Code convention: `skills: ["./skills/"]` or `skills: ["skills/tdd"]`).
-/// If an entry points to a directory containing `SKILL.md`, it is used directly.
-/// Otherwise the entry is treated as a container directory and scanned for
-/// subdirectories that contain `SKILL.md`.
+/// Each entry becomes a `SkillRoot` (`source=Plugin`, `plugin_name=plugin_name`),
+/// regardless of whether it directly contains `SKILL.md` or is a container——
+/// `scan_skill_roots` handles both cases via leaf semantics.
 ///
-/// Falls back to scanning `base_dir/skills/` when no manifest skills are declared.
-pub(crate) fn extract_skills_paths(manifest: &PluginManifest, base_dir: &Path) -> Vec<PathBuf> {
+/// Falls back to `base_dir/skills/` as a single root when no manifest skills are declared.
+pub(crate) fn extract_skills_paths(
+    manifest: &PluginManifest,
+    base_dir: &Path,
+    plugin_name: &str,
+) -> Vec<SkillRoot> {
     let mut result = Vec::new();
 
     // 1. manifest 显式声明（每条 entry 是相对于插件根目录的路径）
@@ -278,32 +283,24 @@ pub(crate) fn extract_skills_paths(manifest: &PluginManifest, base_dir: &Path) -
                     debug!(path = %skill_path.display(), "插件 skill 路径不存在，跳过");
                     continue;
                 }
-                if skill_path.join("SKILL.md").exists() {
-                    result.push(skill_path);
-                } else {
-                    // 容器目录：扫描含 SKILL.md 的子目录
-                    if let Ok(children) = std::fs::read_dir(&skill_path) {
-                        for child in children.flatten() {
-                            let p = child.path();
-                            if p.is_dir() && p.join("SKILL.md").exists() {
-                                result.push(p);
-                            }
-                        }
-                    }
-                }
+                result.push(SkillRoot {
+                    path: skill_path,
+                    source: SkillSource::Plugin,
+                    plugin_name: Some(plugin_name.to_string()),
+                });
             }
             return result;
         }
     }
 
-    // 2. fallback：扫描 base_dir/skills/ 下所有含 SKILL.md 的子目录
+    // 2. fallback：base_dir/skills/ 作为一个 root（由 scan_skill_roots 递归扫描）
     let skills_dir = base_dir.join("skills");
-    if let Ok(entries) = std::fs::read_dir(&skills_dir) {
-        for entry in entries.flatten() {
-            if entry.path().is_dir() && entry.path().join("SKILL.md").exists() {
-                result.push(entry.path());
-            }
-        }
+    if skills_dir.is_dir() {
+        result.push(SkillRoot {
+            path: skills_dir,
+            source: SkillSource::Plugin,
+            plugin_name: Some(plugin_name.to_string()),
+        });
     }
 
     result
@@ -467,7 +464,7 @@ pub fn load_plugins(installed: &InstalledPlugins) -> Result<Vec<LoadedPlugin>, L
         };
 
         let commands = extract_commands(&manifest, &plugin.install_path, &plugin.name);
-        let skills_dirs = extract_skills_paths(&manifest, &plugin.install_path);
+        let skills_roots = extract_skills_paths(&manifest, &plugin.install_path, &plugin.name);
         let agents_dirs = extract_agents_paths(&manifest, &plugin.install_path);
         let mcp_servers = extract_mcp_servers(&manifest, &plugin.install_path);
         let data_path = plugin.install_path.join(".claude-plugin").join("data");
@@ -479,7 +476,7 @@ pub fn load_plugins(installed: &InstalledPlugins) -> Result<Vec<LoadedPlugin>, L
             install_path: plugin.install_path.clone(),
             manifest,
             commands,
-            skills_dirs,
+            skills_roots,
             agents_dirs,
             mcp_servers,
             data_path,
@@ -552,7 +549,7 @@ pub fn merge_plugin_mcp_servers(plugins: &[LoadedPlugin]) -> HashMap<String, Mcp
 #[derive(Debug, Clone)]
 pub struct PluginLoadResult {
     pub plugins: Vec<LoadedPlugin>,
-    pub all_skill_dirs: Vec<PathBuf>,
+    pub all_skill_roots: Vec<SkillRoot>,
     pub all_mcp_servers: HashMap<String, McpServerConfig>,
     pub all_agent_dirs: Vec<PathBuf>,
     pub all_commands: Vec<CommandEntry>,
@@ -569,7 +566,7 @@ pub fn load_enabled_plugins_aggregated(claude_dir: &Path) -> PluginLoadResult {
             // 静默失败，避免在 TUI 上打印错误日志
             return PluginLoadResult {
                 plugins: vec![],
-                all_skill_dirs: vec![],
+                all_skill_roots: vec![],
                 all_mcp_servers: HashMap::new(),
                 all_agent_dirs: vec![],
                 all_commands: vec![],
@@ -579,7 +576,10 @@ pub fn load_enabled_plugins_aggregated(claude_dir: &Path) -> PluginLoadResult {
         }
     };
 
-    let all_skill_dirs: Vec<PathBuf> = plugins.iter().flat_map(|p| p.skills_dirs.clone()).collect();
+    let all_skill_roots: Vec<SkillRoot> = plugins
+        .iter()
+        .flat_map(|p| p.skills_roots.clone())
+        .collect();
 
     let all_mcp_servers = merge_plugin_mcp_servers(&plugins);
 
@@ -657,7 +657,7 @@ pub fn load_enabled_plugins_aggregated(claude_dir: &Path) -> PluginLoadResult {
 
     PluginLoadResult {
         plugins,
-        all_skill_dirs,
+        all_skill_roots,
         all_mcp_servers,
         all_agent_dirs,
         all_commands,
