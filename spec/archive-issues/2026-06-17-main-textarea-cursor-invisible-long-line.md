@@ -1,3 +1,5 @@
+> 归档于 2026-06-19，原路径 spec/issues/2026-06-17-main-textarea-cursor-invisible-long-line.md
+
 # 主输入框长行行尾终端光标消失
 
 **状态**：Verified（修复 #9：buffer 后处理移除 REVERSED + 设 bg=TEXT 等效光标块，残影 + 行尾光标可见同时根治）

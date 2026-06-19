@@ -1185,6 +1185,21 @@ submit_message(text)
 
 ---
 
+### issue_2026-06-17-main-textarea-cursor-invisible-long-line
+
+**摘要:** 主输入框长行行尾终端光标消失
+**状态:** Verified
+**归档日期:** 2026-06-19
+**关键词:** buffer 光标, terminal 光标, REVERSED 残影, tui-textarea 光标, IME 候选窗
+**问题本质:** PR #34 引入 IME 支持时，关闭了 tui-textarea 默认的 REVERSED buffer 级光标改用终端光标。但 tui-textarea-2 的 Viewport::scroll_top() 是 pub(crate)，外部无法读取真实水平滚动偏移，只能用推断公式。推断公式在 sticky scroll 场景下（光标在视口中部移动，top_col 不变）始终把光标钉在视口最右列，终端模拟器在最右列裁剪光标→光标完全消失。加之 buffer 光标已被禁用，无 fallback。
+**通用模式:** (1) 禁用 buffer 级光标（REVERSED）改用终端光标时，必须有准确的滚动偏移读数，否则会出现"完全看不到光标"的灾难性表现；跨帧 sticky scroll 状态需要 UI state 维护，不能纯靠公式推断。(2) 终端光标的最右列可能存在裁剪行为，visible_col 必须钳位到 visible_width-1 以内。(3) buffer 后处理（扫描 REVERSED 空格，移除 REVERSED + 设 bg=TEXT）可以在不修改上游的情况下等效还原光标可视化，且不依赖坐标计算。
+**架构影响:** buffer 光标 vs terminal 光标形成双层光标模型。buffer 光标（REVERSED）始终正确但无法引导 IME 候选窗；terminal 光标可引导 IME 候选窗但需要准确坐标计算。平台差异化的折中方案（macOS/Linux 用 buffer 光标 + bg 等效块，Windows 用 terminal cursor）平衡了两者。
+**技术决策:** 修复 #9 的 buffer 后处理方案（扫描 textarea 渲染区域 REVERSED 空格，移除 REVERSED + 设 bg=TEXT 等效光标块）不依赖水平滚动推断、不修改 tui-textarea 上游、无残影残留。未来恢复 IME 支持的正确方向是方案 A（UI state 跨帧 sticky last_scroll_col + next_scroll_top 逻辑），避免重蹈 PR #34 推断公式的覆辙。
+**涉及文件:** peri-tui/src/app/ime.rs, peri-tui/src/ui/main_ui/mod.rs, peri-tui/src/app/edit_utils.rs, peri-tui/Cargo.toml
+**CLAUDE.md 链接:** true
+
+---
+
 ## 相关 Feature
 
 - → [agent.md#20260322_F001_agent-storage-refactor](./agent.md#20260322_F001_agent-storage-refactor) — SQLite 持久化，TUI 消息渲染依赖此存储
