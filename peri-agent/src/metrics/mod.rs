@@ -73,6 +73,12 @@ pub fn current_rss_mb() -> Option<u64> {
     }
 }
 
+/// 获取系统总物理内存（MB），跨平台
+pub fn total_system_memory_mb() -> Option<u64> {
+    let sys = sysinfo::System::new_all();
+    Some(sys.total_memory() / (1024 * 1024))
+}
+
 /// 单 writer task：消费 channel，追加写入 JSONL 文件
 async fn metrics_writer(mut rx: mpsc::UnboundedReceiver<MetricEvent>) {
     let base_dir = dirs_next::home_dir()
