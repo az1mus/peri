@@ -4,6 +4,7 @@ pub mod diff;
 pub mod file_tree;
 pub mod form;
 pub mod input_field;
+pub mod link;
 pub mod list;
 pub mod list_overlay;
 pub mod message_block;
@@ -24,6 +25,7 @@ pub use file_tree::render::FileTree;
 pub use file_tree::{FileNode, FileTreeState, FlatNode, ToggleResult};
 pub use form::{FormField, FormState};
 pub use input_field::InputState;
+pub use link::{wrap_osc8, LinkSpan, LinkWidget};
 #[cfg(feature = "markdown")]
 pub use markdown::{DefaultMarkdownTheme, MarkdownTheme, ThemeMarkdownAdapter};
 pub use scrollable::{render_vertical_scrollbar, ScrollState, ScrollableArea, ScrollbarMetrics};

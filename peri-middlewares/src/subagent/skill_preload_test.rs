@@ -353,3 +353,30 @@
             "Tool 结果应包含插件 skill 全文"
         );
     }
+
+    #[tokio::test]
+    async fn test_preload_loads_builtin_skill_content() {
+        // SubAgent 路径：显式 skill_names 含 use-artifacts，应能从 BUILTIN_SKILLS 加载全文
+        let mut state = peri_agent::agent::state::AgentState::new("/tmp");
+        state.add_message(peri_agent::messages::BaseMessage::human("hi"));
+
+        let mw = super::SkillPreloadMiddleware::new(
+            vec!["use-artifacts".to_string()],
+            "/tmp",
+        );
+
+        mw.before_agent(&mut state).await.unwrap();
+
+        // 应注入 Ai + Tool 消息（共 2 条），且 ToolResult 含 BUILTIN_SKILLS 的 SKILL.md 内容
+        let msgs = state.messages();
+        let tool_result_content = msgs
+            .iter()
+            .find(|m| matches!(m, peri_agent::messages::BaseMessage::Tool { .. }))
+            .map(|m| m.content())
+            .expect("应有 ToolResult 消息");
+        assert!(
+            tool_result_content.contains("Artifact"),
+            "ToolResult 应含 BUILTIN_SKILLS 的 SKILL.md 全文，实际: {}",
+            tool_result_content
+        );
+    }

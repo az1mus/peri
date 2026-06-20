@@ -41,7 +41,7 @@ help-available-commands = 可用命令：
 help-alias-prefix = （别名: /{ $aliases }）
 help-skills-count = Skills（{ $count } 个可用）: 输入 # 前缀查看
 help-skills-empty = Skills: 将 .md 文件放入 .claude/skills/ 目录即可添加
-help-shortcuts = 快捷键：Shift+Tab 切换权限模式 │ Ctrl+T 切换模型 │ Shift+Enter 换行 │ Esc 退出 │ Ctrl+C 中断
+help-shortcuts = 快捷键：Shift+Tab 切换权限模式 │ { $model_key } 切换模型 │ Shift+Enter 换行 │ Esc 退出 │ Ctrl+C 中断
 
 # compact command
 compact-agent-running = Agent 运行中，无法执行压缩
@@ -430,3 +430,173 @@ app-plugin-added = Marketplace 已添加: { $name } (正在获取内容...)
 
 # 后台 Agent 管理栏
 bg-bar-focus-hint = 按 Esc 退出聚焦
+
+# ---- 模型面板 ----
+
+model-panel-title =  选择模型 
+model-panel-description =   切换模型。仅对当前会话生效。
+model-field-max-token = 最大 Token
+model-field-effort = 推理力度
+model-field-1m-context = 1M 上下文
+model-effort-low = 低
+model-effort-medium = 中
+model-effort-high = 高
+model-effort-xhigh = 超高
+model-effort-max = 最大
+
+# ---- 状态面板 ----
+
+status-panel-title =  状态 
+status-tab-cost = 费用
+status-tab-context = 上下文
+status-label-duration = 会话时长
+status-label-input-tokens = 输入 Tokens
+status-label-output-tokens = 输出 Tokens
+status-label-cache-create = Cache 创建
+status-label-cache-read = Cache 读取
+status-label-llm-calls = LLM 调用次数
+status-label-estimated-cost = 估算费用
+status-label-current-model = 当前模型
+status-label-context = 上下文
+status-label-used = 已用
+status-label-messages = 消息
+status-label-tools = 工具
+status-empty-data = 暂无请求数据
+
+# ---- Agent 面板 ----
+
+agent-panel-title-none =  Agent 选择 (无) 
+agent-panel-title =  Agent 选择 
+agent-panel-none-label = 无 Agent（默认）
+agent-panel-empty-hint = 在 .claude/agents/ 目录中添加 Agent 定义文件
+
+# ---- Hook 面板 ----
+
+hooks-panel-title-none =  Hook 配置 (无) 
+hooks-panel-title =  Hook 配置 
+hooks-configured-count = 已配置 { $count } 个 hook
+hooks-readonly-hint = 此面板为只读。要添加或修改 hook，请编辑插件的 hooks.json。
+hooks-no-hooks =   未配置 hook。
+hooks-no-hooks-hint =   Hook 可通过插件 hooks/hooks.json 添加。
+
+# ---- 历史浏览器 ----
+
+thread-browser-title =  恢复会话 ({ $cursor }/{ $total }) 
+thread-browser-search-placeholder = 搜索…
+thread-browser-empty =   （暂无对话）
+thread-browser-no-match =   （无匹配对话）
+thread-browser-untitled = （无标题）
+thread-browser-time-just-now = 刚刚
+thread-browser-time-minutes = { $count } 分钟前
+thread-browser-time-hours = { $count } 小时前
+thread-browser-time-days = { $count } 天前
+
+# ---- Rewind 弹窗 ----
+
+rewind-title = 回滚
+rewind-msg-count = ({ $count }条消息)
+rewind-mode-messages = 1. 回到此 prompt
+rewind-mode-files = 2. 回到此 prompt + 恢复文件
+rewind-mode-confirm = ⚠ 确认: 恢复文件?
+rewind-files-to-restore = 将恢复的文件:
+rewind-confirm-hint = Enter 确认, Esc 取消
+rewind-write-op = Write → 删除+Git restore
+rewind-edit-op = Edit → 恢复
+
+# ---- OAuth 弹窗 ----
+
+oauth-title =  OAuth 授权 — { $server } 
+oauth-prompt = 按 Ctrl+O 在浏览器中打开链接，完成后粘贴回调 URL：
+oauth-callback-label = 回调 URL > 
+
+# ---- Login 面板 ----
+
+login-field-name = 名称
+login-field-type = 类型
+login-field-base-url = 基础 URL
+login-field-api-key = API 密钥
+login-field-opus-model = Opus 模型
+login-field-sonnet-model = Sonnet 模型
+login-field-haiku-model = Haiku 模型
+
+# ---- 配置面板补充 ----
+
+config-lang-display-en = English
+config-lang-display-zh = 简体中文
+config-lang-display-auto = auto
+config-streaming-display-streaming = streaming
+config-streaming-display-block = block
+config-streaming-display-none = none
+config-proactiveness-display-low = low
+config-proactiveness-display-medium = medium
+config-proactiveness-display-high = high
+
+# ---- 命令输出 ----
+
+command-channel-desc = 管理 MCP 频道连接: open <source> / close / status
+command-channel-usage = 用法: /channel open <source> | /channel close | /channel status
+command-channel-not-init = Channel 系统未初始化
+command-channel-unavailable = 服务器 { $server } 不支持 channel 功能或未连接
+command-channel-opened = 频道已开启: { $source }
+command-channel-all-closed = 所有频道已关闭
+command-channel-closed = 频道已关闭: { $server }
+command-channel-no-channels = 没有开启的频道。使用 /channel open <source> 开启
+command-channel-list-header = 已开启的频道:
+command-channel-list-item =   { $source }
+command-bg-usage = 用法: /bg <命令描述>
+    例如: /bg 用中文搜索 Rust 2026 roadmap 最新进展
+command-loop-usage = 用法: /loop <自然语言时间描述> <提示词>
+    例如: /loop 每隔5分钟提醒我喝水
+command-plugin-add-failed-detail = 添加 marketplace 失败: { $error }
+command-plugin-install-failed = 安装插件失败: { $error }
+command-plugin-update-failed = 更新 marketplace 失败: { $error }
+command-agent-reset = Agent 已重置（未设置 agent_id）
+command-agent-switched = Agent 已切换为: { $name } ({ $id })
+command-lang-current-suffix =  (当前)
+command-config-save-failed = 配置保存失败: { $error }
+command-plugin-help = 用法:
+    /plugin                                    — 打开插件面板
+    /plugin marketplace add <url>              — 添加市场源
+    /plugin install <name>@<marketplace>       — 安装插件
+    /plugin marketplace update <name>          — 更新市场缓存
+
+# ---- 消息渲染 ----
+
+render-batch-all-failed = { $count } 个 agent 失败
+render-batch-partial = { $done } 个 agent 已完成，{ $failed } 个失败
+render-batch-done = { $count } 个 agent 已完成
+render-status-failed = 失败
+render-status-done = 完成
+render-tool-uses = · { $count } 次工具调用
+render-user-answered = 用户回答了 Peri 的问题：
+render-thought-for = 思考了 { $count } 字符
+render-agent-header = Agent
+render-compacted-hint = 📋 上下文已压缩
+
+# ---- 消息区 Spinner ----
+
+msg-spinner-tokens = · ↓ { $count } tokens
+msg-spinner-brewed =   ✻  处理耗时 { $duration }
+msg-tip-prefix =   ⎿  提示: 
+msg-todo-available =  (可开始)
+
+# ---- 消息视图占位符 ----
+
+msg-placeholder-image = [图片]
+msg-placeholder-document = [文档: { $name }]
+
+# ---- 应用杂项 ----
+
+app-cli-no-input = 无输入 prompt。用法: peri -p "你的问题" 或 echo "问题" | peri -p
+app-thread-deleted = 已删除对话: { $title }
+app-memory-project = 项目说明
+app-memory-user = 用户全局
+
+# ---- 状态栏补充 ----
+
+statusbar-rewind-wait =  Agent 运行中，请等待后再撤销 
+statusbar-rewind-pending =  再按 ESC 回滚对话 
+statusbar-rewind-action = 回滚对话
+statusbar-rewind-other-key = 其他键
+statusbar-rewind-move = 移动
+statusbar-rewind-switch-file = 切换回退文件

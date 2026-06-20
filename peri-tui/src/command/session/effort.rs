@@ -14,6 +14,7 @@ impl Command for EffortCommand {
     }
 
     fn execute(&self, app: &mut App, args: &str) {
+        let lc = &app.services.lc;
         let arg = args.trim().to_lowercase();
         match arg.as_str() {
             "low" | "medium" | "high" | "xhigh" | "max" => {
@@ -31,7 +32,10 @@ impl Command for EffortCommand {
                 });
                 if let Err(e) = App::save_config(&cfg, app.services.config_path_override.as_deref())
                 {
-                    let vm = MessageViewModel::system(format!("配置保存失败: {}", e));
+                    let vm = MessageViewModel::system(lc.tr_args(
+                        "config-save-failed",
+                        &[("error".into(), e.to_string().into())],
+                    ));
                     app.session_mgr
                         .current_mut()
                         .messages
@@ -39,7 +43,9 @@ impl Command for EffortCommand {
                         .push(vm);
                     return;
                 }
-                let vm = MessageViewModel::system(format!("推理力度已设为 {}", arg));
+                let vm = MessageViewModel::system(
+                    lc.tr_args("effort-set", &[("effort".into(), arg.clone().into())]),
+                );
                 app.session_mgr
                     .current_mut()
                     .messages
@@ -66,8 +72,12 @@ impl Command for EffortCommand {
                     .unwrap_or_else(|| "high".to_string());
                 let current = current_owned.as_str();
                 let vm = MessageViewModel::system(format!(
-                    "当前推理力度: {}\n用法: /effort low|medium|high|xhigh|max",
-                    current
+                    "{}\n{}",
+                    lc.tr_args(
+                        "effort-current",
+                        &[("effort".into(), current.to_string().into())]
+                    ),
+                    lc.tr("effort-usage"),
                 ));
                 app.session_mgr
                     .current_mut()

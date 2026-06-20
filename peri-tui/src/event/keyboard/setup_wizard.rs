@@ -45,8 +45,12 @@ pub(super) fn handle_setup_wizard(app: &mut App, input: &Input) -> Option<Action
                     match crate::app::setup_wizard::save_setup(&wizard) {
                         Ok(cfg) => app.refresh_after_setup(cfg),
                         Err(e) => {
+                            let msg_text = app.services.lc.tr_args(
+                                "config-save-failed",
+                                &[("error".into(), e.to_string().into())],
+                            );
                             let msg = MessageViewModel::from_base_message(
-                                &BaseMessage::system(format!("配置保存失败: {}", e)),
+                                &BaseMessage::system(msg_text),
                                 &[],
                             );
                             app.session_mgr

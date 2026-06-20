@@ -118,6 +118,7 @@ pub fn tool_color(name: &str) -> Color {
         "Write" | "Edit" | "folder_operations" | "delete_file" | "delete_folder" | "rm"
         | "rm_rf" => theme::WARNING,
         "Bash" => theme::BASH_BORDER,
+        "AgentResult" => theme::BASH_BORDER,
         "Agent" | "AskUserQuestion" | "TodoWrite" => theme::THINKING,
         _ if name.contains("error") => theme::ERROR,
         _ => theme::MUTED,

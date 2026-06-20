@@ -4,7 +4,9 @@ impl App {
     /// 打开 /memory 面板
     pub fn open_memory_panel(&mut self) {
         let home_dir = dirs_next::home_dir();
-        let mut panel = crate::app::memory_panel::MemoryPanel::new(&self.services.cwd, home_dir);
+        let lc = &self.services.lc;
+        let mut panel =
+            crate::app::memory_panel::MemoryPanel::new(&self.services.cwd, home_dir, lc);
         panel.refresh_exists();
         self.open_panel(PanelState::Memory(panel));
     }

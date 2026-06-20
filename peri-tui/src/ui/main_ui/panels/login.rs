@@ -142,6 +142,18 @@ pub(crate) fn render_login_panel(f: &mut Frame, panel: &mut LoginPanel, app: &mu
                     .join("  ")
             };
 
+            let field_label = |field: &LoginEditField| -> String {
+                match field {
+                    LoginEditField::Name => lc.tr("login-field-name").to_string(),
+                    LoginEditField::Type => lc.tr("login-field-type").to_string(),
+                    LoginEditField::BaseUrl => lc.tr("login-field-base-url").to_string(),
+                    LoginEditField::ApiKey => lc.tr("login-field-api-key").to_string(),
+                    LoginEditField::OpusModel => lc.tr("login-field-opus-model").to_string(),
+                    LoginEditField::SonnetModel => lc.tr("login-field-sonnet-model").to_string(),
+                    LoginEditField::HaikuModel => lc.tr("login-field-haiku-model").to_string(),
+                }
+            };
+
             let fields: &[(LoginEditField, &str)] = &[
                 (LoginEditField::Name, "Name        "),
                 (LoginEditField::Type, "Type        "),
@@ -154,7 +166,8 @@ pub(crate) fn render_login_panel(f: &mut Frame, panel: &mut LoginPanel, app: &mu
 
             let mut active_overlay: Option<u16> = None;
 
-            for (field, label) in fields {
+            for (field, _label) in fields {
+                let display_label = field_label(field);
                 let is_active = *field == panel.edit_field;
                 let is_text_field = *field != LoginEditField::Type;
 
@@ -197,7 +210,7 @@ pub(crate) fn render_login_panel(f: &mut Frame, panel: &mut LoginPanel, app: &mu
                 };
 
                 lines.push(Line::from(vec![
-                    Span::styled(format!("  {} ", label), label_style),
+                    Span::styled(format!("  {} ", display_label), label_style),
                     Span::styled(" ", Style::default()),
                     Span::styled(value_display, value_style),
                 ]));

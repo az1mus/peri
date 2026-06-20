@@ -107,9 +107,13 @@ impl FrozenSessionData {
         let (claude_md, claude_local_md) =
             peri_middlewares::AgentsMdMiddleware::read_frozen_content(cwd);
 
+        // 一次性读取 disableBundledSkills 并冻结到 frozen_skill_summary
+        // （保持系统提示词稳定性：会话内不重读）
+        let disable_bundled = peri_middlewares::skills::load_disable_bundled_skills();
         let skill_summary = peri_middlewares::SkillsMiddleware::build_frozen_summary(
             cwd,
             plugin_skill_roots.to_vec(),
+            disable_bundled,
         );
 
         let features = crate::prompt::PromptFeatures::detect();

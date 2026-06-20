@@ -44,7 +44,9 @@
 
 **Frontmatter 解析**：skill 和插件命令用 `gray_matter` crate（YAML engine），必须复用 `Matter::<YAML>::new()` 模式。
 
-**Skills**：搜索顺序 `~/.claude/skills/` → `skillsDir` → `./.claude/skills/` → 插件 skills。统一收口到 `scan_skill_roots(roots: &[SkillRoot])`：递归扫描（深度上限 6，目录数上限 1000/root），symlink 跟随 + canonicalize 防环，叶子语义（含 SKILL.md 则停止下钻），跨根去重按 roots 顺序先到先得。`SkillsMiddleware.with_plugin_roots()` 是插件扩展点。
+**Skills**：搜索顺序 `~/.claude/skills/` → `skillsDir` → `./.claude/skills/` → 插件 skills → **Builtin（随二进制分发）**。统一收口到 `scan_skill_roots(roots: &[SkillRoot])`：递归扫描（深度上限 6，目录数上限 1000/root），symlink 跟随 + canonicalize 防环，叶子语义（含 SKILL.md 则停止下钻），跨根去重按 roots 顺序先到先得。`SkillsMiddleware.with_plugin_roots()` 是插件扩展点。
+
+**Builtin skills**：`include_str!` 编译期嵌入 SKILL.md 到二进制（注册表 `skills::builtin::BUILTIN_SKILLS`），最低优先级，被任意层级同名覆盖。`scan_skill_roots_impl` 主循环对 `SkillSource::Builtin` 特判（跳过 `is_dir()` 检查，直接从常量数组加载）。虚拟路径 `<builtin>/<name>` 不对应磁盘文件，`SkillPreloadMiddleware` 通过 `source == Builtin` 判断走常量查找（而非 `std::fs::read_to_string`）。`settings.json::config.disableBundledSkills: true` 全局禁用，session/new 时一次性冻结（main agent 路径）或每次调用读取（TUI/Stdio 显示路径）。新增 builtin skill：把 SKILL.md 放到 `src/skills/builtin/skills/<name>/SKILL.md`，在 `BUILTIN_SKILLS` 数组追加 entry（`test_builtin_skills_frontmatter_valid` 自动覆盖）。
 
 **[TRAP]** Manifest `skills` 字段语义：`skills` 数组条目是相对于插件根目录的路径（如 `"./skills/"`、`"skills/tdd"`），不是 skill 名称。`extract_skills_paths` 用 `base_dir.join(entry)` 解析路径并返回 `Vec<SkillRoot>`（携带 `source=Plugin` + `plugin_name`）。容器根的递归下钻与叶子检测统一由 `scan_skill_roots` 处理，extract_skills_paths 不再扫描子目录验证 SKILL.md 存在性。绝不能把条目当名称拼接到 `base_dir/skills/` 下——会生成 `base_dir/skills/./skills/` 这样的无效路径。
 

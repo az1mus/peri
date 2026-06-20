@@ -19,8 +19,9 @@ use crate::{
 };
 
 pub(crate) fn render_model_panel(f: &mut Frame, panel: &ModelPanel, app: &mut App, area: Rect) {
+    let lc = &app.services.lc;
     let inner = BorderedPanel::new(Span::styled(
-        " Select model ",
+        lc.tr("model-panel-title"),
         Style::default()
             .fg(theme::THINKING)
             .add_modifier(Modifier::BOLD),
@@ -45,7 +46,7 @@ pub(crate) fn render_model_panel(f: &mut Frame, panel: &ModelPanel, app: &mut Ap
 
     // Description
     lines.push(Line::from(Span::styled(
-        "  Switch between models. Applies to this session.",
+        lc.tr("model-panel-description"),
         Style::default().fg(theme::MUTED),
     )));
     lines.push(Line::from(""));
@@ -122,12 +123,18 @@ pub(crate) fn render_model_panel(f: &mut Frame, panel: &ModelPanel, app: &mut Ap
         };
         let cursor_char = if is_cursor { "\u{276f}" } else { " " };
 
+        let max_tokens_text = format!(
+            "{}: {}",
+            lc.tr("model-field-max-token"),
+            panel.buf_max_tokens
+        );
+
         let spans = vec![
             Span::styled(
                 format!(" {} \u{25cf} ", cursor_char),
                 Style::default().fg(radio_color),
             ),
-            Span::styled(format!("Max Token: {}", panel.buf_max_tokens), label_style),
+            Span::styled(max_tokens_text, label_style),
         ];
 
         lines.push(Line::from(spans));
@@ -135,12 +142,12 @@ pub(crate) fn render_model_panel(f: &mut Frame, panel: &ModelPanel, app: &mut Ap
 
     // Effort row
     {
-        let effort_label = match panel.buf_thinking_effort.as_str() {
-            "low" => "Low",
-            "high" => "High",
-            "xhigh" => "XHigh",
-            "max" => "Max",
-            _ => "Medium",
+        let effort_key = match panel.buf_thinking_effort.as_str() {
+            "low" => "model-effort-low",
+            "high" => "model-effort-high",
+            "xhigh" => "model-effort-xhigh",
+            "max" => "model-effort-max",
+            _ => "model-effort-medium",
         };
 
         let is_cursor = panel.cursor() == ROW_EFFORT;
@@ -160,12 +167,14 @@ pub(crate) fn render_model_panel(f: &mut Frame, panel: &ModelPanel, app: &mut Ap
         };
         let cursor_char = if is_cursor { "\u{276f}" } else { " " };
 
+        let effort_text = format!("{}: {}", lc.tr("model-field-effort"), lc.tr(effort_key));
+
         let spans = vec![
             Span::styled(
                 format!(" {} \u{25cf} ", cursor_char),
                 Style::default().fg(radio_color),
             ),
-            Span::styled(format!("Effort: {}", effort_label), effort_style),
+            Span::styled(effort_text, effort_style),
         ];
 
         lines.push(Line::from(spans));
@@ -203,7 +212,7 @@ pub(crate) fn render_model_panel(f: &mut Frame, panel: &ModelPanel, app: &mut Ap
                 format!(" {} \u{25cf} ", cursor_char),
                 Style::default().fg(radio_color),
             ),
-            Span::styled("1M Context: ", label_style),
+            Span::styled(lc.tr("model-field-1m-context"), label_style),
             Span::styled(
                 state_label,
                 Style::default()

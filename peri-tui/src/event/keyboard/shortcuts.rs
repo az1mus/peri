@@ -51,11 +51,12 @@ pub(super) fn handle_shortcuts(
             let next = aliases[(idx + 1) % aliases.len()];
             cfg.config.active_alias = next.to_string();
             if let Err(e) = App::save_config(&cfg, app.services.config_path_override.as_deref()) {
-                app.session_mgr
-                    .current_mut()
-                    .messages
-                    .view_messages
-                    .push(MessageViewModel::system(format!("配置保存失败: {}", e)));
+                app.session_mgr.current_mut().messages.view_messages.push(
+                    MessageViewModel::system(app.services.lc.tr_args(
+                        "config-save-failed",
+                        &[("error".into(), e.to_string().into())],
+                    )),
+                );
             }
             if let Some(p) = crate::app::agent::LlmProvider::from_config(&cfg) {
                 app.services.provider_name = p.display_name().to_string();
@@ -99,11 +100,12 @@ pub(super) fn handle_shortcuts(
                 }
                 if let Err(e) = App::save_config(&cfg, app.services.config_path_override.as_deref())
                 {
-                    app.session_mgr
-                        .current_mut()
-                        .messages
-                        .view_messages
-                        .push(MessageViewModel::system(format!("配置保存失败: {}", e)));
+                    app.session_mgr.current_mut().messages.view_messages.push(
+                        MessageViewModel::system(app.services.lc.tr_args(
+                            "config-save-failed",
+                            &[("error".into(), e.to_string().into())],
+                        )),
+                    );
                 }
                 app.global_ui.provider_highlight_until =
                     Some(std::time::Instant::now() + std::time::Duration::from_millis(2000));

@@ -17,6 +17,8 @@ pub enum SkillSource {
     Project,
     /// 插件 manifest 声明的 skill 目录
     Plugin,
+    /// 随二进制分发的内置 skill（include_str! 编译期嵌入）
+    Builtin,
 }
 
 /// 带 source 标签的 skill 根目录
@@ -66,6 +68,10 @@ struct SkillFrontmatter {
 }
 
 /// 加载单个 SKILL.md，解析 frontmatter，返回元数据
+///
+/// **description trim**：YAML `>`（折叠标量）和 `|`（字面标量）会在末尾保留 `\n`，
+/// 下游 `build_summary` 把 description 拼到 Markdown list item 末尾，尾随 `\n` 会
+/// 让 list 渲染断裂成段落。这里 trim 尾随空白与 `parse_builtin_frontmatter` 保持一致。
 pub fn load_skill_metadata(path: &Path) -> Option<SkillMetadata> {
     let content = std::fs::read_to_string(path).ok()?;
     let matter = Matter::<YAML>::new();
@@ -76,7 +82,7 @@ pub fn load_skill_metadata(path: &Path) -> Option<SkillMetadata> {
 
     Some(SkillMetadata {
         name: fm.name,
-        description: fm.description,
+        description: fm.description.trim().to_string(),
         path: path.to_path_buf(),
         // 占位值：实际 source/plugin_name 由 scan_dir_recursive 中的 insert_skill 覆盖
         source: SkillSource::Project,
@@ -90,6 +96,11 @@ pub fn load_skill_metadata(path: &Path) -> Option<SkillMetadata> {
 /// `MAX_SKILLS_DIRS_PER_ROOT`、symlink 跟随 + canonicalize 防环、叶子语义：
 /// dir 含 SKILL.md 则加载并停止下钻）。跨 root 同名去重：roots 顺序决定优先级
 /// （先到先得）。
+///
+/// **Builtin 特判**：`SkillSource::Builtin` 的 root 跳过磁盘扫描（path 字段为占位
+/// `PathBuf::new()`），直接从编译期常量 `crate::skills::builtin::BUILTIN_SKILLS`
+/// 加载，构造虚拟路径 `<builtin>/<name>`（不对应真实文件，加载全文需通过
+/// `SkillPreloadMiddleware` 的 Builtin 特判路由）。
 pub fn scan_skill_roots(roots: &[SkillRoot]) -> Vec<SkillMetadata> {
     scan_skill_roots_impl(roots, MAX_SCAN_DEPTH, MAX_SKILLS_DIRS_PER_ROOT)
 }
@@ -113,6 +124,27 @@ fn scan_skill_roots_impl(
     let mut ordered: Vec<String> = Vec::new();
 
     for root in roots {
+        // Builtin 特判：跳过磁盘扫描，直接从编译期常量数组加载。
+        // path 字段对 Builtin 是占位（PathBuf::new()），不走 is_dir() 检查。
+        if matches!(root.source, SkillSource::Builtin) {
+            for skill in crate::skills::builtin::BUILTIN_SKILLS {
+                let parsed = crate::skills::builtin::parse_builtin_frontmatter(skill.content);
+                let Some((name, description)) = parsed else {
+                    tracing::warn!("builtin skill {} frontmatter 解析失败，跳过", skill.name);
+                    continue;
+                };
+                let meta = SkillMetadata {
+                    name,
+                    description,
+                    path: PathBuf::from(format!("<builtin>/{}", skill.name)),
+                    source: SkillSource::Builtin,
+                    plugin_name: None,
+                };
+                insert_skill(meta, root, &mut seen, &mut ordered);
+            }
+            continue;
+        }
+
         if !root.path.is_dir() {
             continue;
         }
@@ -235,10 +267,17 @@ pub fn list_skills(dirs: &[PathBuf]) -> Vec<SkillMetadata> {
 
 /// 统一解析 skill 根列表，按优先级返回 `SkillRoot`。
 ///
-/// 顺序即去重优先级：User → Global → Project → Plugin（先到先得）。
+/// 顺序即去重优先级：User → Global → Project → Plugin → Builtin（先到先得）。
 /// 这是 skill 目录解析的 single source of truth，`SkillsMiddleware` 和
 /// `SkillPreloadMiddleware` 都应委托此函数。
-pub fn resolve_skill_roots(cwd: &str, plugin_roots: Vec<SkillRoot>) -> Vec<SkillRoot> {
+///
+/// `disable_bundled=true` 时跳过 Builtin root（用户通过 settings.json
+/// `config.disableBundledSkills: true` 关闭内置 skill）。
+pub fn resolve_skill_roots(
+    cwd: &str,
+    plugin_roots: Vec<SkillRoot>,
+    disable_bundled: bool,
+) -> Vec<SkillRoot> {
     let mut roots = Vec::new();
 
     // 1. User
@@ -271,6 +310,15 @@ pub fn resolve_skill_roots(cwd: &str, plugin_roots: Vec<SkillRoot>) -> Vec<Skill
         if r.path.is_dir() {
             roots.push(r);
         }
+    }
+
+    // 5. Builtin（最低优先级，path 字段占位，scan 阶段特判跳过 is_dir()）
+    if !disable_bundled {
+        roots.push(SkillRoot {
+            path: PathBuf::new(),
+            source: SkillSource::Builtin,
+            plugin_name: None,
+        });
     }
 
     roots

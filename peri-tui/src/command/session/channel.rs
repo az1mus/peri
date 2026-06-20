@@ -9,8 +9,8 @@ impl Command for ChannelCommand {
         "channel"
     }
 
-    fn description(&self, _lc: &LcRegistry) -> String {
-        "管理 MCP 频道连接: open <source> / close / status".to_string()
+    fn description(&self, lc: &LcRegistry) -> String {
+        lc.tr("command-channel-desc").to_string()
     }
 
     fn aliases(&self) -> Vec<&str> {
@@ -18,6 +18,7 @@ impl Command for ChannelCommand {
     }
 
     fn execute(&self, app: &mut App, args: &str) {
+        let lc = &app.services.lc;
         let args = args.trim();
 
         if args.is_empty() || args == "status" {
@@ -40,19 +41,18 @@ impl Command for ChannelCommand {
             return;
         }
 
-        app.active_mut()
-            .messages
-            .pending_messages
-            .push("用法: /channel open <source> | /channel close | /channel status".to_string());
+        let usage = lc.tr("command-channel-usage").to_string();
+        app.active_mut().messages.pending_messages.push(usage);
     }
 }
 
 impl ChannelCommand {
     fn open_channel(&self, app: &mut App, source: &str) {
+        let lc = &app.services.lc;
         let channel_state = match &app.services.channel_state {
             Some(cs) => Arc::clone(cs),
             None => {
-                self.add_note(app, "Channel 系统未初始化");
+                self.add_note(app, &lc.tr("command-channel-not-init"));
                 return;
             }
         };
@@ -74,7 +74,10 @@ impl ChannelCommand {
         if !has_capability {
             self.add_note(
                 app,
-                &format!("服务器 {} 不支持 channel 功能或未连接", server_name),
+                &lc.tr_args(
+                    "command-channel-unavailable",
+                    &[("server".into(), server_name.to_string().into())],
+                ),
             );
             return;
         }
@@ -96,42 +99,62 @@ impl ChannelCommand {
             .messages
             .channel_notification_rx = Some(rx);
 
-        self.add_note(app, &format!("频道已开启: {}", source));
+        self.add_note(
+            app,
+            &lc.tr_args(
+                "command-channel-opened",
+                &[("source".into(), source.to_string().into())],
+            ),
+        );
     }
 
     fn close_all(&self, app: &mut App) {
+        let lc = &app.services.lc;
         if let Some(cs) = &app.services.channel_state {
             cs.close_all();
             app.session_mgr
                 .current_mut()
                 .messages
                 .channel_notification_rx = None;
-            self.add_note(app, "所有频道已关闭");
+            self.add_note(app, &lc.tr("command-channel-all-closed"));
         }
     }
 
     fn close_one(&self, app: &mut App, server_name: &str) {
+        let lc = &app.services.lc;
         if let Some(cs) = &app.services.channel_state {
             cs.revoke(server_name);
-            self.add_note(app, &format!("频道已关闭: {}", server_name));
+            self.add_note(
+                app,
+                &lc.tr_args(
+                    "command-channel-closed",
+                    &[("server".into(), server_name.to_string().into())],
+                ),
+            );
         }
     }
 
     fn show_status(&self, app: &mut App) {
+        let lc = &app.services.lc;
         let channel_state = app.services.channel_state.clone();
         let msg = if let Some(cs) = &channel_state {
             let authorized = cs.authorized.read();
             if authorized.is_empty() {
-                "没有开启的频道。使用 /channel open <source> 开启".to_string()
+                lc.tr("command-channel-no-channels").to_string()
             } else {
-                let mut status = String::from("已开启的频道:\n");
+                let mut status = lc.tr("command-channel-list-header").to_string();
+                status.push('\n');
                 for (server, source) in authorized.iter() {
-                    status.push_str(&format!("  {} → {}\n", server, source));
+                    status.push_str(&lc.tr_args(
+                        "command-channel-list-item",
+                        &[("source".into(), format!("{} → {}", server, source).into())],
+                    ));
+                    status.push('\n');
                 }
                 status
             }
         } else {
-            "Channel 系统未初始化".to_string()
+            lc.tr("command-channel-not-init").to_string()
         };
         self.add_note(app, &msg);
     }

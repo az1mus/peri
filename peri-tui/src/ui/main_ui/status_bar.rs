@@ -334,7 +334,7 @@ fn render_second_row(f: &mut Frame, app: &App, area: Rect) {
     if let Some(until) = app.global_ui.rewind_busy_hint_until {
         if std::time::Instant::now() < until {
             left_spans.push(Span::styled(
-                " Agent 运行中，请等待后再撤销 ",
+                lc.tr("statusbar-rewind-wait"),
                 Style::default().fg(theme::WARNING),
             ));
         }
@@ -344,7 +344,7 @@ fn render_second_row(f: &mut Frame, app: &App, area: Rect) {
     if let Some(since) = app.global_ui.rewind_pending_since {
         if since.elapsed() < std::time::Duration::from_secs(2) {
             left_spans.push(Span::styled(
-                " 再按 ESC 回滚对话 ",
+                lc.tr("statusbar-rewind-pending"),
                 Style::default().fg(theme::ACCENT),
             ));
         }
@@ -407,8 +407,8 @@ fn render_second_row(f: &mut Frame, app: &App, area: Rect) {
                 ),
                 _ => format_hints(
                     &[
-                        ("↑↓".to_string(), "移动".to_string()),
-                        ("Tab".to_string(), "切换回退文件".to_string()),
+                        ("↑↓".to_string(), lc.tr("statusbar-rewind-move")),
+                        ("Tab".to_string(), lc.tr("statusbar-rewind-switch-file")),
                         ("Enter".to_string(), lc.tr("key-confirm")),
                         ("Esc".to_string(), lc.tr("key-cancel")),
                     ],
@@ -429,13 +429,19 @@ fn render_second_row(f: &mut Frame, app: &App, area: Rect) {
                 app.global_panels.status_bar_hints(lc)
             } else if app.global_ui.rewind_pending_since.is_some() {
                 vec![
-                    ("Esc".to_string(), "回滚对话".to_string()),
-                    ("其他键".to_string(), lc.tr("key-cancel")),
+                    ("Esc".to_string(), lc.tr("statusbar-rewind-action")),
+                    (
+                        lc.tr("statusbar-rewind-other-key").to_string(),
+                        lc.tr("key-cancel"),
+                    ),
                 ]
             } else if app.global_ui.quit_pending_since.is_some() {
                 vec![
                     ("Ctrl+C".to_string(), lc.tr("key-close")),
-                    ("其他键".to_string(), lc.tr("key-cancel")),
+                    (
+                        lc.tr("statusbar-rewind-other-key").to_string(),
+                        lc.tr("key-cancel"),
+                    ),
                 ]
             } else if no_mouse {
                 vec![

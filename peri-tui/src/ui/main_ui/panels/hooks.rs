@@ -16,13 +16,14 @@ use crate::{
 
 /// /hooks 面板渲染（底部展开区）
 pub(crate) fn render_hooks_panel(f: &mut Frame, panel: &HooksPanel, app: &mut App, area: Rect) {
+    let lc = &app.services.lc;
     let total_hooks = panel.total_hooks();
     let entry_count = panel.total();
 
     let title = if entry_count == 0 {
-        " Hooks (none configured) "
+        lc.tr("hooks-panel-title-none")
     } else {
-        " Hooks "
+        lc.tr("hooks-panel-title")
     };
 
     let inner = BorderedPanel::new(Span::styled(
@@ -39,7 +40,10 @@ pub(crate) fn render_hooks_panel(f: &mut Frame, panel: &HooksPanel, app: &mut Ap
     // 统计行
     if entry_count > 0 {
         lines.push(Line::from(vec![Span::styled(
-            format!("{} hooks configured", total_hooks),
+            lc.tr_args(
+                "hooks-configured-count",
+                &[("count".into(), total_hooks.to_string().into())],
+            ),
             Style::default()
                 .fg(theme::TEXT)
                 .add_modifier(Modifier::BOLD),
@@ -48,7 +52,7 @@ pub(crate) fn render_hooks_panel(f: &mut Frame, panel: &HooksPanel, app: &mut Ap
 
     // 只读提示
     lines.push(Line::from(vec![Span::styled(
-        "This panel is read-only. To add or modify hooks, edit plugin hooks.json.",
+        lc.tr("hooks-readonly-hint"),
         Style::default().fg(theme::MUTED),
     )]));
     lines.push(Line::from(""));
@@ -56,11 +60,11 @@ pub(crate) fn render_hooks_panel(f: &mut Frame, panel: &HooksPanel, app: &mut Ap
     // 事件列表
     if entry_count == 0 {
         lines.push(Line::from(vec![Span::styled(
-            "  No hooks configured.",
+            lc.tr("hooks-no-hooks"),
             Style::default().fg(theme::MUTED),
         )]));
         lines.push(Line::from(vec![Span::styled(
-            "  Hooks can be added via plugin hooks/hooks.json.",
+            lc.tr("hooks-no-hooks-hint"),
             Style::default().fg(theme::MUTED),
         )]));
     } else {

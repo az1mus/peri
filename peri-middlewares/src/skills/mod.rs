@@ -1,3 +1,4 @@
+pub mod builtin;
 pub mod loader;
 
 use std::path::PathBuf;
@@ -40,6 +41,29 @@ pub fn load_global_skills_dir() -> Option<PathBuf> {
     skills_dir.filter(|p| !p.as_os_str().is_empty())
 }
 
+/// 从 `~/.peri/settings.json` 读取 `disableBundledSkills` 配置（默认 false）
+///
+/// session/new 时一次性读取并冻结，会话内不再重新读取（保持系统提示词稳定性）。
+pub fn load_disable_bundled_skills() -> bool {
+    load_disable_bundled_skills_from_path(&global_config_path())
+}
+
+/// 测试注入入口：从指定 settings 文件读取 disableBundledSkills
+pub fn load_disable_bundled_skills_from_path(path: &std::path::Path) -> bool {
+    let Ok(content) = std::fs::read_to_string(path) else {
+        return false;
+    };
+    let Ok(json): Result<serde_json::Value, _> = serde_json::from_str(&content) else {
+        return false;
+    };
+    // 支持嵌套 { "config": { "disableBundledSkills": ... } } 或扁平
+    json.get("config")
+        .and_then(|c| c.get("disableBundledSkills"))
+        .or_else(|| json.get("disableBundledSkills"))
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false)
+}
+
 /// SkillsMiddleware - 渐进式 Skills 摘要注入
 ///
 /// 在 `before_agent` 时扫描 skills 目录，将所有 skill 的 name + description
@@ -56,6 +80,8 @@ pub struct SkillsMiddleware {
     plugin_roots: Vec<SkillRoot>,
     /// Frozen skills summary (None = scan each turn from disk).
     frozen_summary: Option<String>,
+    /// 是否禁用 builtin skill（session/new 时一次性读取冻结）
+    disable_bundled: bool,
 }
 
 impl SkillsMiddleware {
@@ -66,6 +92,7 @@ impl SkillsMiddleware {
             user_skills_dir: None,
             plugin_roots: vec![],
             frozen_summary: None,
+            disable_bundled: false,
         }
     }
 
@@ -109,12 +136,22 @@ impl SkillsMiddleware {
         self
     }
 
+    /// 设置是否禁用 builtin skill（默认 false）
+    pub fn with_disable_bundled(mut self, disable: bool) -> Self {
+        self.disable_bundled = disable;
+        self
+    }
+
     /// 一次性扫描并构建冻结的 skills 摘要。
     ///
     /// 返回 `None` 表示无 skills 可用。
     /// 供 session 创建时调用。
-    pub fn build_frozen_summary(cwd: &str, plugin_roots: Vec<SkillRoot>) -> Option<String> {
-        let roots = Self::resolve_roots_static(cwd, plugin_roots);
+    pub fn build_frozen_summary(
+        cwd: &str,
+        plugin_roots: Vec<SkillRoot>,
+        disable_bundled: bool,
+    ) -> Option<String> {
+        let roots = Self::resolve_roots_static(cwd, plugin_roots, disable_bundled);
         let skills = scan_skill_roots(&roots);
         if skills.is_empty() {
             return None;
@@ -123,13 +160,20 @@ impl SkillsMiddleware {
     }
 
     /// 在无 `&self` 时解析 skills 根列表（供静态 frozen 构造使用）。
-    pub fn resolve_roots_static(cwd: &str, plugin_roots: Vec<SkillRoot>) -> Vec<SkillRoot> {
-        loader::resolve_skill_roots(cwd, plugin_roots)
+    ///
+    /// **注意**：`disable_bundled` 应在 session/new 时一次性读取并冻结，不要每轮传入不同值。
+    pub fn resolve_roots_static(
+        cwd: &str,
+        plugin_roots: Vec<SkillRoot>,
+        disable_bundled: bool,
+    ) -> Vec<SkillRoot> {
+        loader::resolve_skill_roots(cwd, plugin_roots, disable_bundled)
     }
 
     /// 根据 cwd 解析实际搜索根列表（含 source 标签）
     fn resolve_roots(&self, cwd: &str) -> Vec<SkillRoot> {
         // 有 override 字段时走测试隔离路径
+        // 注意：测试隔离路径不含 Builtin root（override 模式用于测试，不需要内置 skill）
         if self.user_skills_dir.is_some()
             || self.global_skills_dir.is_some()
             || self.project_skills_dir.is_some()
@@ -172,7 +216,7 @@ impl SkillsMiddleware {
             }
             roots
         } else {
-            loader::resolve_skill_roots(cwd, self.plugin_roots.clone())
+            loader::resolve_skill_roots(cwd, self.plugin_roots.clone(), self.disable_bundled)
         }
     }
 

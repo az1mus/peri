@@ -95,6 +95,8 @@ scripts/start-tui.sh                 # 启动 TUI（RELAY_PORT=3001）
 
 工具分三层：**Core（12 个）**——Read/Write/Edit/Glob/Grep/folder_operations/Bash/WebFetch/WebSearch/Agent/AskUserQuestion/TodoWrite，始终对 LLM 可见；**Meta（2 个）**——`SearchExtraTools`/`ExecuteExtraTool`，始终可见，用于按需发现和执行 deferred tools；**Deferred（其余）**——Cron*、MCP 工具、LspTool 等，LLM 不直接可见，通过 Meta 工具桥接。核心工具定义以 `tool_search/core_tools.rs` 中的 `CORE_TOOLS` 为准。新增工具优先配置为 deferred tool，避免膨胀核心工具列表。
 
+**Builtin Skills（随二进制分发的 SKILL.md）**：参考 Claude Code bundled skills 特性，`SkillSource::Builtin` 是第 5 种 skill 来源，最低优先级（被 User/Global/Project/Plugin 同名覆盖）。`include_str!` 编译期嵌入（注册表 `skills::builtin::BUILTIN_SKILLS`），`scan_skill_roots_impl` 特判分支加载（虚拟路径 `<builtin>/<name>` 不走 `is_dir()` 检查），`SkillPreloadMiddleware` 通过 `source == Builtin` 路由常量查找（绕过磁盘读）。`settings.json::config.disableBundledSkills: true` 全局禁用——main agent 路径在 session/new 时一次性冻结（保持系统提示词稳定性），TUI/Stdio 显示路径每次调用读取最新值。详见 `docs/superpowers/specs/2026-06-20-builtin-skills-design.md`。
+
 **[TRAP]** `Box<dyn BaseTool>` 不能直接转 `Arc<dyn BaseTool>`，用 `box_to_arc()` 通过 `ToolWrapper(ManuallyDrop<Box>)` 透传。**绝不能用 `Box::into_raw` + `Arc::from_raw`**——布局不同导致 UB。
 
 **[TRAP]** Prompt Cache 前缀稳定性——通用原则：所有参与缓存前缀的数据（system prompt、tools 数组、消息顺序）必须保证跨请求稳定。具体规则：

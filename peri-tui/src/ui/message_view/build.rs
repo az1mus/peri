@@ -285,6 +285,8 @@ impl MessageViewModel {
                 } else {
                     build_diff_lines(&tool_name, &input)
                 };
+                // AgentResult 后台任务结果自动展开
+                let auto_expand = tool_name == "AgentResult" && !*is_error;
                 let mut vm = MessageViewModel::ToolBlock {
                     tool_name,
                     tool_call_id: tool_call_id.clone(),
@@ -292,7 +294,7 @@ impl MessageViewModel {
                     args_display,
                     content: raw_content,
                     is_error: *is_error,
-                    collapsed: true,
+                    collapsed: !auto_expand,
                     color,
                     diff_lines,
                     content_hash: 0,

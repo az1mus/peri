@@ -12,8 +12,12 @@ pub(super) fn send_available_commands(
     session_id: &SessionId,
     cx: &ConnectionTo<Client>,
 ) {
-    let skill_roots =
-        peri_middlewares::SkillsMiddleware::resolve_roots_static(cwd, plugin_skill_roots.to_vec());
+    let disable_bundled = peri_middlewares::skills::load_disable_bundled_skills();
+    let skill_roots = peri_middlewares::SkillsMiddleware::resolve_roots_static(
+        cwd,
+        plugin_skill_roots.to_vec(),
+        disable_bundled, // Stdio 侧仅用于显示
+    );
     let skills = peri_middlewares::skills::scan_skill_roots(&skill_roots);
     let cmds = peri_acp::dispatch::build_available_commands(&skills);
     let notif = SessionNotification::new(

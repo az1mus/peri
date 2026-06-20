@@ -16,8 +16,9 @@ use crate::{
 };
 
 pub(crate) fn render_status_panel(f: &mut Frame, panel: &StatusPanel, app: &mut App, area: Rect) {
+    let lc = &app.services.lc;
     let inner = BorderedPanel::new(Span::styled(
-        " Status ",
+        lc.tr("status-panel-title"),
         Style::default()
             .fg(theme::THINKING)
             .add_modifier(Modifier::BOLD),
@@ -43,7 +44,7 @@ pub(crate) fn render_status_panel(f: &mut Frame, panel: &StatusPanel, app: &mut 
     };
 
     // 手动渲染 tab 标签（仿照 plugin 面板风格）
-    let tab_labels: Vec<Span> = ["Cost", "Context"]
+    let tab_labels: Vec<Span> = [lc.tr("status-tab-cost"), lc.tr("status-tab-context")]
         .iter()
         .enumerate()
         .map(|(i, label)| {
@@ -74,6 +75,7 @@ pub(crate) fn render_status_panel(f: &mut Frame, panel: &StatusPanel, app: &mut 
 }
 
 fn build_cost_lines(app: &App) -> Vec<Line<'static>> {
+    let lc = &app.services.lc;
     let tracker = &app.session_mgr.current().agent.session_token_tracker;
     let mut lines: Vec<Line<'static>> = Vec::new();
 
@@ -91,42 +93,48 @@ fn build_cost_lines(app: &App) -> Vec<Line<'static>> {
         }
         None => "N/A".to_string(),
     };
-    lines.push(label_value("会话时长", &duration_str));
+    lines.push(label_value(&lc.tr("status-label-duration"), &duration_str));
     lines.push(Line::from(""));
 
     // Token 消耗
     lines.push(label_value(
-        "输入 Tokens",
+        &lc.tr("status-label-input-tokens"),
         &format_number(tracker.total_input_tokens),
     ));
     lines.push(label_value(
-        "输出 Tokens",
+        &lc.tr("status-label-output-tokens"),
         &format_number(tracker.total_output_tokens),
     ));
     lines.push(label_value(
-        "Cache 创建",
+        &lc.tr("status-label-cache-create"),
         &format_number(tracker.total_cache_creation_tokens),
     ));
     lines.push(label_value(
-        "Cache 读取",
+        &lc.tr("status-label-cache-read"),
         &format_number(tracker.total_cache_read_tokens),
     ));
     lines.push(Line::from(""));
 
     // LLM 调用次数
     lines.push(label_value(
-        "LLM 调用次数",
+        &lc.tr("status-label-llm-calls"),
         &tracker.llm_call_count.to_string(),
     ));
     lines.push(Line::from(""));
 
     // 估算费用
     let cost = estimate_cost(app);
-    lines.push(label_value("估算费用", &format!("${:.4}", cost)));
+    lines.push(label_value(
+        &lc.tr("status-label-estimated-cost"),
+        &format!("${:.4}", cost),
+    ));
     lines.push(Line::from(""));
 
     // 当前模型
-    lines.push(label_value("当前模型", &app.services.model_name));
+    lines.push(label_value(
+        &lc.tr("status-label-current-model"),
+        &app.services.model_name,
+    ));
 
     lines
 }
@@ -367,6 +375,7 @@ fn build_context_summary(app: &App) -> Line<'static> {
         style::{Modifier, Style},
         text::Span,
     };
+    let lc = &app.services.lc;
 
     let tracker = &app.session_mgr.current().agent.session_token_tracker;
     let context_window = app.session_mgr.current().agent.context_window;
@@ -380,28 +389,40 @@ fn build_context_summary(app: &App) -> Line<'static> {
         .unwrap_or_else(|| "N/A".to_string());
 
     Line::from(vec![
-        Span::styled("  上下文: ", Style::default().fg(theme::MUTED)),
+        Span::styled(
+            format!("  {}: ", lc.tr("status-label-context")),
+            Style::default().fg(theme::MUTED),
+        ),
         Span::styled(
             format_number(context_window as u64),
             Style::default()
                 .fg(theme::TEXT)
                 .add_modifier(Modifier::BOLD),
         ),
-        Span::styled(" | 已用: ", Style::default().fg(theme::MUTED)),
+        Span::styled(
+            format!(" | {}: ", lc.tr("status-label-used")),
+            Style::default().fg(theme::MUTED),
+        ),
         Span::styled(
             format!("{} ({})", format_number(used), pct),
             Style::default()
                 .fg(theme::TEXT)
                 .add_modifier(Modifier::BOLD),
         ),
-        Span::styled(" | 消息: ", Style::default().fg(theme::MUTED)),
+        Span::styled(
+            format!(" | {}: ", lc.tr("status-label-messages")),
+            Style::default().fg(theme::MUTED),
+        ),
         Span::styled(
             msg_count.to_string(),
             Style::default()
                 .fg(theme::TEXT)
                 .add_modifier(Modifier::BOLD),
         ),
-        Span::styled(" | 工具: ", Style::default().fg(theme::MUTED)),
+        Span::styled(
+            format!(" | {}: ", lc.tr("status-label-tools")),
+            Style::default().fg(theme::MUTED),
+        ),
         Span::styled(
             tool_count.to_string(),
             Style::default()
@@ -417,6 +438,7 @@ fn render_context_tab(f: &mut Frame, app: &App, area: Rect) {
         text::{Line, Span, Text},
         widgets::Paragraph,
     };
+    let lc = &app.services.lc;
 
     let history = &app
         .session_mgr
@@ -429,7 +451,7 @@ fn render_context_tab(f: &mut Frame, app: &App, area: Rect) {
         let mut lines = vec![build_context_summary(app)];
         lines.push(Line::from(""));
         lines.push(Line::from(Span::styled(
-            "  暂无请求数据",
+            lc.tr("status-empty-data"),
             Style::default().fg(theme::MUTED),
         )));
         f.render_widget(Paragraph::new(Text::from(lines)), area);
