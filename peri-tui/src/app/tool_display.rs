@@ -83,6 +83,19 @@ pub fn truncate(s: &str, max: usize) -> String {
     }
 }
 
+/// 判断工具结果是否应默认展开（不折叠）。
+///
+/// `AgentResult`：后台 agent 的最终结果，用户需要看到任务产出。
+/// `ExecuteExtraTool`：deferred 工具的统一包装（如 artifact/WebFetch），
+/// 其结果对用户有直接价值（例如上传后的 URL），折叠会完全吞掉关键信息。
+/// 错误结果一律不在此展开（错误走 `error_summary_lines` 始终可见）。
+pub fn should_auto_expand_tool(tool_name: &str, is_error: bool) -> bool {
+    if is_error {
+        return false;
+    }
+    matches!(tool_name, "AgentResult" | "ExecuteExtraTool")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -285,8 +285,9 @@ impl MessageViewModel {
                 } else {
                     build_diff_lines(&tool_name, &input)
                 };
-                // AgentResult 后台任务结果自动展开
-                let auto_expand = tool_name == "AgentResult" && !*is_error;
+                // AgentResult / ExecuteExtraTool 结果自动展开（关键产出不折叠）
+                let auto_expand =
+                    crate::app::tool_display::should_auto_expand_tool(&tool_name, *is_error);
                 let mut vm = MessageViewModel::ToolBlock {
                     tool_name,
                     tool_call_id: tool_call_id.clone(),

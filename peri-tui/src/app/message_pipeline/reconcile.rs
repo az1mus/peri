@@ -189,7 +189,7 @@ impl MessagePipeline {
                 } else {
                     None
                 };
-                let auto_expand = ct.name == "AgentResult" && !ct.is_error;
+                let auto_expand = tool_display::should_auto_expand_tool(&ct.name, ct.is_error);
                 let mut vm = MessageViewModel::ToolBlock {
                     tool_name: ct.name.clone(),
                     tool_call_id: ct.tool_call_id.clone(),
@@ -225,7 +225,7 @@ impl MessagePipeline {
             } else {
                 None
             };
-            let auto_expand = ct.name == "AgentResult" && !ct.is_error;
+            let auto_expand = tool_display::should_auto_expand_tool(&ct.name, ct.is_error);
             let mut vm = MessageViewModel::ToolBlock {
                 tool_name: ct.name.clone(),
                 tool_call_id: ct.tool_call_id.clone(),
