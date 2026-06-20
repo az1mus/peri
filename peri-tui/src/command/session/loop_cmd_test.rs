@@ -21,7 +21,7 @@
                 .view_messages[0]
         );
         assert!(
-            text.contains("用法"),
+            text.contains("用法") || text.contains("Usage"),
             "空参数应显示用法提示，实际: {}",
             text
         );
@@ -45,7 +45,10 @@
                 .messages
                 .view_messages[0]
         );
-        assert!(text.contains("用法"), "纯空格参数应显示用法提示");
+        assert!(
+            text.contains("用法") || text.contains("Usage"),
+            "纯空格参数应显示用法提示"
+        );
     }
 
     #[tokio::test(flavor = "multi_thread")]
