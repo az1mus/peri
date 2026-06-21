@@ -42,7 +42,7 @@ help-available-commands = Available commands:
 help-alias-prefix = (aliases: /{ $aliases })
 help-skills-count = Skills ({ $count } available): type # prefix to view
 help-skills-empty = Skills: place .md files in .claude/skills/ directory to add
-help-shortcuts = Shortcuts: Shift+Tab toggle permission mode | Ctrl+T switch model | Shift+Enter newline | Esc quit | Ctrl+C interrupt
+help-shortcuts = Shortcuts: Shift+Tab toggle permission mode | { $model_key } switch model | Shift+Enter newline | Esc quit | Ctrl+C interrupt
 
 # compact command
 compact-agent-running = Agent is running, cannot compact
@@ -431,3 +431,173 @@ app-plugin-added = Marketplace added: { $name } (fetching content...)
 
 # Background Agent Bar
 bg-bar-focus-hint = Press Esc to exit focus
+
+# ---- Model Panel ----
+
+model-panel-title =  Select model 
+model-panel-description =   Switch between models. Applies to this session.
+model-field-max-token = Max Token
+model-field-effort = Effort
+model-field-1m-context = 1M Context
+model-effort-low = Low
+model-effort-medium = Medium
+model-effort-high = High
+model-effort-xhigh = XHigh
+model-effort-max = Max
+
+# ---- Status Panel ----
+
+status-panel-title =  Status 
+status-tab-cost = Cost
+status-tab-context = Context
+status-label-duration = Session Duration
+status-label-input-tokens = Input Tokens
+status-label-output-tokens = Output Tokens
+status-label-cache-create = Cache Creation
+status-label-cache-read = Cache Read
+status-label-llm-calls = LLM Calls
+status-label-estimated-cost = Est. Cost
+status-label-current-model = Current Model
+status-label-context = Context
+status-label-used = Used
+status-label-messages = Messages
+status-label-tools = Tools
+status-empty-data = No request data
+
+# ---- Agent Panel ----
+
+agent-panel-title-none =  Select Agent (None) 
+agent-panel-title =  Select Agent 
+agent-panel-none-label = No Agent (default)
+agent-panel-empty-hint = Add Agent definition files in .claude/agents/
+
+# ---- Hooks Panel ----
+
+hooks-panel-title-none =  Hooks (none configured) 
+hooks-panel-title =  Hooks 
+hooks-configured-count = { $count } hooks configured
+hooks-readonly-hint = This panel is read-only. To add or modify hooks, edit plugin hooks.json.
+hooks-no-hooks =   No hooks configured.
+hooks-no-hooks-hint =   Hooks can be added via plugin hooks/hooks.json.
+
+# ---- Thread Browser ----
+
+thread-browser-title =  Resume Session ({ $cursor }/{ $total }) 
+thread-browser-search-placeholder = Search…
+thread-browser-empty =   (No conversations yet)
+thread-browser-no-match =   (No matching conversations)
+thread-browser-untitled = (untitled)
+thread-browser-time-just-now = just now
+thread-browser-time-minutes = { $count } minute{ $suffix } ago
+thread-browser-time-hours = { $count } hour{ $suffix } ago
+thread-browser-time-days = { $count } day{ $suffix } ago
+
+# ---- Rewind Popup ----
+
+rewind-title = Rewind
+rewind-msg-count = ({ $count }msg)
+rewind-mode-messages = 1. Back to this prompt
+rewind-mode-files = 2. Back to this prompt + restore files
+rewind-mode-confirm = ⚠ Confirm: restore files?
+rewind-files-to-restore = Files to restore:
+rewind-confirm-hint = Enter to confirm, Esc to cancel
+rewind-write-op = Write → Delete + Git restore
+rewind-edit-op = Edit → Restore
+
+# ---- OAuth Popup ----
+
+oauth-title =  OAuth Authorization — { $server } 
+oauth-prompt = Press Ctrl+O to open in browser, then paste callback URL:
+oauth-callback-label = Callback URL > 
+
+# ---- Login Panel ----
+
+login-field-name = Name
+login-field-type = Type
+login-field-base-url = Base URL
+login-field-api-key = API Key
+login-field-opus-model = Opus Model
+login-field-sonnet-model = Sonnet Model
+login-field-haiku-model = Haiku Model
+
+# ---- Config Panel additional ----
+
+config-lang-display-en = English
+config-lang-display-zh = 简体中文
+config-lang-display-auto = auto
+config-streaming-display-streaming = streaming
+config-streaming-display-block = block
+config-streaming-display-none = none
+config-proactiveness-display-low = low
+config-proactiveness-display-medium = medium
+config-proactiveness-display-high = high
+
+# ---- Command Outputs ----
+
+command-channel-desc = Manage MCP channel connections: open <source> / close / status
+command-channel-usage = Usage: /channel open <source> | /channel close | /channel status
+command-channel-not-init = Channel system not initialized
+command-channel-unavailable = Server { $server } does not support channel or is not connected
+command-channel-opened = Channel opened: { $source }
+command-channel-all-closed = All channels closed
+command-channel-closed = Channel closed: { $server }
+command-channel-no-channels = No open channels. Use /channel open <source> to open
+command-channel-list-header = Open channels:
+command-channel-list-item =   { $source }
+command-bg-usage = Usage: /bg <command description>
+    Example: /bg Search for Rust 2026 roadmap latest progress in Chinese
+command-loop-usage = Usage: /loop <natural language time> <prompt>
+    Example: /loop remind me to drink water every 5 minutes
+command-plugin-add-failed-detail = Add marketplace failed: { $error }
+command-plugin-install-failed = Install plugin failed: { $error }
+command-plugin-update-failed = Update marketplace failed: { $error }
+command-agent-reset = Agent reset (no agent_id set)
+command-agent-switched = Agent switched to: { $name } ({ $id })
+command-lang-current-suffix =  (current)
+command-config-save-failed = Config save failed: { $error }
+command-plugin-help = Usage:
+    /plugin                                    — Open plugin panel
+    /plugin marketplace add <url>              — Add marketplace source
+    /plugin install <name>@<marketplace>       — Install plugin
+    /plugin marketplace update <name>          — Update marketplace cache
+
+# ---- Message Rendering ----
+
+render-batch-all-failed = { $count } agents failed
+render-batch-partial = { $done } agents finished, { $failed } failed
+render-batch-done = { $count } agents finished
+render-status-failed = Failed
+render-status-done = Done
+render-tool-uses = · { $count } tool uses
+render-user-answered = User answered Peri's questions:
+render-thought-for = Thought for { $count } chars
+render-agent-header = Agent
+render-compacted-hint = 📋 Context compacted
+
+# ---- Message Area Spinner ----
+
+msg-spinner-tokens = · ↓ { $count } tokens
+msg-spinner-brewed =   ✻  Brewed for { $duration }
+msg-tip-prefix =   ⎿  Tip: 
+msg-todo-available =  (available)
+
+# ---- Message View Placeholders ----
+
+msg-placeholder-image = [Image]
+msg-placeholder-document = [Document: { $name }]
+
+# ---- App Misc ----
+
+app-cli-no-input = No input prompt. Usage: peri -p "your question" or echo "question" | peri -p
+app-thread-deleted = Conversation deleted: { $title }
+app-memory-project = Project Description
+app-memory-user = User Global
+
+# ---- Status Bar additional ----
+
+statusbar-rewind-wait =  Agent is running, wait before rewind 
+statusbar-rewind-pending =  Press ESC again to rewind 
+statusbar-rewind-action = Rewind
+statusbar-rewind-other-key = Other keys
+statusbar-rewind-move = Move
+statusbar-rewind-switch-file = Switch restore file

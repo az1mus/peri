@@ -86,12 +86,94 @@ fn parse_bold_italic() {
 fn parse_link() {
     let text = parse_markdown("[text](url)", &default_theme(), 80);
     assert!(!text.lines.is_empty());
-    let has_link = text.lines.iter().any(|l| {
-        l.spans
-            .iter()
-            .any(|s| s.content.contains("text") && s.style.fg == Some(default_theme().link()))
+    let mut link_found = false;
+    for l in &text.lines {
+        for s in &l.spans {
+            if s.content.contains("text") && s.style.fg == Some(default_theme().link()) {
+                // 验证 OSC 8 escape sequence 嵌入在 span 文本中
+                assert!(
+                    s.content.starts_with("\x1b]8;;url\x1b\\"),
+                    "链接 span 应以 OSC 8 开头，实际: {:?}",
+                    &s.content[..s.content.len().min(40)]
+                );
+                assert!(
+                    s.content.ends_with("\x1b]8;;\x1b\\"),
+                    "链接 span 应以 OSC 8 结尾"
+                );
+                link_found = true;
+            }
+        }
+    }
+    assert!(link_found, "Expected link text with link color and OSC 8");
+}
+
+#[test]
+fn parse_link_with_nested_emphasis() {
+    let text = parse_markdown("[**bold** text](url)", &default_theme(), 80);
+    // bold span 应有 BOLD + link color + OSC 8
+    let bold_found = text.lines.iter().any(|l| {
+        l.spans.iter().any(|s| {
+            s.content.contains("bold")
+                && s.style.add_modifier.contains(Modifier::BOLD)
+                && s.style.fg == Some(default_theme().link())
+        })
     });
-    assert!(has_link, "Expected link text with link color");
+    assert!(bold_found, "嵌套 Bold 应保留 BOLD + link color");
+    // text span 应有 link color 无 BOLD
+    let text_found = text.lines.iter().any(|l| {
+        l.spans.iter().any(|s| {
+            s.content.contains(" text")  // includes leading space
+                && !s.style.add_modifier.contains(Modifier::BOLD)
+                && s.style.fg == Some(default_theme().link())
+        })
+    });
+    assert!(text_found, "链接内普通文本应有 link color 但无 BOLD");
+}
+
+#[test]
+fn parse_link_with_nested_italic() {
+    let text = parse_markdown("[*italic* text](url)", &default_theme(), 80);
+    let italic_found = text.lines.iter().any(|l| {
+        l.spans.iter().any(|s| {
+            s.content.contains("italic")
+                && s.style.add_modifier.contains(Modifier::ITALIC)
+                && s.style.fg == Some(default_theme().link())
+        })
+    });
+    assert!(italic_found, "嵌套 Italic 应保留 ITALIC + link color");
+}
+
+#[test]
+fn parse_link_empty_url_skips_osc8() {
+    let text = parse_markdown("[text]()", &default_theme(), 80);
+    let link_found = text.lines.iter().any(|l| {
+        l.spans.iter().any(|s| {
+            s.content.contains("text")
+                && s.style.fg == Some(default_theme().link())
+                // 空 URL 不应包含 OSC 8 prefix
+                && !s.content.contains("\x1b]8;;")
+        })
+    });
+    assert!(
+        link_found,
+        "空 URL 链接不应有 OSC 8 escape，但保留 link color"
+    );
+}
+
+#[test]
+fn parse_link_text_after_link_not_colored() {
+    let text = parse_markdown("[link](url) after", &default_theme(), 80);
+    // "after" 不应为链接颜色
+    let after_has_link_color = text
+        .lines
+        .iter()
+        .flat_map(|l| l.spans.iter())
+        .filter(|s| s.content.contains("after"))
+        .any(|s| s.style.fg == Some(default_theme().link()));
+    assert!(
+        !after_has_link_color,
+        "链接之后的文本不应为链接颜色（颜色泄漏回归）"
+    );
 }
 
 #[test]

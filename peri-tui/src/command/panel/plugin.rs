@@ -19,10 +19,11 @@ impl Command for PluginCommand {
             ["marketplace", "add", rest @ ..] if !rest.is_empty() => {
                 let input = rest.join(" ");
                 if let Err(e) = app.marketplace_add_and_save(&input) {
-                    app.session_mgr
-                        .current_mut()
-                        .messages
-                        .push_system_note(format!("添加 marketplace 失败: {}", e));
+                    let msg = app.services.lc.tr_args(
+                        "command-plugin-add-failed-detail",
+                        &[("error".into(), e.to_string().into())],
+                    );
+                    app.session_mgr.current_mut().messages.push_system_note(msg);
                 }
             }
 
@@ -32,30 +33,28 @@ impl Command for PluginCommand {
                     .split_once('@')
                     .unwrap_or((name_at_marketplace, "claude-plugins-official"));
                 if let Err(e) = app.plugin_install_by_marketplace(name, marketplace) {
-                    app.session_mgr
-                        .current_mut()
-                        .messages
-                        .push_system_note(format!("安装插件失败: {}", e));
+                    let msg = app.services.lc.tr_args(
+                        "command-plugin-install-failed",
+                        &[("error".into(), e.to_string().into())],
+                    );
+                    app.session_mgr.current_mut().messages.push_system_note(msg);
                 }
             }
 
             // /plugin marketplace update <name>
             ["marketplace", "update", name] => {
                 if let Err(e) = app.marketplace_update_and_refresh(name) {
-                    app.session_mgr
-                        .current_mut()
-                        .messages
-                        .push_system_note(format!("更新 marketplace 失败: {}", e));
+                    let msg = app.services.lc.tr_args(
+                        "command-plugin-update-failed",
+                        &[("error".into(), e.to_string().into())],
+                    );
+                    app.session_mgr.current_mut().messages.push_system_note(msg);
                 }
             }
 
             // 未知用法 → 显示帮助
             _ => {
-                let help = "用法:\n\
-                    /plugin                                    — 打开插件面板\n\
-                    /plugin marketplace add <url>              — 添加市场源\n\
-                    /plugin install <name>@<marketplace>       — 安装插件\n\
-                    /plugin marketplace update <name>          — 更新市场缓存";
+                let help = app.services.lc.tr("command-plugin-help");
                 app.session_mgr
                     .current_mut()
                     .messages

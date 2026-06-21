@@ -181,3 +181,118 @@
         assert!(content.contains("project-skill"));
         assert!(content.contains("extra-skill"));
     }
+
+    #[test]
+    fn test_load_disable_bundled_skills_defaults_false_when_missing() {
+        // settings.json 无 disableBundledSkills 字段时返回 false
+        let tmp = tempdir().unwrap();
+        let settings_path = tmp.path().join("settings.json");
+        std::fs::write(
+            &settings_path,
+            r#"{"config": {}}"#,
+        )
+        .unwrap();
+
+        let value = super::load_disable_bundled_skills_from_path(&settings_path);
+        assert!(!value, "缺字段时应默认 false");
+    }
+
+    #[test]
+    fn test_load_disable_bundled_skills_reads_true() {
+        let tmp = tempdir().unwrap();
+        let settings_path = tmp.path().join("settings.json");
+        std::fs::write(
+            &settings_path,
+            r#"{"config": {"disableBundledSkills": true}}"#,
+        )
+        .unwrap();
+
+        let value = super::load_disable_bundled_skills_from_path(&settings_path);
+        assert!(value, "disableBundledSkills=true 时应返回 true");
+    }
+
+    #[test]
+    fn test_load_disable_bundled_skills_reads_false_explicit() {
+        let tmp = tempdir().unwrap();
+        let settings_path = tmp.path().join("settings.json");
+        std::fs::write(
+            &settings_path,
+            r#"{"config": {"disableBundledSkills": false}}"#,
+        )
+        .unwrap();
+
+        let value = super::load_disable_bundled_skills_from_path(&settings_path);
+        assert!(!value);
+    }
+
+    #[test]
+    fn test_load_disable_bundled_skills_handles_missing_file() {
+        // 文件不存在时返回 false
+        let value =
+            super::load_disable_bundled_skills_from_path(std::path::Path::new("/nonexistent.json"));
+        assert!(!value);
+    }
+
+    #[test]
+    fn test_load_disable_bundled_skills_reads_flat_true() {
+        // 扁平 JSON（无 config 包裹）也应支持
+        let tmp = tempdir().unwrap();
+        let settings_path = tmp.path().join("settings.json");
+        std::fs::write(
+            &settings_path,
+            r#"{"disableBundledSkills": true}"#,
+        )
+        .unwrap();
+
+        let value = super::load_disable_bundled_skills_from_path(&settings_path);
+        assert!(value, "扁平 JSON disableBundledSkills=true 时应返回 true");
+    }
+
+    #[test]
+    fn test_load_disable_bundled_skills_handles_malformed_json() {
+        // 畸形 JSON（如崩溃留下的半截文件）应默认 false
+        let tmp = tempdir().unwrap();
+        let settings_path = tmp.path().join("settings.json");
+        std::fs::write(&settings_path, r#"{"config": {"disableBundledSkills": broken}"#).unwrap();
+
+        let value = super::load_disable_bundled_skills_from_path(&settings_path);
+        assert!(!value, "畸形 JSON 应默认 false");
+    }
+
+    // ===== E2E: Builtin skills 全链路验证（Task 7） =====
+
+    #[test]
+    fn test_e2e_frozen_summary_contains_builtin_use_artifacts() {
+        // 验证：disable_bundled=false 时 frozen summary 含 builtin use-artifacts
+        // 这覆盖了 Task 1-3 的整条链路：
+        //   resolve_skill_roots(末尾追加 Builtin root)
+        //   → scan_skill_roots(Builtin 特判从 BUILTIN_SKILLS 加载)
+        //   → build_summary(生成给 LLM 看的摘要)
+        let summary = SkillsMiddleware::build_frozen_summary("/tmp", vec![], false);
+        let summary = summary.expect("非空时应返回 Some");
+        assert!(
+            summary.contains("use-artifacts"),
+            "frozen summary 应含 builtin use-artifacts，实际: {}",
+            summary
+        );
+        assert!(
+            summary.contains("<builtin>/use-artifacts"),
+            "frozen summary 应含虚拟路径 <builtin>/use-artifacts，实际: {}",
+            summary
+        );
+    }
+
+    #[test]
+    fn test_e2e_frozen_summary_excludes_builtin_when_disabled() {
+        // 验证：disable_bundled=true 时 Builtin root 不被追加，
+        // frozen summary 不含 <builtin>/use-artifacts
+        let summary = SkillsMiddleware::build_frozen_summary("/tmp", vec![], true);
+        // 可能返回 None（无任何 skill）或 Some（仅含磁盘 skill）
+        if let Some(s) = summary {
+            assert!(
+                !s.contains("<builtin>/use-artifacts"),
+                "disable_bundled=true 时不应含 Builtin use-artifacts，实际: {}",
+                s
+            );
+        }
+    }

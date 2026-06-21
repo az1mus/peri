@@ -12,12 +12,10 @@ impl Command for LoopCommand {
     }
 
     fn execute(&self, app: &mut App, args: &str) {
+        let lc = &app.services.lc;
         let args = args.trim();
         if args.is_empty() {
-            let vm = MessageViewModel::system(
-                "用法: /loop <自然语言时间描述> <提示词>\n例如: /loop 每隔5分钟提醒我喝水"
-                    .to_string(),
-            );
+            let vm = MessageViewModel::system(lc.tr("command-loop-usage").to_string());
             app.session_mgr
                 .current_mut()
                 .messages

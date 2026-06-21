@@ -19,6 +19,7 @@ use crate::{
 
 /// 渲染 Rewind 弹窗（底部展开区）。
 pub(crate) fn render_rewind_popup(f: &mut Frame, app: &App, area: Rect) {
+    let lc = &app.services.lc;
     let Some(InteractionPrompt::Rewind(prompt)) =
         &app.session_mgr.current().agent.interaction_prompt
     else {
@@ -26,7 +27,7 @@ pub(crate) fn render_rewind_popup(f: &mut Frame, app: &App, area: Rect) {
     };
 
     let inner = BorderedPanel::new(Span::styled(
-        "Rewind",
+        lc.tr("rewind-title"),
         Style::default()
             .fg(theme::ACCENT)
             .add_modifier(Modifier::BOLD),
@@ -51,7 +52,10 @@ pub(crate) fn render_rewind_popup(f: &mut Frame, app: &App, area: Rect) {
         } else {
             item.summary.clone()
         };
-        let count_label = format!("({}msg)", item.message_count_after);
+        let count_label = lc.tr_args(
+            "rewind-msg-count",
+            &[("count".into(), item.message_count_after.to_string().into())],
+        );
 
         lines.push(Line::from(vec![
             Span::styled(
@@ -84,9 +88,9 @@ pub(crate) fn render_rewind_popup(f: &mut Frame, app: &App, area: Rect) {
     // ── 分隔 + 模式指示 ──
     lines.push(Line::from(""));
     let mode_label = match prompt.mode {
-        RewindMode::MessagesOnly => "1. 回到此 prompt",
-        RewindMode::MessagesAndFiles => "2. 回到此 prompt + 恢复文件",
-        RewindMode::ConfirmRevert => "⚠ 确认: 恢复文件?",
+        RewindMode::MessagesOnly => lc.tr("rewind-mode-messages"),
+        RewindMode::MessagesAndFiles => lc.tr("rewind-mode-files"),
+        RewindMode::ConfirmRevert => lc.tr("rewind-mode-confirm"),
     };
     lines.push(Line::from(vec![
         Span::styled(
@@ -103,16 +107,16 @@ pub(crate) fn render_rewind_popup(f: &mut Frame, app: &App, area: Rect) {
         let selected = &prompt.items[prompt.cursor];
         lines.push(Line::from(""));
         lines.push(Line::from(Span::styled(
-            "将恢复的文件:",
+            lc.tr("rewind-files-to-restore"),
             Style::default()
                 .fg(theme::WARNING)
                 .add_modifier(Modifier::BOLD),
         )));
         for fc in &selected.file_changes {
             let op_label = match fc.operation.as_str() {
-                "Write" => "Write → 删除+Git restore",
-                "Edit" => "Edit → 恢复",
-                _ => &fc.operation,
+                "Write" => lc.tr("rewind-write-op"),
+                "Edit" => lc.tr("rewind-edit-op"),
+                _ => fc.operation.clone(),
             };
             let path_display: String = fc.path.chars().take(max_width.saturating_sub(20)).collect();
             lines.push(Line::from(vec![
@@ -126,7 +130,7 @@ pub(crate) fn render_rewind_popup(f: &mut Frame, app: &App, area: Rect) {
         }
         lines.push(Line::from(""));
         lines.push(Line::from(Span::styled(
-            "Enter 确认, Esc 取消",
+            lc.tr("rewind-confirm-hint"),
             Style::default().fg(theme::WARNING),
         )));
     }

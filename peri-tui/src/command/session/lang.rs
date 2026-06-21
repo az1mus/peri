@@ -20,7 +20,11 @@ impl Command for LangCommand {
                 .iter()
                 .map(|l| {
                     if *l == current {
-                        format!("{} (current)", l)
+                        format!(
+                            "{} {}",
+                            l,
+                            app.services.lc.tr("command-lang-current-suffix")
+                        )
                     } else {
                         l.to_string()
                     }

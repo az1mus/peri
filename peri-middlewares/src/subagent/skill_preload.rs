@@ -60,6 +60,7 @@ pub struct SkillPreloadMiddleware {
     skill_names: Vec<String>,
     cwd: String,
     plugin_roots: Vec<SkillRoot>,
+    disable_bundled: bool,
 }
 
 impl SkillPreloadMiddleware {
@@ -68,12 +69,19 @@ impl SkillPreloadMiddleware {
             skill_names,
             cwd: cwd.to_string(),
             plugin_roots: Vec::new(),
+            disable_bundled: false,
         }
     }
 
     /// 追加插件 skills 搜索根（每个 root 携带 source 与 plugin_name）
     pub fn with_plugin_roots(mut self, roots: Vec<SkillRoot>) -> Self {
         self.plugin_roots = roots;
+        self
+    }
+
+    /// 设置是否禁用 builtin skill（默认 false）
+    pub fn with_disable_bundled(mut self, disable: bool) -> Self {
+        self.disable_bundled = disable;
         self
     }
 }
@@ -106,7 +114,7 @@ impl<S: State> Middleware<S> for SkillPreloadMiddleware {
             return Ok(());
         }
 
-        let roots = resolve_skill_roots(&self.cwd, self.plugin_roots.clone());
+        let roots = resolve_skill_roots(&self.cwd, self.plugin_roots.clone(), self.disable_bundled);
         let names_lower: Vec<String> = skill_names.iter().map(|s| s.to_lowercase()).collect();
 
         // 在 blocking 线程中扫描目录 + 读取文件内容
@@ -124,8 +132,18 @@ impl<S: State> Middleware<S> for SkillPreloadMiddleware {
                     })
                 })
                 .filter_map(|s| {
-                    let content = std::fs::read_to_string(&s.path).ok()?;
-                    Some((s.path.to_string_lossy().to_string(), content))
+                    // Builtin source 走常量数组查找（虚拟路径无文件），其他 source 走磁盘读取
+                    // 注意：本文件在 peri-middlewares crate 内部，必须用 crate:: 路径
+                    // （不能用 peri_middlewares::，否则编译失败）
+                    let content = if matches!(s.source, crate::skills::SkillSource::Builtin) {
+                        crate::skills::builtin::BUILTIN_SKILLS
+                            .iter()
+                            .find(|bs| bs.name == s.name)
+                            .map(|bs| bs.content.to_string())
+                    } else {
+                        std::fs::read_to_string(&s.path).ok()
+                    };
+                    content.map(|c| (s.path.to_string_lossy().to_string(), c))
                 })
                 .collect::<Vec<_>>()
         })

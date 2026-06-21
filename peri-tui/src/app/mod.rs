@@ -212,18 +212,13 @@ impl App {
 
         // 预计算命令帮助列表
         let command_registry = crate::command::default_registry();
+        // 复用 loader::resolve_skill_roots 作为 single source of truth，
+        // 与 new_session() / ACP session/new 保持一致，确保 Builtin skills 被扫描
         let skills = {
-            let mut dirs = Vec::new();
-            if let Some(home) = dirs_next::home_dir() {
-                dirs.push(home.join(".claude").join("skills"));
-            }
-            if let Some(global_dir) = peri_middlewares::skills::load_global_skills_dir() {
-                dirs.push(global_dir);
-            }
-            if let Ok(cwd) = std::env::current_dir() {
-                dirs.push(cwd.join(".claude").join("skills"));
-            }
-            peri_middlewares::skills::list_skills(&dirs)
+            let disable_bundled = peri_middlewares::skills::load_disable_bundled_skills();
+            let skill_roots =
+                peri_middlewares::skills::resolve_skill_roots(&cwd, vec![], disable_bundled);
+            peri_middlewares::skills::scan_skill_roots(&skill_roots)
         };
 
         // 初始化 cron state + spawn tick task
@@ -317,8 +312,12 @@ impl App {
             .as_ref()
             .map(|pd| pd.all_skill_roots.clone())
             .unwrap_or_default();
-        let skill_roots =
-            peri_middlewares::skills::resolve_skill_roots(&self.services.cwd, plugin_skill_roots);
+        let disable_bundled = peri_middlewares::skills::load_disable_bundled_skills();
+        let skill_roots = peri_middlewares::skills::resolve_skill_roots(
+            &self.services.cwd,
+            plugin_skill_roots,
+            disable_bundled, // TUI 侧仅用于显示
+        );
         let skills = peri_middlewares::skills::scan_skill_roots(&skill_roots);
         // 追加插件 commands
         if let Some(pd) = &self.services.plugin_data {

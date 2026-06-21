@@ -16,11 +16,10 @@ impl Command for BgCommand {
     }
 
     fn execute(&self, app: &mut App, args: &str) {
+        let lc = &app.services.lc;
         let args = args.trim();
         if args.is_empty() {
-            let vm = MessageViewModel::system(
-                "用法: /bg <命令>\n例如: /bg 用中文搜索 Rust 2026 roadmap 最新进展".to_string(),
-            );
+            let vm = MessageViewModel::system(lc.tr("command-bg-usage").to_string());
             app.session_mgr
                 .current_mut()
                 .messages

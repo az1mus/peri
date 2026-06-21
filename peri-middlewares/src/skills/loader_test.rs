@@ -265,7 +265,7 @@
     #[test]
     fn test_resolve_skill_roots_returns_standard_paths() {
         let cwd = "/tmp/test-project";
-        let roots = resolve_skill_roots(cwd, vec![]);
+        let roots = resolve_skill_roots(cwd, vec![], false);
         assert!(
             roots
                 .iter()
@@ -289,7 +289,7 @@
             source: SkillSource::Plugin,
             plugin_name: Some("test-plugin".to_string()),
         };
-        let roots = resolve_skill_roots("/tmp", vec![plugin_root]);
+        let roots = resolve_skill_roots("/tmp", vec![plugin_root], false);
         assert!(
             roots.iter().any(|r| r.path == extra.path().to_path_buf()
                 && r.source == SkillSource::Plugin
@@ -305,9 +305,101 @@
             source: SkillSource::Plugin,
             plugin_name: None,
         };
-        let roots = resolve_skill_roots("/tmp", vec![nonexistent]);
+        let roots = resolve_skill_roots("/tmp", vec![nonexistent], false);
         assert!(
             !roots.iter().any(|r| r.path.to_str() == Some("/nonexistent/path")),
             "不存在的 plugin root 应被跳过"
         );
+    }
+
+    #[test]
+    fn test_resolve_skill_roots_includes_builtin_when_enabled() {
+        let roots = resolve_skill_roots("/tmp", vec![], false);
+        assert!(
+            roots.iter().any(|r| r.source == SkillSource::Builtin),
+            "disable_bundled=false 时应含 Builtin root"
+        );
+    }
+
+    #[test]
+    fn test_resolve_skill_roots_excludes_builtin_when_disabled() {
+        let roots = resolve_skill_roots("/tmp", vec![], true);
+        assert!(
+            !roots.iter().any(|r| r.source == SkillSource::Builtin),
+            "disable_bundled=true 时不应含 Builtin root"
+        );
+    }
+
+    #[test]
+    fn test_resolve_skill_roots_builtin_is_lowest_priority() {
+        // Builtin root 应在末尾（最后被扫描，最低优先级）
+        let roots = resolve_skill_roots("/tmp", vec![], false);
+        let builtin_idx = roots
+            .iter()
+            .position(|r| r.source == SkillSource::Builtin)
+            .expect("应含 Builtin root");
+        assert_eq!(
+            builtin_idx,
+            roots.len() - 1,
+            "Builtin root 应在列表末尾（最低优先级）"
+        );
+    }
+
+    #[test]
+    fn test_scan_skill_roots_builtin_returns_metadata() {
+        // 仅含 Builtin root 时，应返回 BUILTIN_SKILLS 的 metadata
+        let roots = vec![SkillRoot {
+            path: PathBuf::new(),
+            source: SkillSource::Builtin,
+            plugin_name: None,
+        }];
+        let skills = scan_skill_roots(&roots);
+        assert!(
+            skills.iter().any(|s| s.name == "use-artifacts"
+                && s.source == SkillSource::Builtin
+                && s.path == Path::new("<builtin>/use-artifacts")),
+            "应含 use-artifacts 的 Builtin metadata，path=<builtin>/use-artifacts，实际: {:?}",
+            skills
+        );
+    }
+
+    #[test]
+    fn test_scan_skill_roots_builtin_works_with_empty_path() {
+        // 即使 path 字段是空（占位），Builtin source 也应正常扫描
+        // （特判分支跳过 is_dir() 检查）
+        let roots = vec![SkillRoot {
+            path: PathBuf::new(), // 空路径占位
+            source: SkillSource::Builtin,
+            plugin_name: None,
+        }];
+        let skills = scan_skill_roots(&roots);
+        assert!(!skills.is_empty(), "Builtin source 不应因 path 为空被跳过");
+    }
+
+    #[test]
+    fn test_scan_skill_roots_user_overrides_builtin() {
+        // User root 有同名 use-artifacts，应胜出（User 描述 + source=User）
+        let user_dir = tempdir().unwrap();
+        write_skill_file(
+            &user_dir.path().join("use-artifacts").join("SKILL.md"),
+            "use-artifacts",
+            "from user override",
+        );
+
+        let roots = vec![
+            SkillRoot {
+                path: user_dir.path().to_path_buf(),
+                source: SkillSource::User,
+                plugin_name: None,
+            },
+            SkillRoot {
+                path: PathBuf::new(),
+                source: SkillSource::Builtin,
+                plugin_name: None,
+            },
+        ];
+        let skills = scan_skill_roots(&roots);
+        let ua = skills.iter().find(|s| s.name == "use-artifacts").unwrap();
+        assert_eq!(ua.source, SkillSource::User, "User 应覆盖 Builtin");
+        assert_eq!(ua.description, "from user override");
     }

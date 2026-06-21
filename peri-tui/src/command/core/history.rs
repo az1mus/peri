@@ -25,7 +25,7 @@ impl Command for HistoryCommand {
                 .messages
                 .view_messages
                 .push(MessageViewModel::system(
-                    "Agent 运行中，无法打开历史面板".to_string(),
+                    app.services.lc.tr("history-agent-running"),
                 ));
             return;
         }

@@ -97,9 +97,11 @@ pub(crate) async fn handle_request(
                 .modes(modes)
                 .config_options(config_options);
             // Scan skills for AvailableCommands
+            let disable_bundled = peri_middlewares::skills::load_disable_bundled_skills();
             let skill_roots = peri_middlewares::SkillsMiddleware::resolve_roots_static(
                 &cwd,
                 cfg.plugin_skill_roots.clone(),
+                disable_bundled, // TUI 侧仅用于显示
             );
             let skills = peri_middlewares::skills::scan_skill_roots(&skill_roots);
             send_available_commands_update(transport, &session_id, &skills).await;
@@ -236,9 +238,11 @@ pub(crate) async fn handle_request(
                 .modes(modes)
                 .config_options(config_options);
             // Scan skills for AvailableCommands (same as session/new)
+            let disable_bundled = peri_middlewares::skills::load_disable_bundled_skills();
             let skill_roots = peri_middlewares::SkillsMiddleware::resolve_roots_static(
                 cwd,
                 cfg.plugin_skill_roots.clone(),
+                disable_bundled, // TUI 侧仅用于显示
             );
             let skills = peri_middlewares::skills::scan_skill_roots(&skill_roots);
             send_available_commands_update(transport, req_session_id, &skills).await;

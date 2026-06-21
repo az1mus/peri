@@ -70,8 +70,11 @@ async fn test_plugin_unknown_subcommand_shows_usage() {
     cmd.execute(&mut app, "unknown sub command");
     let msg = last_system_note(&app);
     assert!(msg.is_some(), "未知子命令应显示用法提示");
+    // 默认 locale 可能是 en/zh-CN，两种文案都接受
+    let text = msg.unwrap();
     assert!(
-        msg.unwrap().contains("用法"),
-        "未知子命令的消息应包含用法说明"
+        text.contains("用法") || text.contains("Usage"),
+        "未知子命令的消息应包含用法说明，实际: {}",
+        text
     );
 }

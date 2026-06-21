@@ -189,6 +189,7 @@ impl MessagePipeline {
                 } else {
                     None
                 };
+                let auto_expand = tool_display::should_auto_expand_tool(&ct.name, ct.is_error);
                 let mut vm = MessageViewModel::ToolBlock {
                     tool_name: ct.name.clone(),
                     tool_call_id: ct.tool_call_id.clone(),
@@ -196,7 +197,7 @@ impl MessagePipeline {
                     args_display: args,
                     content: ct.output.clone(),
                     is_error: ct.is_error,
-                    collapsed: true,
+                    collapsed: !auto_expand,
                     color: if ct.is_error {
                         theme::ERROR
                     } else {
@@ -224,6 +225,7 @@ impl MessagePipeline {
             } else {
                 None
             };
+            let auto_expand = tool_display::should_auto_expand_tool(&ct.name, ct.is_error);
             let mut vm = MessageViewModel::ToolBlock {
                 tool_name: ct.name.clone(),
                 tool_call_id: ct.tool_call_id.clone(),
@@ -231,7 +233,7 @@ impl MessagePipeline {
                 args_display: args,
                 content: ct.output.clone(),
                 is_error: ct.is_error,
-                collapsed: true,
+                collapsed: !auto_expand,
                 color: if ct.is_error {
                     theme::ERROR
                 } else {

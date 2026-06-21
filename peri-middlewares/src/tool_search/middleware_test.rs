@@ -62,10 +62,11 @@
             peri_agent::agent::state::AgentState,
         >>::collect_tools(&mw, "/tmp");
 
-        assert_eq!(tools.len(), 2);
+        assert!(tools.len() >= 3, "expected at least 3 tools (meta + deferred)");
         let names: Vec<&str> = tools.iter().map(|t| t.name()).collect();
         assert!(names.contains(&"SearchExtraTools"));
         assert!(names.contains(&"ExecuteExtraTool"));
+        assert!(names.contains(&"artifact"), "expected artifact tool");
     }
 
     #[tokio::test]

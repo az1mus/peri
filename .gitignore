@@ -188,4 +188,8 @@ vendor/
 node_modules
 dist
 settings.json
-.claude/
+.claude/*
+!.claude/skills/
+.claude/skills/*
+!.claude/skills/learn-from-history/**
+!.claude/skills/learn-from-history/

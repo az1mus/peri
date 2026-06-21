@@ -13,20 +13,26 @@ impl Command for AgentCommand {
     }
 
     fn execute(&self, app: &mut App, args: &str) {
+        let lc = &app.services.lc;
         let id = args.trim();
         if id.is_empty() {
             // 清除 agent_id
             app.set_agent_id(None);
             app.session_mgr.current_mut().messages.view_messages.push(MessageViewModel::system(
-                "Agent 已重置（未设置 agent_id）".to_string(),
+                lc.tr("command-agent-reset").to_string(),
             ));
         } else {
             app.set_agent_id(Some(id.to_string()));
             let name = peri_middlewares::format_agent_id(id);
-            app.session_mgr.current_mut().messages.view_messages.push(MessageViewModel::system(format!(
-                "Agent 已切换为: {} ({})",
-                name, id
-            )));
+            app.session_mgr.current_mut().messages.view_messages.push(MessageViewModel::system(
+                lc.tr_args(
+                    "command-agent-switched",
+                    &[
+                        ("name".into(), name.into()),
+                        ("id".into(), id.to_string().into()),
+                    ],
+                ),
+            ));
         }
     }
 }

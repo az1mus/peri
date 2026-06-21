@@ -52,32 +52,49 @@ fn format_content_size(bytes: u64) -> String {
 }
 
 /// 格式化相对时间
-fn format_relative_time(dt: &chrono::DateTime<Utc>) -> String {
+fn format_relative_time(lc: &crate::i18n::LcRegistry, dt: &chrono::DateTime<Utc>) -> String {
     let now = Utc::now();
     let diff = now.signed_duration_since(*dt);
     let secs = diff.num_seconds();
     if secs < 60 {
-        "just now".to_string()
+        lc.tr("thread-browser-time-just-now").to_string()
     } else if secs < 3600 {
-        format!(
-            "{} minute{} ago",
-            secs / 60,
-            if secs / 60 > 1 { "s" } else { "" }
+        let minutes = secs / 60;
+        lc.tr_args(
+            "thread-browser-time-minutes",
+            &[
+                ("count".into(), minutes.to_string().into()),
+                ("suffix".into(), "".into()),
+            ],
         )
     } else if secs < 86400 {
-        format!(
-            "{} hour{} ago",
-            secs / 3600,
-            if secs / 3600 > 1 { "s" } else { "" }
+        let hours = secs / 3600;
+        lc.tr_args(
+            "thread-browser-time-hours",
+            &[
+                ("count".into(), hours.to_string().into()),
+                ("suffix".into(), "".into()),
+            ],
         )
     } else {
         let days = secs / 86400;
-        format!("{} day{} ago", days, if days > 1 { "s" } else { "" })
+        lc.tr_args(
+            "thread-browser-time-days",
+            &[
+                ("count".into(), days.to_string().into()),
+                ("suffix".into(), "".into()),
+            ],
+        )
     }
 }
 
 /// 渲染搜索框到固定区域（不参与滚动）
-fn render_search_box(f: &mut Frame, browser: &ThreadBrowser, area: Rect) {
+fn render_search_box(
+    f: &mut Frame,
+    browser: &ThreadBrowser,
+    area: Rect,
+    lc: &crate::i18n::LcRegistry,
+) {
     if area.width < 4 || area.height < 3 {
         return;
     }
@@ -97,7 +114,10 @@ fn render_search_box(f: &mut Frame, browser: &ThreadBrowser, area: Rect) {
     let content_line = if query_val.is_empty() && !browser.search_focused {
         Line::from(vec![
             Span::styled(" ⌕ ", Style::default().fg(theme::MUTED)),
-            Span::styled("Search…", Style::default().fg(theme::DIM)),
+            Span::styled(
+                lc.tr("thread-browser-search-placeholder"),
+                Style::default().fg(theme::DIM),
+            ),
         ])
     } else {
         let mut spans = vec![
@@ -122,6 +142,7 @@ pub(crate) fn render_thread_browser(
     app: &mut App,
     area: Rect,
 ) {
+    let lc = &app.services.lc;
     let current_thread_id = app.session_mgr.current_mut().current_thread_id.clone();
 
     let popup_area = area;
@@ -130,7 +151,13 @@ pub(crate) fn render_thread_browser(
     let total = browser.total();
     let total_all = browser.total_all();
     let cursor_display = if total == 0 { 0 } else { browser.cursor + 1 };
-    let title_text = format!(" Resume Session ({}/{}) ", cursor_display, total_all);
+    let title_text = lc.tr_args(
+        "thread-browser-title",
+        &[
+            ("cursor".into(), cursor_display.to_string().into()),
+            ("total".into(), total_all.to_string().into()),
+        ],
+    );
 
     let inner = BorderedPanel::new(Span::styled(
         title_text,
@@ -156,7 +183,7 @@ pub(crate) fn render_thread_browser(
     };
 
     // ── 1. 渲染搜索框（固定位置，不滚动） ──
-    render_search_box(f, browser, search_area);
+    render_search_box(f, browser, search_area, lc);
 
     // ── 2. 构建列表内容（纯 thread 列表 + 快捷键，无搜索框占位） ──
     let mut lines: Vec<Line> = Vec::new();
@@ -167,12 +194,12 @@ pub(crate) fn render_thread_browser(
     if filtered.is_empty() {
         if browser.search_query.is_empty() {
             lines.push(Line::from(Span::styled(
-                "  (No conversations yet)",
+                lc.tr("thread-browser-empty"),
                 Style::default().fg(theme::MUTED),
             )));
         } else {
             lines.push(Line::from(Span::styled(
-                "  (No matching conversations)",
+                lc.tr("thread-browser-no-match"),
                 Style::default().fg(theme::MUTED),
             )));
         }
@@ -183,7 +210,8 @@ pub(crate) fn render_thread_browser(
     for (i, meta) in filtered.iter().enumerate() {
         let is_cursor = i == browser.cursor;
         let is_current = current_thread_id == Some(&meta.id);
-        let title = meta.title.as_deref().unwrap_or("(untitled)");
+        let untitled = lc.tr("thread-browser-untitled");
+        let title = meta.title.as_deref().unwrap_or(&untitled);
         let label = truncate_display(title, max_title_width);
 
         // 第一行：cursor indicator + 标题
@@ -221,7 +249,7 @@ pub(crate) fn render_thread_browser(
         lines.push(Line::from(first_line_spans));
 
         // 第二行：metadata（relative time · branch · size）
-        let relative_time = format_relative_time(&meta.updated_at);
+        let relative_time = format_relative_time(lc, &meta.updated_at);
         let size_str = format_content_size(meta.content_size);
 
         let mut meta_parts = vec![Span::styled(
