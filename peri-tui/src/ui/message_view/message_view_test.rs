@@ -461,7 +461,10 @@ fn test_recompute_hash_idempotent() {
 
 #[test]
 fn test_human_message_with_system_reminder_detection() {
-    let text = "<system-reminder>\n此会话从之前的对话延续。\n## Summary\nDone.\n[上下文已压缩，请根据摘要继续工作]\n</system-reminder>";
+    let text = format!(
+        "<system-reminder>\nThis session continues from a previous conversation.\n## Summary\nDone.\n{}\n</system-reminder>",
+        peri_agent::agent::compact::CONTINUATION_HINT
+    );
     let msg = BaseMessage::human(text);
     let vm = MessageViewModel::from_base_message(&msg, &[]);
     match vm {
@@ -478,7 +481,10 @@ fn test_human_message_with_system_reminder_detection() {
             );
             assert!(!content.contains("</system-reminder>"), "结束标签应被剥离");
             assert!(content.contains("## Summary"), "正文应保留");
-            assert!(content.contains("[上下文已压缩"), "续接指令应保留");
+            assert!(
+                content.contains(peri_agent::agent::compact::CONTINUATION_HINT),
+                "续接指令应保留"
+            );
         }
         _ => panic!("应为 UserBubble"),
     }
@@ -500,9 +506,39 @@ fn test_human_message_without_system_reminder() {
 }
 
 #[test]
+fn test_goal_steering_system_reminder_不折叠为_compact() {
+    // GoalMiddleware 注入的 steering 用 <goal-message> 包裹（区别于 compact 的 <system-reminder>）
+    let text = "<goal-message>\n[Goal Steering] 目标: 完成重构\n请决策下一步...\n</goal-message>";
+    let msg = BaseMessage::human(text);
+    let vm = MessageViewModel::from_base_message(&msg, &[]);
+    match vm {
+        MessageViewModel::UserBubble {
+            system_reminder,
+            content,
+            ..
+        } => {
+            assert!(!system_reminder, "goal steering 不应折叠为 compact 摘要");
+            assert!(
+                content.contains("<goal-message>"),
+                "goal-message 标签应原样保留"
+            );
+            assert!(
+                content.contains("[Goal Steering]"),
+                "steering 内容应原样保留"
+            );
+        }
+        _ => panic!("应为 UserBubble"),
+    }
+}
+
+#[test]
 fn test_system_reminder_partial_eq_different() {
     let msg1 = BaseMessage::human("普通消息");
-    let msg2 = BaseMessage::human("<system-reminder>\n压缩摘要\n</system-reminder>");
+    let reminder = format!(
+        "<system-reminder>\n压缩摘要\n{}\n</system-reminder>",
+        peri_agent::agent::compact::CONTINUATION_HINT
+    );
+    let msg2 = BaseMessage::human(reminder);
     let vm1 = MessageViewModel::from_base_message(&msg1, &[]);
     let vm2 = MessageViewModel::from_base_message(&msg2, &[]);
     assert_ne!(vm1, vm2, "系统提醒消息和普通消息不应相等");
@@ -511,7 +547,11 @@ fn test_system_reminder_partial_eq_different() {
 #[test]
 fn test_system_reminder_content_hash_different() {
     let msg1 = BaseMessage::human("普通消息");
-    let msg2 = BaseMessage::human("<system-reminder>\n压缩摘要\n</system-reminder>");
+    let reminder = format!(
+        "<system-reminder>\n压缩摘要\n{}\n</system-reminder>",
+        peri_agent::agent::compact::CONTINUATION_HINT
+    );
+    let msg2 = BaseMessage::human(reminder);
     let vm1 = MessageViewModel::from_base_message(&msg1, &[]);
     let vm2 = MessageViewModel::from_base_message(&msg2, &[]);
     assert_ne!(

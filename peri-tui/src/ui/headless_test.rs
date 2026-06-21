@@ -893,7 +893,6 @@ async fn test_permission_mode_store_and_load() {
     use peri_middlewares::prelude::PermissionMode;
     for mode in [
         PermissionMode::Default,
-        PermissionMode::DontAsk,
         PermissionMode::AcceptEdit,
         PermissionMode::AutoMode,
         PermissionMode::Bypass,
@@ -912,12 +911,12 @@ async fn test_permission_mode_store_and_load() {
 async fn test_permission_mode_cycle() {
     let (app, _handle) = App::new_headless(80, 24).await;
     use peri_middlewares::prelude::PermissionMode;
-    // cycle 从 Bypass 开始 → Default
+    // 默认 Bypass → cycle 到 Default
     let next = app.services.permission_mode.cycle();
     assert_eq!(next, PermissionMode::Default);
-    // 继续循环 → DontAsk
+    // 继续循环 → AcceptEdit
     let next2 = app.services.permission_mode.cycle();
-    assert_eq!(next2, PermissionMode::DontAsk);
+    assert_eq!(next2, PermissionMode::AcceptEdit);
 }
 
 #[tokio::test]
@@ -948,18 +947,6 @@ async fn test_status_bar_updates_after_mode_switch() {
     assert!(
         !handle.contains("DEFAULT"),
         "Default 模式不应显示标签，实际:\n{}",
-        handle.snapshot().join("\n")
-    );
-
-    // 切换到 DontAsk
-    app.services.permission_mode.store(PermissionMode::DontAsk);
-    handle
-        .terminal
-        .draw(|f| crate::ui::main_ui::render(f, &mut app))
-        .unwrap();
-    assert!(
-        handle.contains("Don't Ask"),
-        "切换后状态栏应显示 Don't Ask，实际:\n{}",
         handle.snapshot().join("\n")
     );
 
@@ -1000,12 +987,11 @@ async fn test_shift_tab_cycles_permission_mode() {
     let next = app.services.permission_mode.cycle();
     assert_eq!(next, PermissionMode::Default, "Bypass 之后应为 Default");
     assert_eq!(app.services.permission_mode.load(), PermissionMode::Default);
-    // 继续循环 4 次回到 Bypass
-    app.services.permission_mode.cycle(); // DontAsk
+    // 继续循环 3 次回到 Bypass
     app.services.permission_mode.cycle(); // AcceptEdit
     app.services.permission_mode.cycle(); // AutoMode
     let final_mode = app.services.permission_mode.cycle(); // Bypass
-    assert_eq!(final_mode, PermissionMode::Bypass, "循环 5 次回到起点");
+    assert_eq!(final_mode, PermissionMode::Bypass, "循环 4 次回到起点");
 }
 
 #[tokio::test]
@@ -1290,15 +1276,22 @@ async fn test_messages_accumulate_across_turns() {
     let (mut app, mut handle) = App::new_headless(120, 30).await;
 
     // 第一轮：用户 → AI
-    // 模拟 submit_message：先记录 round_start_vm_idx，再 push Human VM
-    app.session_mgr.current_mut().messages.round_start_vm_idx =
-        app.session_mgr.current_mut().messages.view_messages.len();
+    // 模拟 submit_message 完整流程：begin_round → push UserBubble → 记录 round_start_vm_idx。
+    // begin_round 重置 completed_len_at_round_start，确保 build_tail_vms 只 reconcile 本轮新增，
+    // 否则前缀 completed 会被重复纳入 tail_vms（参见 reconcile.rs::build_tail_vms）。
+    app.session_mgr
+        .current_mut()
+        .messages
+        .pipeline
+        .begin_round();
     let user1 = MessageViewModel::user("turn1".into());
     app.session_mgr
         .current_mut()
         .messages
         .view_messages
         .push(user1);
+    app.session_mgr.current_mut().messages.round_start_vm_idx =
+        app.session_mgr.current_mut().messages.view_messages.len();
     app.render_rebuild();
 
     app.push_agent_event(AgentEvent::AssistantChunk {
@@ -1316,24 +1309,32 @@ async fn test_messages_accumulate_across_turns() {
     tokio::task::yield_now().await;
 
     // 第二轮：用户 → AI
-    // 模拟 submit_message：先记录 round_start_vm_idx，再 push Human VM
-    app.session_mgr.current_mut().messages.round_start_vm_idx =
-        app.session_mgr.current_mut().messages.view_messages.len();
+    // 模拟 submit_message：先 push Human VM，再记录 round_start_vm_idx（与
+    // agent_submit.rs::submit_message 顺序一致）。
+    app.session_mgr
+        .current_mut()
+        .messages
+        .pipeline
+        .begin_round();
     let user2 = MessageViewModel::user("turn2".into());
     app.session_mgr
         .current_mut()
         .messages
         .view_messages
         .push(user2);
+    app.session_mgr.current_mut().messages.round_start_vm_idx =
+        app.session_mgr.current_mut().messages.view_messages.len();
     app.render_rebuild();
 
     app.push_agent_event(AgentEvent::AssistantChunk {
         chunk: "answer2".into(),
         source_agent_id: None,
     });
+    // StateSnapshot 是增量的：只携带本轮新增消息（snapshot_anchor 之后），
+    // 不是整段 history。set_completed() 用 extend 累加，详见
+    // peri-agent/src/agent/executor/final_answer.rs::emit_snapshot_and_drain_notifications
+    // 与本文件 test_state_snapshot_is_incremental 回归。
     app.push_agent_event(AgentEvent::StateSnapshot(vec![
-        BaseMessage::human("turn1"),
-        BaseMessage::ai("answer1"),
         BaseMessage::human("turn2"),
         BaseMessage::ai("answer2"),
     ]));

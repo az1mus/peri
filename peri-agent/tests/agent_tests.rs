@@ -39,6 +39,7 @@ impl BaseTool for OverrideEchoTool {
     async fn invoke(
         &self,
         input: serde_json::Value,
+        _ctx: peri_agent::tools::ToolContext<'_>,
     ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
         Ok(format!(
             "override: {}",
@@ -63,6 +64,7 @@ impl BaseTool for EchoTool {
     async fn invoke(
         &self,
         input: serde_json::Value,
+        _ctx: peri_agent::tools::ToolContext<'_>,
     ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
         Ok(format!("echo: {}", input["text"].as_str().unwrap_or("")))
     }
@@ -84,6 +86,7 @@ impl BaseTool for FailingTool {
     async fn invoke(
         &self,
         _input: serde_json::Value,
+        _ctx: peri_agent::tools::ToolContext<'_>,
     ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
         Err("intentional failure".into())
     }
@@ -145,7 +148,7 @@ async fn test_agent_tool_not_found() {
         output.tool_calls[0].1.is_error,
         "ToolNotFound 应产生错误结果"
     );
-    assert!(output.tool_calls[0].1.output.contains("不存在"));
+    assert!(output.tool_calls[0].1.output.contains("not found"));
 }
 
 #[tokio::test]

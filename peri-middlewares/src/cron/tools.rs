@@ -47,6 +47,7 @@ impl BaseTool for CronRegisterTool {
     async fn invoke(
         &self,
         input: Value,
+        _ctx: peri_agent::tools::ToolContext<'_>,
     ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
         let expression = input["expression"]
             .as_str()
@@ -101,6 +102,7 @@ impl BaseTool for CronListTool {
     async fn invoke(
         &self,
         _input: Value,
+        _ctx: peri_agent::tools::ToolContext<'_>,
     ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
         let scheduler = self.scheduler.lock();
 
@@ -165,6 +167,7 @@ impl BaseTool for CronRemoveTool {
     async fn invoke(
         &self,
         input: Value,
+        _ctx: peri_agent::tools::ToolContext<'_>,
     ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
         let id = input["id"]
             .as_str()
@@ -173,9 +176,9 @@ impl BaseTool for CronRemoveTool {
         let mut scheduler = self.scheduler.lock();
 
         if scheduler.remove(id) {
-            Ok(format!("已删除定时任务 {}", id))
+            Ok(format!("Deleted scheduled task {}", id))
         } else {
-            Err(format!("定时任务 {} 不存在", id).into())
+            Err(format!("Scheduled task {} not found", id).into())
         }
     }
 }
