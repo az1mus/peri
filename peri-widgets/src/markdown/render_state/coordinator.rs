@@ -370,7 +370,6 @@ impl<'a> RenderState<'a> {
             }
             Event::End(TagEnd::TableHead) => {
                 if let Some(tb) = self.table.as_mut() {
-                    tb.push_cell();
                     tb.push_row();
                     tb.in_head = false;
                 }
@@ -378,7 +377,6 @@ impl<'a> RenderState<'a> {
             Event::Start(Tag::TableRow) => {}
             Event::End(TagEnd::TableRow) => {
                 if let Some(tb) = self.table.as_mut() {
-                    tb.push_cell();
                     tb.push_row();
                 }
             }
