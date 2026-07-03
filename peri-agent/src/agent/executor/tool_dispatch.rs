@@ -161,6 +161,11 @@ pub(crate) async fn dispatch_tools<L: ReactLLM, S: State>(
     agent.emit(AgentEvent::MessageAdded(ai_msg.clone()));
     state.add_message(ai_msg);
 
+    // 收集系统提醒消息，在所有 tool_result 之后统一注入。
+    // 否则 Ai(tool_use) → Human(system-reminder) → Tool(tool_result) 序列
+    // 违反 API "tool_calls must be followed by tool messages" 约束 → 400。
+    let mut correction_messages: Vec<BaseMessage> = Vec::new();
+
     for (_, result) in &results {
         // 连续失败追踪
         if result.is_error {
@@ -178,7 +183,7 @@ pub(crate) async fn dispatch_tools<L: ReactLLM, S: State>(
                 // System 消息会被 anthropic/openai invoke hoist 到 system prompt 顶部，
                 // 违反 frozen_system_prompt 稳定性（第一优先级）。
                 // （与 goal_middleware.rs / compact_middleware.rs 注入路径一致）
-                state.add_message(BaseMessage::human(format!(
+                correction_messages.push(BaseMessage::human(format!(
                     "<system-reminder>\nWarning: Tool '{}' has failed {} consecutive times with the same error. \
                      Stop retrying and analyze the root cause. Consider using a different approach \
                      or asking the user for guidance.\n</system-reminder>",
@@ -204,6 +209,14 @@ pub(crate) async fn dispatch_tools<L: ReactLLM, S: State>(
         state
             .token_tracker_mut()
             .add_estimated_tool_tokens(&result.output);
+    }
+
+    // 所有 tool_result 写入完成后，注入收集的纠正消息。
+    // 确保 Ai(tool_use) → Tool(tool_result) 序列不被 Human 消息打断。
+    for msg in correction_messages {
+        let msg_clone = msg.clone();
+        state.add_message(msg);
+        agent.emit(AgentEvent::MessageAdded(msg_clone));
     }
 
     // 阶段 C：所有 tool_result 写入完成，触发 PostToolBatch hook

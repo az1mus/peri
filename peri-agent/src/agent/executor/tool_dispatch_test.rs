@@ -652,6 +652,102 @@ async fn test_consecutive_failure_injects_correction() {
     );
 }
 
+/// system-reminder 必须在所有 tool_result 之后注入，禁止插在
+/// Ai(tool_use) 和 Tool(tool_result) 之间（否则 API 返回 400 Bad Request:
+/// "an assistant message with 'tool_calls' must be followed by tool messages"）
+#[tokio::test]
+async fn test_consecutive_failure_correction_after_tool_results() {
+    struct AlwaysFailRead;
+    #[async_trait::async_trait]
+    impl BaseTool for AlwaysFailRead {
+        fn name(&self) -> &str {
+            "Read"
+        }
+        fn description(&self) -> &str {
+            "read"
+        }
+        fn parameters(&self) -> serde_json::Value {
+            serde_json::json!({ "properties": { "file_path": { "type": "string" } } })
+        }
+        async fn invoke(
+            &self,
+            _: serde_json::Value,
+            _ctx: crate::tools::ToolContext<'_>,
+        ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+            Err("The 'file_path' parameter is required for the Read tool.".into())
+        }
+    }
+
+    struct StubbornLLM;
+    #[async_trait::async_trait]
+    impl ReactLLM for StubbornLLM {
+        async fn generate_reasoning(
+            &self,
+            messages: &[BaseMessage],
+            _tools: &[&dyn BaseTool],
+            _streaming: Option<crate::llm::types::StreamingContext>,
+        ) -> AgentResult<Reasoning> {
+            let has_correction = messages.iter().any(|m| {
+                matches!(m, BaseMessage::Human { content, .. }
+                    if content.text_content().contains("5 consecutive times"))
+            });
+            if has_correction {
+                return Ok(Reasoning::with_answer("done", "I'll stop retrying"));
+            }
+            Ok(Reasoning::with_tools(
+                "retrying",
+                vec![ToolCall::new(
+                    format!("id_{}", messages.len()),
+                    "Read",
+                    serde_json::json!({}),
+                )],
+            ))
+        }
+    }
+
+    let agent = ReActAgent::new(StubbornLLM)
+        .max_iterations(20)
+        .register_tool(Box::new(AlwaysFailRead));
+
+    let mut state = AgentState::new("/tmp");
+    let result = agent
+        .execute(AgentInput::text("go"), &mut state, None)
+        .await;
+
+    assert!(result.is_ok(), "Agent should complete, got: {:?}", result);
+
+    let messages = state.messages();
+    // 每个 Ai(tool_use) 之后紧接的非 Ai 消息必须是 Tool, 不能有 Human 插在中间
+    for window in messages.windows(2) {
+        if let (BaseMessage::Ai { tool_calls, .. }, next) = (&window[0], &window[1]) {
+            if tool_calls.is_empty() {
+                continue;
+            }
+            if matches!(next, BaseMessage::Ai { .. }) {
+                continue; // 连续 Ai 消息是可接受的（例如流式场景）
+            }
+            assert!(
+                matches!(next, BaseMessage::Tool { .. }),
+                "Ai(tool_use) must be followed by Tool, not {:?}.                  Correction message must come after all tool_results.",
+                std::mem::discriminant(next)
+            );
+        }
+    }
+
+    // 纠正消息存在
+    let has_correction = messages.iter().any(|m| {
+        matches!(m, BaseMessage::Human { content, .. }
+            if content.text_content().contains("5 consecutive times"))
+    });
+    assert!(has_correction, "Should have correction message");
+    // 禁止 System role
+    let no_system = !messages.iter().any(|m| {
+        matches!(m, BaseMessage::System { content, .. }
+            if content.text_content().contains("5 consecutive times"))
+    });
+    assert!(no_system, "Correction message must not use System role");
+}
+
 #[test]
 fn test_normalize_params_path_to_file_path() {
     // Arrange: input has "path" but no "file_path"
