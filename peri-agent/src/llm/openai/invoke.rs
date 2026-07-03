@@ -293,43 +293,93 @@ pub(super) fn parse_assistant_message(
     }
 }
 
-/// 校验消息序列不变量：每段连续 tool 消息块之前必须有 assistant with tool_calls
-pub(super) fn validate_message_invariants(messages: &[Value]) {
+/// 修复消息序列：确保每段连续 tool 消息块之前紧接的是 assistant with tool_calls。
+/// 如果发现中间插入了非 assistant/tool 消息（如 user/system-reminder），
+/// 将其移到 tool 块之后（注意：中间的非 tool 消息会被保留，但会排在 tool 块之后）。
+/// 此修复消除 400 Bad Request "tool_calls must be followed by tool messages" 错误。
+///
+/// 返回修复后的消息数组。如无需修复则返回原数组 clone。
+pub(super) fn repair_message_invariants(messages: &[Value]) -> Vec<Value> {
+    // 两阶段修复：
+    // 1. 找出所有 assistant(tool_calls) → 后续 tool 块的配对关系
+    // 2. 将 assistant/tool 对之间的中间消息移到 tool 块之后
+    let n = messages.len();
+
+    // 找到所有需要修复的区间
+    struct Gap {
+        assist_idx: usize, // assistant(tool_calls) 在 messages 中的索引
+        tool_start: usize, // 第一个 tool 消息索引
+        tool_end: usize,   // 最后一个 tool 消息 + 1 的索引
+    }
+
+    let mut gaps = Vec::new();
     let mut i = 0;
-    while i < messages.len() {
-        if messages[i]["role"] == "tool" {
-            let block_start = i;
-            let prev_non_tool = if block_start > 0 {
-                let mut j = block_start;
-                while j > 0 && messages[j - 1]["role"] == "tool" {
-                    j -= 1;
-                }
-                if j > 0 {
-                    Some(&messages[j - 1])
-                } else {
-                    None
-                }
-            } else {
-                None
-            };
-            let valid = prev_non_tool
-                .is_some_and(|p| p["role"] == "assistant" && p["tool_calls"].is_array());
-            if !valid {
-                tracing::error!(
-                    block_start,
-                    total = messages.len(),
-                    prev_non_tool_role = ?prev_non_tool.map(|m| m["role"].as_str()),
-                    "消息序列不变量违反：连续 tool 块前缺少 assistant with tool_calls"
-                );
+    while i < n {
+        if messages[i]["role"] == "assistant" && messages[i]["tool_calls"].is_array() {
+            // 检查后面是否有 tool 消息，且它们之间是否有中间消息
+            let mut j = i + 1;
+            // 跳过中间的非 tool 消息，找到 tool 块
+            while j < n && messages[j]["role"] != "tool" {
+                j += 1;
             }
-            // 跳过整个 tool 块
-            while i < messages.len() && messages[i]["role"] == "tool" {
-                i += 1;
+            if j < n {
+                // 有 tool 消息
+                let tool_start = j;
+                while j < n && messages[j]["role"] == "tool" {
+                    j += 1;
+                }
+                let tool_end = j;
+                // 如果 tool_start > i + 1，说明中间有非 tool 消息 → 需要修复
+                if tool_start > i + 1 {
+                    gaps.push(Gap {
+                        assist_idx: i,
+                        tool_start,
+                        tool_end,
+                    });
+                }
             }
+        }
+        i += 1;
+    }
+
+    if gaps.is_empty() {
+        return messages.to_vec();
+    }
+
+    // 构建修复后的数组
+    let mut repaired = Vec::with_capacity(n);
+    let mut next_gap = 0;
+    i = 0;
+    while i < n {
+        if next_gap < gaps.len() && i == gaps[next_gap].assist_idx {
+            let gap = &gaps[next_gap];
+            // 1) 先放 assistant(tool_calls)
+            repaired.push(messages[gap.assist_idx].clone());
+            // 2) 再放 tool 块
+            repaired.extend(messages[gap.tool_start..gap.tool_end].iter().cloned());
+            // 3) 最后放中间的非 tool 消息（保持原顺序）
+            repaired.extend(
+                messages[(gap.assist_idx + 1)..gap.tool_start]
+                    .iter()
+                    .cloned(),
+            );
+            i = gap.tool_end;
+            next_gap += 1;
         } else {
+            repaired.push(messages[i].clone());
             i += 1;
         }
     }
+
+    tracing::warn!(
+        original_len = n,
+        repaired_len = repaired.len(),
+        num_gaps = gaps.len(),
+        "repair_message_invariants: 修复 tool 块位置，\
+         消除 assistant(tool_calls) 和 tool 之间的中间消息"
+    );
+
+    repaired
 }
 
 /// 构建 OpenAI API 请求体（invoke 和 invoke_streaming 共用）
@@ -355,7 +405,7 @@ pub(super) fn build_request_body(
 
     let mut messages = messages_to_json(adapter, &request.messages);
 
-    validate_message_invariants(&messages);
+    messages = repair_message_invariants(&messages);
 
     if let Some(base_system) = &request.system {
         if let Some(first) = messages.first_mut() {

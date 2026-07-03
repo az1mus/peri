@@ -10,7 +10,7 @@ use std::process::Stdio;
 
 use anyhow::{Context, Result};
 use tokio::{
-    io::{AsyncBufReadExt, BufReader},
+    io::{AsyncReadExt, BufReader},
     process::Command,
 };
 
@@ -69,21 +69,30 @@ async fn run_update_windows() -> Result<String> {
     read_installed_version()
 }
 
+/// Read all output from a child process, handling non-UTF-8 bytes gracefully.
+/// Uses `String::from_utf8_lossy` to avoid crashing when the child process
+/// emits bytes that are not valid UTF-8 (e.g., binary data, locale-specific
+/// characters, or ANSI escape sequences with corrupted bytes).
 async fn stream_output(child: &mut tokio::process::Child) -> Result<()> {
-    // 流式输出 stdout
-    if let Some(stdout) = child.stdout.take() {
-        let reader = BufReader::new(stdout);
-        let mut lines = reader.lines();
-        while let Some(line) = lines.next_line().await? {
+    // Take stdout and stderr handles
+    let stdout = child.stdout.take();
+    let stderr = child.stderr.take();
+
+    // Read stdout and stderr into buffers, replacing invalid UTF-8 on the fly
+    if let Some(mut reader) = stdout.map(BufReader::new) {
+        let mut buf = Vec::new();
+        reader.read_to_end(&mut buf).await?;
+        let text = String::from_utf8_lossy(&buf);
+        for line in text.lines() {
             println!("{line}");
         }
     }
 
-    // 流式输出 stderr
-    if let Some(stderr) = child.stderr.take() {
-        let reader = BufReader::new(stderr);
-        let mut lines = reader.lines();
-        while let Some(line) = lines.next_line().await? {
+    if let Some(mut reader) = stderr.map(BufReader::new) {
+        let mut buf = Vec::new();
+        reader.read_to_end(&mut buf).await?;
+        let text = String::from_utf8_lossy(&buf);
+        for line in text.lines() {
             eprintln!("{line}");
         }
     }

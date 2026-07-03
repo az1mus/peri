@@ -587,3 +587,136 @@ fn test_non_thinking_still_has_reasoning_content() {
         "无 reasoning 内容时应为空字符串"
     );
 }
+
+// ─── repair_message_invariants ──────────────────────────────────────────
+
+/// 正常消息顺序：Ai(tool_calls) → Tool → Tool → Ai(text)，不应变化
+#[test]
+fn test_repair_no_interleaving() {
+    let messages = vec![
+        json!({"role": "user", "content": "hello"}),
+        json!({"role": "assistant", "content": "", "tool_calls": [{"id": "c1"}]}),
+        json!({"role": "tool", "tool_call_id": "c1", "content": "ok"}),
+        json!({"role": "assistant", "content": "done"}),
+    ];
+    let repaired = invoke::repair_message_invariants(&messages);
+    assert_eq!(repaired.len(), 4, "正常顺序不应变化");
+    assert_eq!(repaired[0]["role"], "user");
+    assert_eq!(repaired[1]["role"], "assistant");
+    assert!(repaired[1]["tool_calls"].is_array());
+    assert_eq!(repaired[2]["role"], "tool");
+    assert_eq!(repaired[3]["role"], "assistant");
+}
+
+/// Human 消息插在 Ai(tool_calls) 和 Tool 之间 → 移到 Tool 之后
+#[test]
+fn test_repair_human_between_tool_pair() {
+    let messages = vec![
+        json!({"role": "user", "content": "go"}),
+        json!({"role": "assistant", "content": "", "tool_calls": [{"id": "c1"}]}),
+        json!({"role": "user", "content": "<system-reminder>stop</system-reminder>"}),
+        json!({"role": "tool", "tool_call_id": "c1", "content": "error"}),
+    ];
+    let repaired = invoke::repair_message_invariants(&messages);
+    assert_eq!(repaired.len(), 4, "消息数量不应变化");
+    // Ai(tool_calls) 之后紧接 Tool
+    assert_eq!(repaired[1]["role"], "assistant");
+    assert!(repaired[1]["tool_calls"].is_array());
+    assert_eq!(repaired[2]["role"], "tool");
+    // Human 被移到 Tool 之后
+    assert_eq!(repaired[3]["role"], "user");
+    assert!(repaired[3]["content"].as_str().unwrap().contains("stop"));
+}
+
+/// System 消息插在中间 → 移到 Tool 之后
+#[test]
+fn test_repair_system_between_tool_pair() {
+    let messages = vec![
+        json!({"role": "assistant", "content": "", "tool_calls": [{"id": "c1"}]}),
+        json!({"role": "system", "content": "be helpful"}),
+        json!({"role": "tool", "tool_call_id": "c1", "content": "result"}),
+    ];
+    let repaired = invoke::repair_message_invariants(&messages);
+    assert_eq!(repaired.len(), 3);
+    assert_eq!(repaired[0]["role"], "assistant");
+    assert!(repaired[0]["tool_calls"].is_array());
+    assert_eq!(repaired[1]["role"], "tool");
+    assert_eq!(repaired[2]["role"], "system");
+}
+
+/// 多个 tool 块，各自有中间消息 → 每个都修复
+#[test]
+fn test_repair_multiple_tool_blocks() {
+    let messages = vec![
+        json!({"role": "user", "content": "do tasks"}),
+        // 第一组：Ai(tc) + Human + Tool
+        json!({"role": "assistant", "content": "", "tool_calls": [{"id": "c1"}]}),
+        json!({"role": "user", "content": "interjection1"}),
+        json!({"role": "tool", "tool_call_id": "c1", "content": "res1"}),
+        // 第二组：Ai(tc) + System + Tool
+        json!({"role": "assistant", "content": "", "tool_calls": [{"id": "c2"}]}),
+        json!({"role": "system", "content": "warning"}),
+        json!({"role": "tool", "tool_call_id": "c2", "content": "res2"}),
+    ];
+    // 7 条消息，重排后仍为 7 条
+    let repaired = invoke::repair_message_invariants(&messages);
+    assert_eq!(repaired.len(), 7);
+
+    // 第一组：Ai → Tool → Human
+    assert_eq!(repaired[1]["role"], "assistant");
+    assert!(repaired[1]["tool_calls"].is_array());
+    assert_eq!(repaired[2]["role"], "tool");
+    assert_eq!(repaired[2]["tool_call_id"], "c1");
+    assert_eq!(repaired[3]["role"], "user");
+    assert_eq!(repaired[3]["content"], "interjection1");
+
+    // 第二组：Ai → Tool → System
+    assert_eq!(repaired[4]["role"], "assistant");
+    assert!(repaired[4]["tool_calls"].is_array());
+    assert_eq!(repaired[5]["role"], "tool");
+    assert_eq!(repaired[5]["tool_call_id"], "c2");
+    assert_eq!(repaired[6]["role"], "system");
+    assert_eq!(repaired[6]["content"], "warning");
+}
+
+/// 空数组 → 空数组
+#[test]
+fn test_repair_empty_messages() {
+    let messages: Vec<Value> = vec![];
+    let repaired = invoke::repair_message_invariants(&messages);
+    assert!(repaired.is_empty());
+}
+
+/// 只有 Ai(tool_calls) 但后续无 Tool → 不应变化
+#[test]
+fn test_repair_assistant_without_following_tool() {
+    let messages = vec![
+        json!({"role": "user", "content": "hi"}),
+        json!({"role": "assistant", "content": "", "tool_calls": [{"id": "c1"}]}),
+        json!({"role": "user", "content": "never mind"}),
+    ];
+    let repaired = invoke::repair_message_invariants(&messages);
+    assert_eq!(repaired.len(), 3);
+    assert_eq!(repaired[1]["role"], "assistant");
+    assert_eq!(repaired[2]["role"], "user");
+}
+
+/// 连续多个 Tool 结果 + 中间消息 → 整个 tool 块一起移动
+#[test]
+fn test_repair_multiple_tool_results_with_interleaving() {
+    let messages = vec![
+        json!({"role": "assistant", "content": "", "tool_calls": [{"id": "c1"}, {"id": "c2"}]}),
+        json!({"role": "user", "content": "wait"}),
+        json!({"role": "tool", "tool_call_id": "c1", "content": "res1"}),
+        json!({"role": "tool", "tool_call_id": "c2", "content": "res2"}),
+    ];
+    let repaired = invoke::repair_message_invariants(&messages);
+    assert_eq!(repaired.len(), 4);
+    // Ai → Tool → Tool → Human
+    assert_eq!(repaired[0]["role"], "assistant");
+    assert_eq!(repaired[1]["role"], "tool");
+    assert_eq!(repaired[1]["tool_call_id"], "c1");
+    assert_eq!(repaired[2]["role"], "tool");
+    assert_eq!(repaired[2]["tool_call_id"], "c2");
+    assert_eq!(repaired[3]["role"], "user");
+}
