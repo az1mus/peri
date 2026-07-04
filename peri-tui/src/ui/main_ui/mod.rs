@@ -18,6 +18,7 @@ use ratatui::{
 
 #[cfg(target_os = "windows")]
 use crate::app::textarea_cursor_pos;
+use crate::app::update_textarea_top_col;
 
 use crate::{app::App, ui::theme};
 
@@ -273,6 +274,17 @@ fn render_session_column(f: &mut Frame, app: &mut App, area: Rect) {
         .map(|b| b.inner(chunks[5]))
         .unwrap_or(chunks[5]);
 
+    // 每帧渲染后更新 tracked top_col（sticky scroll 规则推算 textarea 内部
+    // viewport 的水平滚动偏移）。mouse.rs 和 Windows set_cursor_position 都
+    // 依赖这个值来正确定位光标。
+    if app.focused && inner.width > 0 {
+        app.session_mgr.current_mut().ui.top_col = update_textarea_top_col(
+            &app.session_mgr.current().ui.textarea,
+            app.session_mgr.current().ui.top_col,
+            inner.width as usize,
+        );
+    }
+
     // macOS/Linux：cursor_at_end 残影修复——扫描 textarea 渲染区域内
     // 所有 REVERSED 空格，用 bg=TEXT（白色背景）替换 REVERSED 以达到
     // 相同视觉效果（光标块），同时避免 REVERSED 跨帧残留。
@@ -307,7 +319,8 @@ fn render_session_column(f: &mut Frame, app: &mut App, area: Rect) {
     // cursor_at_end 残影由渲染后处理修复。
     #[cfg(target_os = "windows")]
     if app.focused {
-        if let Some((cx, cy)) = textarea_cursor_pos(&app.session_mgr.current().ui.textarea, inner) {
+        let top_col = app.session_mgr.current().ui.top_col;
+        if let Some((cx, cy)) = textarea_cursor_pos(&app.session_mgr.current().ui.textarea, inner, top_col) {
             f.set_cursor_position((cx, cy));
         }
     }

@@ -775,8 +775,12 @@ async fn handle_event(app: &mut App, ev: Event) -> Result<Option<Action>> {
                             && mouse.column < area.x + area.width
                         {
                             let session = &app.session_mgr.current_mut();
-                            let (row, col) =
-                                mouse::textarea_mouse_to_cursor(&session.ui.textarea, area, &mouse);
+                            let (row, col) = mouse::textarea_mouse_to_cursor(
+                                &session.ui.textarea,
+                                area,
+                                &mouse,
+                                session.ui.top_col,
+                            );
                             app.session_mgr.current_mut().ui.textarea.move_cursor(
                                 tui_textarea::CursorMove::Jump(row as u16, col as u16),
                             );
@@ -865,8 +869,12 @@ async fn handle_event(app: &mut App, ev: Event) -> Result<Option<Action>> {
                     if let Some(area) = app.session_mgr.current_mut().ui.textarea_area {
                         if mouse.row >= area.y && mouse.row < area.y + area.height {
                             let session = &app.session_mgr.current_mut();
-                            let (row, col) =
-                                mouse::textarea_mouse_to_cursor(&session.ui.textarea, area, &mouse);
+                            let (row, col) = mouse::textarea_mouse_to_cursor(
+                                &session.ui.textarea,
+                                area,
+                                &mouse,
+                                session.ui.top_col,
+                            );
                             app.session_mgr.current_mut().ui.textarea.move_cursor(
                                 tui_textarea::CursorMove::Jump(row as u16, col as u16),
                             );

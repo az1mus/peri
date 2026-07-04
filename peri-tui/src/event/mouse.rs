@@ -44,19 +44,22 @@ pub fn display_col_to_char_idx(line: &str, display_col: usize) -> usize {
 /// 4. **CJK character width**: `Jump(row, col)` expects `col` as a character index,
 ///    not a display column. Conversion uses `unicode_width` per character.
 ///
-/// `top_row` and `top_col` are inferred from cursor position because
-/// `tui_textarea`'s viewport is private.
+/// `top_row` is inferred from cursor position because `tui_textarea`'s viewport
+/// is private. `top_col` is passed from the per-frame tracked value (updated in
+/// the render loop via `update_textarea_top_col`). Using the tracked value
+/// avoids the sticky-scroll inference bug where the formula `cursor - (width - 1)`
+/// pins the horizontal offset to the rightmost column.
 pub fn textarea_mouse_to_cursor(
     textarea: &tui_textarea::TextArea<'_>,
     textarea_area: ratatui::layout::Rect,
     mouse: &ratatui::crossterm::event::MouseEvent,
+    top_col: usize,
 ) -> (usize, usize) {
     // 1. Compute inner area (stripping border + padding)
     let inner = textarea
         .block()
         .map(|b| b.inner(textarea_area))
         .unwrap_or(textarea_area);
-    let inner_width = inner.width as usize;
     let inner_height = inner.height as usize;
 
     // Mouse coordinates relative to inner area (saturating to avoid u16 overflow
@@ -69,25 +72,14 @@ pub fn textarea_mouse_to_cursor(
     // cursor >= top_row + height => top_row = cursor + 1 - height; else unchanged.
     // Since viewport is private, we infer from cursor position:
     // cursor is always within [top_row, top_row + height), so top_row <= cursor_row
-    let (cursor_row, cursor_col) = textarea.cursor();
+    let (cursor_row, _cursor_col) = textarea.cursor();
     let scroll_row = cursor_row.saturating_sub(inner_height.saturating_sub(1));
 
-    // 3. Infer horizontal scroll offset (top_col, in display columns)
-    let cursor_line = textarea
-        .lines()
-        .get(cursor_row)
-        .map(|s| s.as_str())
-        .unwrap_or("");
-    let cursor_display_col: usize = cursor_line
-        .chars()
-        .take(cursor_col)
-        .map(|c| unicode_width::UnicodeWidthChar::width(c).unwrap_or(0))
-        .sum();
-    let scroll_col = cursor_display_col.saturating_sub(inner_width.saturating_sub(1));
-
+    // 3. Horizontal scroll: use tracked top_col (passed from caller, updated
+    //    per frame via update_textarea_top_col after textarea rendering).
     // 4. Text row and display column
     let target_row = scroll_row + visual_row;
-    let text_display_col = visual_col + scroll_col;
+    let text_display_col = visual_col + top_col;
 
     // 5. Convert display column to character index
     let target_row = target_row.min(textarea.lines().len().saturating_sub(1));

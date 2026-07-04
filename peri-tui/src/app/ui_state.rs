@@ -14,6 +14,9 @@ pub struct PredictionState {
 /// UI 交互状态：会话级的输入、滚动、选区、历史等。
 pub struct UiState {
     pub textarea: TextArea<'static>,
+    /// textarea 水平滚动偏移 tracking（tui-textarea 的 viewport 是 private，
+    /// 每帧渲染后通过 sticky scroll 规则推算当前 top_col）。
+    pub top_col: usize,
     pub loading: bool,
     pub scroll_offset: u16,
     pub scroll_follow: bool,
@@ -65,6 +68,7 @@ impl UiState {
         let input_history = super::history_persistence::load_input_history();
         Self {
             textarea,
+            top_col: 0,
             loading: false,
             scroll_offset: u16::MAX,
             scroll_follow: true,
