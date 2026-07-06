@@ -2,21 +2,19 @@
 set -euo pipefail
 export LC_ALL=C
 
-# Peri Install Script
-# Usage: curl -fsSL https://raw.githubusercontent.com/konghayao/peri/main/scripts/install.sh | bash
+# Peri Install Script (Local Build Edition)
+# Usage: cd peri && bash scripts/install.sh
+#
+# This fork builds Peri from source instead of downloading pre-built binaries.
+# Prerequisites: Rust toolchain (cargo), Git
 #
 # Options:
-#   PERI_INSTALL_VERSION   Specific version tag (e.g. agent-v1.17), empty = latest
 #   PERI_INSTALL_DIR       Install directory (default: $HOME/.peri)
-#   GITHUB_PROXY           GitHub download proxy prefix (replaces https://github.com in download URL)
-#   GITHUB_TOKEN           GitHub personal access token (bypasses API rate limiting)
 #   PERI_NO_PATH_HINT      Set to 1 to skip PATH hint
-#   PERI_INSTALL_PLATFORM  Override platform detection (e.g. linux-x86_64, macos-aarch64)
 #
 # Example:
-#   PERI_INSTALL_VERSION=agent-v1.17 bash install.sh
-#   GITHUB_PROXY=https://ghproxy.com/https://github.com curl ... | bash
-#   GITHUB_TOKEN=ghp_xxx curl ... | bash
+#   cd peri && bash scripts/install.sh
+#   PERI_INSTALL_DIR=/opt/peri bash scripts/install.sh
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -28,62 +26,6 @@ info()    { echo -e "${GREEN}[INFO]${NC}  $*"; }
 warn()    { echo -e "${YELLOW}[WARN]${NC}  $*"; }
 error()   { echo -e "${RED}[ERROR]${NC} $*" >&2; }
 step()    { echo -e "${CYAN}[STEP]${NC}  $*"; }
-
-# --- Platform Detection ---
-detect_platform() {
-    local os arch platform
-
-    # Allow manual override
-    if [[ -n "${PERI_INSTALL_PLATFORM:-}" ]]; then
-        # Validate format: os-arch
-        if [[ ! "${PERI_INSTALL_PLATFORM}" =~ ^(macos|linux|windows)-(x86_64|aarch64|riscv64)$ ]]; then
-            error "Invalid PERI_INSTALL_PLATFORM: ${PERI_INSTALL_PLATFORM}"
-            echo "  Expected: macos-x86_64 | macos-aarch64 | linux-x86_64 | linux-aarch64 | linux-riscv64 | windows-x86_64"
-            exit 1
-        fi
-        info "Platform (manual): ${PERI_INSTALL_PLATFORM}" >&2
-        echo "${PERI_INSTALL_PLATFORM}"
-        return
-    fi
-
-    case "$(uname -s)" in
-        Darwin)  os="macos" ;;
-        Linux)   os="linux" ;;
-        *)       error "Unsupported OS: $(uname -s)"; exit 1 ;;
-    esac
-
-    case "$(uname -m)" in
-        x86_64|amd64)  arch="x86_64" ;;
-        aarch64|arm64) arch="aarch64" ;;
-        riscv64)       arch="riscv64" ;;
-        *)             error "Unsupported arch: $(uname -m)"; exit 1 ;;
-    esac
-
-    platform="${os}-${arch}"
-    info "Detected platform: ${platform}" >&2
-    echo "${platform}"
-}
-
-# --- Download with optional proxy ---
-get_download_url() {
-    local url="$1"
-    local proxy="${GITHUB_PROXY:-}"
-    if [[ -n "${proxy}" ]]; then
-        echo "${url/https:\/\/github.com/${proxy}}"
-    else
-        echo "${url}"
-    fi
-}
-
-# --- GitHub API request (with optional token) ---
-github_api() {
-    local url="$1"
-    local auth_header=""
-    if [[ -n "${GITHUB_TOKEN:-}" ]]; then
-        auth_header="-H Authorization: Bearer ${GITHUB_TOKEN}"
-    fi
-    curl -fsSL ${auth_header:-} "${url}" 2>/dev/null
-}
 
 # --- Cleanup Old Versions ---
 cleanup_old_versions() {
@@ -146,96 +88,57 @@ cleanup_old_versions() {
 # --- Main ---
 main() {
     INSTALL_DIR="${PERI_INSTALL_DIR:-${HOME}/.peri}"
-    GITHUB_API="https://api.github.com/repos/konghayao/peri"
 
     echo ""
-    info "Peri Agent Installer"
+    info "Peri Agent Installer (Local Build)"
     info "-------------------------------"
 
-    PLATFORM=$(detect_platform)
-    ASSET_NAME="peri-${PLATFORM}.tar.gz"
-
-    # Fetch release info
-    if [[ -n "${PERI_INSTALL_VERSION:-}" ]]; then
-        VERSION_TAG="${PERI_INSTALL_VERSION}"
-        step "Fetching release: ${VERSION_TAG}..."
-        RELEASE_JSON=$(github_api "${GITHUB_API}/releases/tags/${VERSION_TAG}") || {
-            error "Failed to fetch release '${VERSION_TAG}'. Does this tag exist?"
-            exit 1
-        }
-    else
-        step "Fetching latest agent release..."
-        RELEASES_JSON=$(github_api "${GITHUB_API}/releases?per_page=30") || {
-            error "Failed to fetch releases from GitHub."
-            exit 1
-        }
-        # Find latest agent-* tag
-        VERSION_TAG=$(echo "${RELEASES_JSON}" | tr ',' '\n' | grep -F '"tag_name"' | grep -F '"agent-' | head -1 | cut -d'"' -f4)
-        if [[ -z "${VERSION_TAG}" ]]; then
-            error "No agent release found."
-            exit 1
-        fi
-
-        # Fetch the specific release for asset list
-        RELEASE_JSON=$(github_api "${GITHUB_API}/releases/tags/${VERSION_TAG}") || {
-            error "Failed to fetch release '${VERSION_TAG}'."
-            exit 1
-        }
-    fi
-
-    info "Found release: ${VERSION_TAG}"
-
-    # Find matching asset
-    ASSET_DOWNLOAD_URL=$(echo "${RELEASE_JSON}" | tr ',' '\n' | grep -F '"browser_download_url"' | grep -F "${ASSET_NAME}" | head -1 | cut -d'"' -f4)
-
-    if [[ -z "${ASSET_DOWNLOAD_URL}" ]]; then
-        error "No binary found for platform '${PLATFORM}'."
-        echo ""
-        echo "Available assets:"
-        echo "${RELEASE_JSON}" | tr ',' '\n' | grep -F '"browser_download_url"' | cut -d'"' -f4 | sed 's/^/  - /'
+    # Check prerequisites
+    if ! command -v cargo &>/dev/null; then
+        error "cargo not found. Please install Rust: https://rustup.rs"
         exit 1
     fi
 
-    info "Binary: ${ASSET_NAME}"
+    # Determine version from git
+    if command -v git &>/dev/null && git rev-parse --git-dir >/dev/null 2>&1; then
+        VERSION_TAG=$(git describe --tags --always 2>/dev/null || echo "local-$(date +%Y%m%d)")
+    else
+        VERSION_TAG="local-$(date +%Y%m%d)"
+    fi
+    info "Build version: ${VERSION_TAG}"
+
+    # Build
+    step "Building peri from source..."
+    cargo build -p peri-tui --release || {
+        error "Build failed."
+        exit 1
+    }
+
+    # Detect binary name
+    local BINARY_NAME
+    case "$(uname -s)" in
+        MINGW*|MSYS*|CYGWIN*) BINARY_NAME="peri.exe" ;;
+        *)                      BINARY_NAME="peri" ;;
+    esac
+
+    BINARY_PATH="target/release/${BINARY_NAME}"
+    if [[ ! -f "${BINARY_PATH}" ]]; then
+        error "Binary not found at ${BINARY_PATH}"
+        exit 1
+    fi
 
     # Create install directory
     VERSION_DIR="${INSTALL_DIR}/${VERSION_TAG}"
     mkdir -p "${VERSION_DIR}"
 
-    TARGET="${VERSION_DIR}/peri"
-    TARBALL="${VERSION_DIR}/${ASSET_NAME}"
+    TARGET="${VERSION_DIR}/${BINARY_NAME}"
 
-    # Download tarball
-    FINAL_URL=$(get_download_url "${ASSET_DOWNLOAD_URL}")
-    if [[ "${FINAL_URL}" != "${ASSET_DOWNLOAD_URL}" ]]; then
-        info "Using proxy: ${FINAL_URL}"
-    fi
-
-    step "Downloading..."
-    curl -fSL --progress-bar "${FINAL_URL}" -o "${TARBALL}" || {
-        error "Download failed."
+    # Copy binary
+    step "Installing..."
+    cp -f "${BINARY_PATH}" "${TARGET}" || {
+        error "Copy failed."
         exit 1
     }
-
-    # Extract tarball
-    step "Extracting..."
-    tar -xzf "${TARBALL}" -C "${VERSION_DIR}" || {
-        error "Extraction failed."
-        exit 1
-    }
-    rm -f "${TARBALL}"
-
-    # Tarball contains peri-<platform> (e.g., peri-macos-aarch64), rename to peri
-    if [[ ! -f "${TARGET}" ]]; then
-        EXTRACTED=$(ls "${VERSION_DIR}"/peri-* 2>/dev/null | head -1)
-        if [[ -f "${EXTRACTED}" ]]; then
-            mv "${EXTRACTED}" "${TARGET}"
-        else
-            error "No binary found in extracted tarball."
-            ls -la "${VERSION_DIR}" || true
-            exit 1
-        fi
-    fi
 
     # Make executable
     chmod +x "${TARGET}"
