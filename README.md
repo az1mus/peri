@@ -1,3 +1,9 @@
+> **Fork 说明** — 本 fork 基于 [KonghaYao/peri](https://github.com/KonghaYao/peri) v1.9.2，修复了以下问题：
+>
+> - 修复 `system-reminder` 注入顺序错误：在 `Ai(tool_use)` 和 `Tool` 消息之间插入 `Human` 消息导致 Anthropic API 返回 **400** 错误
+> - 修复 Markdown 表格渲染：表格右侧出现多余空白列
+> - 修复 TUI 光标行为：长文本输入时光标指示符不随方向键正确移动
+>
 <div align="center">
 
 # Peri Code
